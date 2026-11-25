@@ -1,0 +1,73 @@
+<mat-sidenav-container class="shell" autosize>
+  <mat-sidenav
+    class="side"
+    [mode]="isMobile() ? 'over' : 'side'"
+    [opened]="sidenavOpen()"
+    (closedStart)="isMobile() && toggleSidenav()"
+    [attr.aria-label]="'nav.sidebar' | transloco"
+  >
+    <div class="side-head">
+      <a routerLink="/app" class="brand" (click)="onNavigate()"><img src="favicon.svg" alt="" width="28" height="28" />Notes</a>
+      <button mat-icon-button type="button" (click)="toggleSidenav()" [attr.aria-label]="'nav.hideSidebar' | transloco"><mat-icon>menu_open</mat-icon></button>
+    </div>
+    <div class="side-scroll" (click)="onNavigate()"><app-tree /></div>
+    <nav class="side-foot">
+      <a routerLink="/app/trash" routerLinkActive="active" (click)="onNavigate()"><mat-icon>delete</mat-icon>{{ 'nav.trash' | transloco }}</a>
+      <a routerLink="/app/settings" routerLinkActive="active" (click)="onNavigate()"><mat-icon>settings</mat-icon>{{ 'nav.settings' | transloco }}</a>
+      @if (platform.mode === 'browser') {
+        <a routerLink="/download" (click)="onNavigate()"><mat-icon>install_desktop</mat-icon>{{ 'nav.getApp' | transloco }}</a>
+      }
+    </nav>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="main">
+    <header class="top">
+      @if (!sidenavOpen()) {
+        <button mat-icon-button type="button" (click)="toggleSidenav()" [attr.aria-label]="'nav.showSidebar' | transloco"><mat-icon>menu</mat-icon></button>
+      }
+      <form class="search" role="search" (ngSubmit)="search()">
+        <mat-icon>search</mat-icon>
+        <input name="q" [(ngModel)]="query" [placeholder]="'nav.search' | transloco" [attr.aria-label]="'nav.search' | transloco" autocomplete="off" />
+      </form>
+      <span class="grow"></span>
+
+      <button type="button" class="chip" [class]="'chip ' + status()" (click)="sync.run()" [matTooltip]="'sync.now' | transloco">
+        <mat-icon>{{ status() === 'offline' ? 'cloud_off' : status() === 'error' ? 'error' : status() === 'syncing' ? 'sync' : 'cloud_done' }}</mat-icon>
+        <span class="chip-text">{{ 'sync.' + status() | transloco }}</span>
+        @if (sync.pending() > 0) { <span class="badge">{{ sync.pending() }}</span> }
+      </button>
+
+      <button mat-icon-button type="button" [matMenuTriggerFor]="userMenu" [attr.aria-label]="'nav.account' | transloco"><span class="avatar">{{ initial() }}</span></button>
+      <mat-menu #userMenu="matMenu">
+        <div class="who" (click)="$event.stopPropagation()">
+          <strong>{{ auth.user()?.displayName }}</strong>
+          <span class="muted">{{ auth.user()?.email }}</span>
+        </div>
+        <a mat-menu-item routerLink="/app/settings"><mat-icon>settings</mat-icon>{{ 'nav.settings' | transloco }}</a>
+        <a mat-menu-item routerLink="/download"><mat-icon>install_desktop</mat-icon>{{ 'nav.getApp' | transloco }}</a>
+        <button mat-menu-item type="button" (click)="signOut()"><mat-icon>logout</mat-icon>{{ 'nav.signOut' | transloco }}</button>
+      </mat-menu>
+    </header>
+
+    @if (auth.user() && !auth.user()!.emailVerified) {
+      <div class="banner warn" role="status">
+        <mat-icon>mark_email_unread</mat-icon>
+        <span>{{ (sync.needsVerification() ? 'auth.verifyBannerUploads' : 'auth.verifyBanner') | transloco }}</span>
+        <button mat-button type="button" (click)="resendVerification()">{{ 'auth.resend' | transloco }}</button>
+      </div>
+    }
+    @if (auth.offlineSession()) {
+      <div class="banner" role="status"><mat-icon>cloud_off</mat-icon><span>{{ 'sync.offlineBanner' | transloco }}</span></div>
+    }
+    @if (lastIssue(); as issue) {
+      <div class="banner info" role="alert">
+        <mat-icon>info</mat-icon>
+        <span>{{ issue.messageKey | transloco: issue.params }}</span>
+        @if (issue.pageId) { <button mat-button type="button" (click)="openIssue()">{{ 'common.open' | transloco }}</button> }
+        <button mat-icon-button type="button" (click)="sync.dismissIssue(issue.id)" [attr.aria-label]="'common.close' | transloco"><mat-icon>close</mat-icon></button>
+      </div>
+    }
+
+    <main><router-outlet /></main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

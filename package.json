@@ -1,0 +1,33 @@
+{
+  "name": "notes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rich note-taking website: Angular PWA + NestJS/MySQL server + Electron desktop shell",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d --wait mysql mailpit",
+    "db:down": "docker compose down",
+    "build": "npm run build -w @notes/shared && npm run build -w @notes/web && npm run build -w @notes/server",
+    "test": "npm run test:scripts && npm run test -w @notes/shared && npm run test -w @notes/server",
+    "e2e": "node --test --test-concurrency=1 \"apps/web/e2e/*.e2e.mjs\"",
+    "build:shared": "npm run build -w @notes/shared",
+    "test:shared": "npm run test -w @notes/shared",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:scripts": "node --test \"scripts/lib/*.test.mjs\"",
+    "check:themes": "node scripts/check-theme-contrast.mjs",
+    "check:themes": "node scripts/check-theme-contrast.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2",
+    "typescript": "~6.0.3"
+  }
+}

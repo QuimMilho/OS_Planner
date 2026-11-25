@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Server</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <style>
+      :root { color-scheme: light dark; --accent: #3b5bdb; }
+      body { margin: 0; padding: 24px; font-family: system-ui, "Segoe UI", sans-serif; background: Canvas; color: CanvasText; }
+      h1 { margin: 0 0 6px; font-size: 18px; }
+      p { margin: 0 0 14px; opacity: 0.75; font-size: 14px; line-height: 1.45; }
+      input { width: 100%; box-sizing: border-box; font: inherit; padding: 9px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, CanvasText 30%, transparent); background: Canvas; color: CanvasText; }
+      .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+      button { font: inherit; border: 0; border-radius: 999px; padding: 8px 20px; background: var(--accent); color: white; cursor: pointer; }
+      button.secondary { background: none; color: var(--accent); }
+      .err { color: #e03131; font-size: 13px; min-height: 18px; margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <h1>Notes server</h1>
+      <p>The address of the Notes website this app shows, for example <code>https://notes.example.com</code>.</p>
+      <input id="url" type="text" autocomplete="off" spellcheck="false" autofocus />
+      <div class="err" id="err" role="alert"></div>
+      <div class="row">
+        <button type="button" class="secondary" id="cancel">Cancel</button>
+        <button type="submit">Save and reload</button>
+      </div>
+    </form>
+    <script>
+      const input = document.getElementById('url');
+      const err = document.getElementById('err');
+      window.notesConfig.get().then((v) => { input.value = v; input.select(); });
+      document.getElementById('cancel').addEventListener('click', () => window.close());
+      document.getElementById('form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        err.textContent = '';
+        if (!(await window.notesConfig.validate(input.value))) { err.textContent = 'Enter a web address starting with http:// or https://'; return; }
+        const result = await window.notesConfig.set(input.value);
+        if (!result.ok) err.textContent = 'That address could not be used.';
+      });
+    </script>
+  </body>
+</html>

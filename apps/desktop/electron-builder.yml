@@ -1,0 +1,40 @@
+appId: app.notes.desktop
+productName: Notes
+copyright: Copyright © Notes
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - resources/**
+  - package.json
+# Updates come from the site the app talks to: https://<server>/downloads/ (see src/main.ts, which sets the
+# real feed address at run time). This block makes electron-builder write latest.yml / latest-linux.yml,
+# which the updater reads; it never uploads anything (we publish with scripts/publish-desktop.mjs).
+publish:
+  provider: generic
+  url: http://localhost:3000/downloads/
+asar: true
+
+win:
+  icon: build/icon.png
+  target:
+    - { target: nsis, arch: [x64] }
+    - { target: portable, arch: [x64] }
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  artifactName: Notes-${version}-win-${arch}-setup.${ext}
+portable:
+  artifactName: Notes-${version}-win-${arch}-portable.${ext}
+
+linux:
+  icon: build/icon.png
+  category: Office
+  synopsis: Rich notes with notebooks, math, diagrams and charts
+  target:
+    - { target: AppImage, arch: [x64] }
+    - { target: deb, arch: [x64] }
+    - { target: rpm, arch: [x64] }
+  artifactName: Notes-${version}-linux-${arch}.${ext}

@@ -1,0 +1,81 @@
+# Notes: collaboration roadmap, checklist
+
+Tick a phase only when its **Definition of done** (see [overview.md](overview.md#43-definition-of-done-all-phases)) holds. Details and acceptance criteria are in each phase file.
+
+- [x] **Phase 0**: [Configurable API URL](phase-0.md)
+  - [x] build-time setting with prompt (`NOTES_API_URL`, `NOTES_SERVER_URL`)
+  - [x] runtime `config.json` + API base interceptor
+  - [x] server CORS, cookie SameSite, media embedding
+  - [x] tests: scripts 13, server +14, cross-origin e2e 5
+  - [x] open item fixed: a sync finishing while typing replaced the page with the older stored copy, see [phase-0.md](phase-0.md#result)
+- [x] **Phase 1**: [Themes](phase-1.md)
+  - [x] seven palettes (light, dark, purple, red, green, blue, dark blue)
+  - [x] stored per account, restored at login, OS default when unset
+  - [x] no flash on load; picker with live preview
+  - [x] tests: scripts +10 (contrast), shared +1, server +1, themes e2e 8
+- [ ] **Phase 2**: [Admin & quotas foundation](phase-2.md)
+  - [ ] `ADMIN_EMAILS` + admin area
+  - [ ] `QuotaPolicy` / `QuotaService` (user, team, project scopes)
+  - [ ] usage bars and `413 quota_exceeded`
+- [ ] **Phase 3**: [Spaces, teams and hierarchy core](phase-3.md)
+  - [ ] Space model + data-preserving migration
+  - [ ] teams, projects, sub-projects, members
+  - [ ] permission engine (shared) + guards
+  - [ ] team rail, project tree, breadcrumbs
+- [ ] **Phase 4**: [Roles, overwrites and audit log](phase-4.md)
+  - [ ] team roles and project roles
+  - [ ] allow/deny overwrites (tri-state editor)
+  - [ ] audit log + viewer
+- [ ] **Phase 5**: [Joining teams](phase-5.md)
+  - [ ] email invites (with or without an account)
+  - [ ] invite links
+  - [ ] public directory, join policy, requests
+  - [ ] leave, kick, ownership transfer
+- [ ] **Phase 6**: [Realtime infrastructure](phase-6.md)
+  - [ ] Socket.IO gateway with JWT auth and permission-checked rooms
+  - [ ] presence, event bus, Redis adapter
+  - [ ] client `RealtimeService`
+- [ ] **Phase 7**: [Chat channels](phase-7.md)
+  - [ ] channels in teams/projects
+  - [ ] messages, edit/delete, attachments
+  - [ ] reactions, replies, pins, threads
+  - [ ] history paging, offline read cache, send queue
+- [ ] **Phase 8**: [Direct messages](phase-8.md)
+  - [ ] 1:1 DMs between people sharing a team
+  - [ ] per-team DM privacy, block, close
+- [ ] **Phase 9**: [Mentions, notifications and mute](phase-9.md)
+  - [ ] `@member`, `@role`, `@everyone`, `@here`
+  - [ ] per-team/project/channel notification levels and mute durations
+  - [ ] inbox, badges, Web Push, per-chat email
+- [ ] **Phase 10**: [Shared notebooks and share links](phase-10.md)
+  - [ ] team/project notebooks
+  - [ ] direct shares (read/edit)
+  - [ ] share links (anonymous read, login to edit, expiry, password)
+- [ ] **Phase 11**: [Real-time co-editing](phase-11.md)
+  - [ ] Yjs + Hocuspocus with permission-checked auth
+  - [ ] JSON ↔ Y-doc migration, derived search text
+  - [ ] offline merge, presence cursors
+- [ ] **Phase 12**: [Boards and tasks](phase-12.md)
+  - [ ] boards, columns, tasks, subtasks, checklists
+  - [ ] labels, assignees, dates, comments
+  - [ ] personal boards, "My tasks"
+- [ ] **Phase 13**: [Calendar and meetings](phase-13.md)
+  - [ ] month/week/day/agenda views
+  - [ ] meetings, recurrence, RSVP, time zones
+  - [ ] `ADD_TO_MEMBER_CALENDARS`, reminders
+- [ ] **Phase 14**: [ICS feeds and import](phase-14.md)
+  - [ ] private subscription feed
+  - [ ] external ICS subscriptions (SSRF-safe)
+  - [ ] `.ics` import
+- [ ] **Phase 15**: [Offline merge and local history](phase-15.md)
+  - [ ] per-field versions and server merge
+  - [ ] local history with Replace / Add as new
+  - [ ] boards, tasks, calendar and notebooks offline
+- [ ] **Phase 16**: [Voice and video channels](phase-16.md)
+  - [ ] optional LiveKit service
+  - [ ] voice channels, permissions, moderation
+  - [ ] Electron media permissions
+- [ ] **Phase 17**: [Hardening and release](phase-17.md)
+  - [ ] authorization fuzz, security review
+  - [ ] load and bundle budgets, accessibility
+  - [ ] self-hosting documentation

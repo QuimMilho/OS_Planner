@@ -1,0 +1,32 @@
+node_modules/
+dist/
+out/
+release/
+.angular/
+coverage/
+playwright-report/
+test-results/
+*.log
+*.tsbuildinfo
+
+# local config and runtime data
+.env
+.env.*
+!.env.example
+/data/
+/apps/server/data/
+
+# generated
+apps/server/src/generated/
+apps/web/public/print/
+apps/web/public/config.json
+apps/web/e2e/.artifacts/
+apps/server/.test-data/
+apps/server/.e2e-data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

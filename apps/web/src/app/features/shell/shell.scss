@@ -1,0 +1,209 @@
+:host {
+  display: block;
+  height: 100dvh;
+}
+
+.shell {
+  height: 100%;
+  background: var(--surface);
+}
+
+.side {
+  width: var(--sidebar-width);
+  max-width: 88vw;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  // The Material drawer wraps its content in a div: make it a column so the tree scrolls.
+  ::ng-deep .mat-drawer-inner-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 8px 6px 16px;
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--text);
+    text-decoration: none;
+  }
+}
+
+.side-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+
+.side-foot {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+    &:hover,
+    &.active {
+      background: var(--surface-3);
+    }
+    mat-icon {
+      color: var(--text-dim);
+    }
+  }
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  main {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  .grow {
+    flex: 1;
+  }
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 420px;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 19px;
+  background: var(--surface-3);
+  input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+  }
+  mat-icon {
+    color: var(--text-dim);
+  }
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+  &.syncing mat-icon {
+    animation: spin 1.2s linear infinite;
+  }
+  &.offline {
+    color: #e8590c;
+    border-color: color-mix(in srgb, #e8590c 40%, var(--border));
+  }
+  &.error {
+    color: var(--mat-sys-error);
+  }
+  .badge {
+    background: var(--accent);
+    color: var(--mat-sys-on-primary);
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 11px;
+    line-height: 18px;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 640px) {
+  .chip-text {
+    display: none;
+  }
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--mat-sys-on-primary);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  max-width: 260px;
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+  }
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  font-size: 14px;
+  background: var(--surface-3);
+  &.warn {
+    background: color-mix(in srgb, #f08c00 16%, var(--surface));
+  }
+  &.info {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  }
+  span {
+    flex: 1;
+  }
+}

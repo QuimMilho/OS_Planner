@@ -1,0 +1,100 @@
+<section class="page" (keydown.control.s)="saveNow($event)" (keydown.meta.s)="saveNow($event)">
+  <input #fileInput type="file" hidden multiple (change)="onFilesPicked($event)" />
+
+  @if (missing()) {
+    <div class="empty">
+      <mat-icon>search_off</mat-icon>
+      <p>{{ 'page.notFound' | transloco }}</p>
+      <a mat-flat-button routerLink="/app">{{ 'common.back' | transloco }}</a>
+    </div>
+  } @else {
+    <header class="head">
+      <nav class="crumbs" aria-label="breadcrumb">
+        @if (crumbs(); as c) {
+          <span>{{ c.notebook?.name }}</span>
+          <mat-icon>chevron_right</mat-icon>
+          <span>{{ c.category?.name }}</span>
+        }
+      </nav>
+      <span class="grow"></span>
+      <span class="state" [class]="saveState()" [attr.aria-live]="'polite'">
+        <mat-icon>{{ saveState() === 'saved' ? 'cloud_done' : saveState() === 'saving' ? 'sync' : 'cloud_off' }}</mat-icon>
+        {{ 'editor.state.' + saveState() | transloco }}
+      </span>
+      <button mat-icon-button type="button" (click)="showOutline.set(!showOutline())" [class.on]="showOutline()" [matTooltip]="'editor.outline' | transloco" [attr.aria-label]="'editor.outline' | transloco" [attr.aria-pressed]="showOutline()"><mat-icon>toc</mat-icon></button>
+      <button mat-icon-button type="button" class="export-btn" (click)="export()" [matTooltip]="'export.title' | transloco" [attr.aria-label]="'export.title' | transloco"><mat-icon>picture_as_pdf</mat-icon></button>
+      <button mat-icon-button type="button" [matMenuTriggerFor]="more" [attr.aria-label]="'common.more' | transloco"><mat-icon>more_vert</mat-icon></button>
+      <mat-menu #more="matMenu">
+        <button mat-menu-item type="button" (click)="export()"><mat-icon>download</mat-icon>{{ 'export.title' | transloco }}</button>
+        <button mat-menu-item type="button" (click)="trash()" [disabled]="trashed()"><mat-icon>delete</mat-icon>{{ 'page.moveToTrash' | transloco }}</button>
+      </mat-menu>
+    </header>
+
+    @if (trashed()) {
+      <div class="banner">
+        <mat-icon>delete</mat-icon>{{ 'page.inTrash' | transloco }}
+        <button mat-button type="button" (click)="restore()">{{ 'common.restore' | transloco }}</button>
+      </div>
+    }
+
+    <div class="body">
+      <div class="scroll">
+        <article class="paper">
+          <input
+            #titleInput
+            class="title"
+            [placeholder]="'page.untitledPlaceholder' | transloco"
+            [readOnly]="trashed()"
+            maxlength="200"
+            (input)="onTitle($any($event.target).value)"
+            (keydown.enter)="focusBody()"
+          />
+
+          @if (editor(); as ed) {
+            @if (!trashed()) {
+              <app-toolbar class="tb" [editor]="ed" [items]="insertItems" (link)="editLink()" />
+            }
+            <div tiptap [editor]="ed" class="content"></div>
+
+            <div tiptapBubbleMenu [editor]="ed" [options]="{ placement: 'top', offset: 8 }" class="bubble"
+                 [shouldShow]="bubbleShouldShow">
+              <button type="button" (click)="ed.chain().focus().toggleBold().run()" [class.on]="ed.isActive('bold')" [attr.aria-label]="'editor.bold' | transloco"><mat-icon>format_bold</mat-icon></button>
+              <button type="button" (click)="ed.chain().focus().toggleItalic().run()" [class.on]="ed.isActive('italic')" [attr.aria-label]="'editor.italic' | transloco"><mat-icon>format_italic</mat-icon></button>
+              <button type="button" (click)="ed.chain().focus().toggleCode().run()" [class.on]="ed.isActive('code')" [attr.aria-label]="'editor.inlineCode' | transloco"><mat-icon>code</mat-icon></button>
+              <button type="button" (click)="ed.chain().focus().toggleHighlight().run()" [class.on]="ed.isActive('highlight')" [attr.aria-label]="'editor.highlight' | transloco"><mat-icon>border_color</mat-icon></button>
+              <button type="button" (click)="editLink()" [class.on]="ed.isActive('link')" [attr.aria-label]="'editor.link' | transloco"><mat-icon>link</mat-icon></button>
+            </div>
+          } @else if (loading()) {
+            <p class="muted">{{ 'common.loading' | transloco }}</p>
+          }
+        </article>
+      </div>
+
+      @if (showOutline()) {
+        <aside class="outline" [attr.aria-label]="'editor.outline' | transloco">
+          <h3>{{ 'editor.outline' | transloco }}</h3>
+          @for (h of outline(); track h.id) {
+            <button type="button" [style.padding-left.px]="(h.level - 1) * 12 + 8" [class.active]="h.isActive" (click)="scrollTo(h)">{{ h.textContent }}</button>
+          } @empty {
+            <p class="muted">{{ 'editor.outlineEmpty' | transloco }}</p>
+          }
+        </aside>
+      }
+    </div>
+
+    <footer class="foot">
+      <span>{{ words() }} {{ 'editor.words' | transloco }}</span>
+      <span>{{ characters() }} {{ 'editor.characters' | transloco }}</span>
+    </footer>
+  }
+
+  @if (slash.open() && slash.items().length) {
+    <div class="slash" role="listbox" [style.left.px]="slash.position().x" [style.top.px]="slash.position().y">
+      @for (item of slash.items(); track item.id; let i = $index) {
+        <button type="button" role="option" [class.active]="i === slash.index()" [attr.aria-selected]="i === slash.index()" (mousedown)="$event.preventDefault(); slash.choose(i)">
+          <mat-icon>{{ item.icon }}</mat-icon>{{ item.labelKey | transloco }}
+        </button>
+      }
+    </div>
+  }
+</section>

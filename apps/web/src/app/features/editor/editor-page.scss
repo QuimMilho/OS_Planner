@@ -1,0 +1,255 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  min-height: 52px;
+  .grow {
+    flex: 1;
+  }
+  .on {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 13px;
+  min-width: 0;
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 22vw;
+  }
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 0 8px;
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+  &.saving mat-icon {
+    animation: spin 1.2s linear infinite;
+  }
+  &.offline {
+    color: #e8590c;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: color-mix(in srgb, var(--mat-sys-error) 10%, var(--surface));
+  color: var(--text);
+  font-size: 14px;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 20px 120px;
+}
+
+.paper {
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+.title {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 6px 0 12px;
+  &::placeholder {
+    color: var(--text-dim);
+    opacity: 0.6;
+  }
+}
+
+.tb {
+  display: block;
+  position: sticky;
+  top: -20px;
+  z-index: 4;
+  margin: 0 0 16px;
+  padding-top: 20px;
+  background: linear-gradient(var(--surface) 80%, transparent);
+}
+
+.bubble {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--mat-sys-level2);
+  z-index: 20;
+  button {
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: none;
+    color: var(--text);
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    &:hover {
+      background: var(--surface-3);
+    }
+    &.on {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+    }
+    mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+    }
+  }
+}
+
+.outline {
+  width: 240px;
+  flex: none;
+  border-left: 1px solid var(--border);
+  overflow: auto;
+  padding: 12px 8px;
+  h3 {
+    margin: 4px 8px 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+  button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: none;
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    &:hover,
+    &.active {
+      background: var(--surface-3);
+    }
+  }
+}
+@media (max-width: 900px) {
+  .outline {
+    display: none;
+  }
+}
+
+.foot {
+  display: flex;
+  gap: 16px;
+  justify-content: flex-end;
+  padding: 4px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+}
+
+.slash {
+  position: fixed;
+  z-index: 1000;
+  width: 260px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--mat-sys-level3);
+  button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    border: 0;
+    background: none;
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    &.active,
+    &:hover {
+      background: var(--surface-3);
+    }
+    mat-icon {
+      color: var(--text-dim);
+    }
+  }
+}
+
+.empty {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--text-dim);
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+  }
+}

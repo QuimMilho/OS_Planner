@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/dist
+**/.angular
+**/coverage
+apps/desktop/release
+apps/desktop/.linux-build
+apps/web/e2e/.artifacts
+apps/server/.e2e-data
+apps/server/.test-data
+apps/server/src/generated
+data
+.env
+.env.*
+*.log

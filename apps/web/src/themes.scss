@@ -1,0 +1,208 @@
+@use 'sass:map';
+@use '@angular/material' as mat;
+
+// ---------------------------------------------------------------------------------------------
+// Themes. `system` (no data-theme attribute) follows the operating system; the others are chosen
+// in Settings → Appearance and set <html data-theme="…">. The ids are the `Theme` values in
+// @notes/shared. scripts/check-theme-contrast.mjs compiles this file and checks the contrast of
+// every theme, so a new palette cannot ship unreadable.
+//
+// Material 3 does the heavy lifting: `mat.theme` turns a primary and a tertiary palette into the
+// --mat-sys-* tokens that every Material component reads. The app's own variables below are
+// aliases of those tokens, so a component styled with --surface/--text/--accent always matches.
+//
+// light, dark and system share the azure palette. The coloured themes are dark schemes: the colour
+// is the accent, and the surfaces are neutrals with only a tint of that hue (8-22 % lightness),
+// so long reading and editing stay comfortable.
+// ---------------------------------------------------------------------------------------------
+
+$font: 'Inter, "Segoe UI", system-ui, -apple-system, "Noto Sans", Roboto, sans-serif';
+
+// The themes whose scheme is dark. Keep in step with DARK_THEMES in app/core/theme.ts.
+$dark-themes: ('dark', 'purple', 'red', 'green', 'blue', 'darkblue');
+
+// M3 tone -> HSL lightness (%) for the tinted neutrals. Tone 6 is the page surface, 10-22 the
+// raised surfaces, 90 the text.
+$lightness: (
+  0: 0,
+  4: 5,
+  6: 8,
+  10: 10,
+  12: 12,
+  17: 15,
+  20: 17,
+  22: 19,
+  24: 21,
+  25: 22,
+  30: 26,
+  35: 31,
+  40: 37,
+  50: 47,
+  60: 58,
+  70: 69,
+  80: 80,
+  87: 87,
+  90: 90,
+  92: 92,
+  94: 94,
+  95: 95,
+  96: 96,
+  98: 98,
+  99: 99,
+  100: 100,
+);
+
+@function tinted($hue, $saturation) {
+  $tones: ();
+  @each $tone, $l in $lightness {
+    $tones: map.set($tones, $tone, hsl($hue, $saturation, $l * 1%));
+  }
+  @return $tones;
+}
+
+// A whole palette from one hue: the accent ramp (soft, not neon: Material's built-in hue palettes are very
+// saturated), the secondary ramp and the two neutral ramps that become the surfaces, text and borders.
+@function palette($hue, $accent, $neutral-hue, $neutral) {
+  @return map.merge(
+    tinted($hue, $accent),
+    (
+      secondary: tinted($hue, $accent * 0.3),
+      neutral: tinted($neutral-hue, $neutral),
+      neutral-variant: tinted($neutral-hue, min($neutral * 1.5, 60%)),
+      error: map.get(mat.$azure-palette, error),
+    )
+  );
+}
+
+// hue: the accent. surface-hue/surface: the tint of the neutrals. tertiary: hue of the second accent.
+$coloured: (
+  'purple': (
+    hue: 265,
+    accent: 80%,
+    surface-hue: 265,
+    surface: 14%,
+    tertiary: 320,
+  ),
+  'red': (
+    hue: 5,
+    accent: 85%,
+    surface-hue: 355,
+    surface: 12%,
+    tertiary: 30,
+  ),
+  'green': (
+    hue: 145,
+    accent: 50%,
+    surface-hue: 150,
+    surface: 10%,
+    tertiary: 185,
+  ),
+  'blue': (
+    hue: 228,
+    accent: 90%,
+    surface-hue: 228,
+    surface: 14%,
+    tertiary: 270,
+  ),
+  // Deeper than "blue": the surfaces themselves are navy, with a sky-blue accent.
+  'darkblue': (
+    hue: 203,
+    accent: 85%,
+    surface-hue: 219,
+    surface: 42%,
+    tertiary: 175,
+  ),
+);
+
+// Emits `@content` when the page is dark: an explicitly dark theme, or `system` on a dark OS.
+@mixin on-dark {
+  @each $theme in $dark-themes {
+    html[data-theme='#{$theme}'] {
+      @content;
+    }
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme]) {
+      @content;
+    }
+  }
+}
+
+html {
+  color-scheme: light dark;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: (
+        plain-family: $font,
+        brand-family: $font,
+      ),
+      density: 0,
+    )
+  );
+}
+
+// The theme attribute works on any element, not only <html>: the picker in Settings previews each theme by
+// putting its id on a small card. (Tokens inherit; light-dark() is evaluated where a colour is used.)
+[data-theme='light'] {
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@each $name, $t in $coloured {
+  [data-theme='#{$name}'] {
+    color-scheme: dark;
+    @include mat.theme(
+      (
+        color: (
+          primary: palette(
+              map.get($t, hue),
+              map.get($t, accent),
+              map.get($t, surface-hue),
+              map.get($t, surface)
+            ),
+          tertiary: palette(
+              map.get($t, tertiary),
+              map.get($t, accent),
+              map.get($t, surface-hue),
+              map.get($t, surface)
+            ),
+        ),
+      )
+    );
+  }
+}
+
+// The app's own names for the Material tokens.
+:root {
+  --sidebar-width: 300px;
+  --content-max: 860px;
+  --radius: 12px;
+  --surface: var(--mat-sys-surface);
+  --surface-2: var(--mat-sys-surface-container-low);
+  --surface-3: var(--mat-sys-surface-container);
+  --border: var(--mat-sys-outline-variant);
+  --text: var(--mat-sys-on-surface);
+  --text-dim: var(--mat-sys-on-surface-variant);
+  --accent: var(--mat-sys-primary);
+
+  // Syntax highlighting in code blocks (highlight.js class names).
+  --hl-keyword: #a626a4;
+  --hl-string: #50a14f;
+  --hl-number: #986801;
+  --hl-title: #4078f2;
+  --hl-type: #c18401;
+}
+
+@include on-dark {
+  --hl-keyword: #c678dd;
+  --hl-string: #98c379;
+  --hl-number: #d19a66;
+  --hl-title: #61afef;
+  --hl-type: #e5c07b;
+}

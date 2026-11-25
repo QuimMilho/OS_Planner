@@ -1,0 +1,77 @@
+name: notes
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      # Prisma emits utf8mb4_unicode_ci for every table it creates; keep the server default
+      # identical so raw SQL never mixes collations.
+      - --collation-server=utf8mb4_unicode_ci
+      # Full-text search: index short words and do not drop en/pt stopwords.
+      - --innodb-ft-min-token-size=2
+      - --innodb-ft-enable-stopword=OFF
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: notes
+      MYSQL_USER: notes
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-notes}
+    ports:
+      - '127.0.0.1:${MYSQL_PORT:-3306}:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-p${MYSQL_ROOT_PASSWORD:-root}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Catches outgoing mail in development. SMTP on 1025, web UI on http://localhost:8025
+  # (For a real deployment, point SMTP_HOST at your mail provider and stop using this.)
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+
+  # The whole app: API + website + downloads + PDF export.   docker compose --profile prod up -d --build
+  server:
+    profiles: ['prod']
+    build:
+      context: .
+      args:
+        NOTES_API_URL: ${NOTES_API_URL:-}
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      APP_URL: ${APP_URL:?set APP_URL in .env to the public address, e.g. https://notes.example.com}
+      DATABASE_URL: mysql://notes:${MYSQL_PASSWORD:-notes}@mysql:3306/notes
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env (at least 32 characters)}
+      JWT_MEDIA_SECRET: ${JWT_MEDIA_SECRET:?set JWT_MEDIA_SECRET in .env (at least 32 characters)}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      MAIL_FROM: ${MAIL_FROM:-Notes <no-reply@notes.local>}
+      RELEASE_TOKEN: ${RELEASE_TOKEN:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-strict}
+      NOTES_API_URL: ${NOTES_API_URL:-}
+      MAX_IMAGE_MB: ${MAX_IMAGE_MB:-20}
+      MAX_VIDEO_MB: ${MAX_VIDEO_MB:-500}
+      USER_QUOTA_MB: ${USER_QUOTA_MB:-2048}
+    volumes:
+      - notes-data:/data
+
+volumes:
+  mysql-data:
+  notes-data:

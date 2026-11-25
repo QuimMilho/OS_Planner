@@ -1,0 +1,187 @@
+// MySQL 8.4, InnoDB, utf8mb4_unicode_ci (what Prisma emits; case/accent-insensitive comparison,
+// so "acentuação" matches "acentuacao" in FULLTEXT search and emails compare case-insensitively).
+//
+// Rules this schema relies on:
+//  * ids are UUID strings. Entities the client can create offline use client-generated UUIDv7.
+//  * `seq` is a per-user, strictly increasing change counter (see ChangeSeqService). Clients
+//    sync with "everything with seq > cursor", tombstones (deletedAt) included.
+//  * `position` is a fractional-index key. Its alphabet is case-sensitive but this database's
+//    collation is not, so NEVER `ORDER BY position` in SQL: sort in application code.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id               String    @id @db.Char(36)
+  /// Stored lowercased.
+  email            String    @unique @db.VarChar(254)
+  passwordHash     String    @db.VarChar(255)
+  displayName      String    @db.VarChar(80)
+  locale           String    @default("en") @db.VarChar(5)
+  theme            String    @default("system") @db.VarChar(16)
+  emailVerifiedAt  DateTime?
+  storageUsedBytes BigInt    @default(0)
+  /// Last change sequence handed out to this user's rows.
+  changeSeq        BigInt    @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
+  emailTokens   EmailToken[]
+  notebooks     Notebook[]
+  categories    Category[]
+  pages         Page[]
+  media         Media[]
+}
+
+model RefreshToken {
+  id           String    @id @db.Char(36)
+  userId       String    @db.Char(36)
+  /// All tokens descended from one login share a family; reuse of a rotated token revokes it all.
+  familyId     String    @db.Char(36)
+  /// SHA-256 (hex) of the opaque token. The token itself is never stored.
+  tokenHash    String    @unique @db.Char(64)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?   @db.Char(36)
+  userAgent    String?   @db.VarChar(255)
+  ip           String?   @db.VarChar(45)
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+model EmailToken {
+  id        String    @id @db.Char(36)
+  userId    String    @db.Char(36)
+  /// "verify" | "reset"
+  type      String    @db.VarChar(10)
+  tokenHash String    @unique @db.Char(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+model Notebook {
+  id        String    @id @db.Char(36)
+  userId    String    @db.Char(36)
+  name      String    @db.VarChar(120)
+  icon      String?   @db.VarChar(40)
+  color     String?   @db.VarChar(7)
+  position  String    @db.VarChar(64)
+  seq       BigInt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories Category[]
+  pages      Page[]
+
+  @@index([userId, seq])
+}
+
+model Category {
+  id         String    @id @db.Char(36)
+  userId     String    @db.Char(36)
+  notebookId String    @db.Char(36)
+  parentId   String?   @db.Char(36)
+  name       String    @db.VarChar(120)
+  position   String    @db.VarChar(64)
+  seq        BigInt
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebook Notebook   @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  // Cascade: hard-deleting a category (trash purge, account deletion) removes its subtree too.
+  // Restrict would make any such delete fail as soon as categories are nested.
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryTree")
+  pages    Page[]
+
+  @@index([userId, seq])
+  @@index([notebookId])
+  @@index([parentId])
+}
+
+model Page {
+  id            String    @id @db.Char(36)
+  userId        String    @db.Char(36)
+  /// Denormalised from the category so notebook-wide queries need no join.
+  notebookId    String    @db.Char(36)
+  categoryId    String    @db.Char(36)
+  title         String    @db.VarChar(200)
+  /// ProseMirror document (see @notes/shared getSchemaExtensions).
+  content       Json
+  /// Plain text derived from `content` for full-text search.
+  contentText   String    @db.MediumText
+  schemaVersion Int       @default(1)
+  /// Incremented on every content write; used for optimistic concurrency.
+  version       Int       @default(0)
+  position      String    @db.VarChar(64)
+  seq           BigInt
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebook   Notebook    @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  mediaLinks PageMedia[]
+
+  @@index([userId, seq])
+  @@index([categoryId])
+  @@index([notebookId])
+  @@fulltext([title, contentText])
+}
+
+model Media {
+  id          String   @id @db.Char(36)
+  userId      String   @db.Char(36)
+  /// "image" | "video"
+  kind        String   @db.VarChar(10)
+  mime        String   @db.VarChar(100)
+  size        Int
+  storageKey  String   @db.VarChar(300)
+  width       Int?
+  height      Int?
+  durationSec Float?
+  createdAt   DateTime @default(now())
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages PageMedia[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+/// Which media a page's content references; maintained on every content write.
+/// Media with no rows here (and older than a grace period) is garbage-collected.
+model PageMedia {
+  pageId  String @db.Char(36)
+  mediaId String @db.Char(36)
+
+  page  Page  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, mediaId])
+  @@index([mediaId])
+}

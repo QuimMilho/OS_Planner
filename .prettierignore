@@ -1,0 +1,11 @@
+node_modules
+dist
+out
+release
+.angular
+coverage
+/data
+/apps/server/data
+package-lock.json
+apps/server/src/generated
+apps/server/prisma/migrations
