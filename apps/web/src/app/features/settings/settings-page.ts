@@ -14,11 +14,13 @@ import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';
 import { QuotaStore } from '../../core/quota';
 import { ThemeService } from '../../core/theme';
+import { sendWithCtrl, setSendWithCtrl } from '../chat/chat-composer';
+import { BlockedUsers, NotificationSettings } from '../notifications/settings-sections';
 import { AppsPanel } from '../site/apps-panel';
 
 @Component({
   selector: 'app-settings-page',
-  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, TranslocoPipe, AppsPanel],
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, TranslocoPipe, AppsPanel, BlockedUsers, NotificationSettings],
   template: `
     <div class="wrap">
       <h1>{{ 'nav.settings' | transloco }}</h1>
@@ -43,6 +45,37 @@ import { AppsPanel } from '../site/apps-panel';
             <mat-option value="pt">Português</mat-option>
           </mat-select>
         </mat-form-field>
+      </section>
+
+      <section class="card" id="privacy">
+        <h2>{{ 'settings.privacy.title' | transloco }}</h2>
+        <label class="toggle">
+          <input type="checkbox" data-invisible [checked]="auth.user()?.presenceMode === 'invisible'" (change)="setInvisible($any($event.target).checked)" />
+          <span>{{ 'settings.privacy.invisible' | transloco }}</span>
+        </label>
+        <p class="muted hint">{{ 'settings.privacy.invisibleHint' | transloco }}</p>
+        <label class="toggle">
+          {{ 'settings.privacy.dms' | transloco }}
+          <select name="allowDMs" data-allow-dms [value]="auth.user()?.allowDMsFrom ?? 'members'" (change)="setAllowDms($any($event.target).value)" [attr.aria-label]="'settings.privacy.dms' | transloco">
+            <option value="members">{{ 'settings.privacy.dmsMembers' | transloco }}</option>
+            <option value="nobody">{{ 'settings.privacy.dmsNobody' | transloco }}</option>
+          </select>
+        </label>
+        <app-blocked-users />
+      </section>
+
+      <section class="card" id="notifications">
+        <h2>{{ 'settings.notifications' | transloco }}</h2>
+        <app-notification-settings />
+      </section>
+
+      <section class="card" id="chat">
+        <h2>{{ 'settings.chat.title' | transloco }}</h2>
+        <label class="toggle">
+          <input type="checkbox" data-send-ctrl [checked]="sendCtrl()" (change)="setSendCtrl($any($event.target).checked)" />
+          <span>{{ 'settings.chat.sendWithCtrl' | transloco }}</span>
+        </label>
+        <p class="muted hint">{{ 'settings.chat.sendWithCtrlHint' | transloco }}</p>
       </section>
 
       <section class="card" id="appearance">
@@ -121,6 +154,7 @@ import { AppsPanel } from '../site/apps-panel';
   styles: `
     .wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 64px; display: flex; flex-direction: column; gap: 16px; } h1 { margin: 0; }
     .card { border: 1px solid var(--border); border-radius: 16px; padding: 20px 24px; } h2 { margin: 0 0 12px; font-size: 18px; } .apps-title { margin: 16px 0 0; }
+    .toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; } .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
     .row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; } form { display: flex; flex-direction: column; gap: 4px; } form.row { flex-direction: row; } mat-form-field { min-width: 220px; }
     .ok, .warn { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; } .ok { color: #2f9e44; } .warn { color: #e8590c; } mat-icon { font-size: 18px; width: 18px; height: 18px; }
     .bar { height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; } .fill { height: 100%; background: var(--accent); }
@@ -183,6 +217,20 @@ export class SettingsPage implements OnInit {
   async saveName(): Promise<void> {
     await this.auth.updateProfile({ displayName: this.displayName.trim() });
     this.notify.info('settings.saved');
+  }
+
+  readonly sendCtrl = sendWithCtrl;
+
+  setSendCtrl(on: boolean): void {
+    setSendWithCtrl(on);
+  }
+
+  async setAllowDms(value: 'members' | 'nobody'): Promise<void> {
+    await this.auth.updateProfile({ allowDMsFrom: value });
+  }
+
+  async setInvisible(on: boolean): Promise<void> {
+    await this.auth.updateProfile({ presenceMode: on ? 'invisible' : 'auto' });
   }
 
   async setLocale(locale: Locale): Promise<void> {

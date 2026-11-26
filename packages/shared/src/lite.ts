@@ -9,3 +9,5 @@ export { collectMediaIds, countWords, extractText } from './doc/text';
 export { IMAGE_MIMES, VIDEO_MIMES } from './dto/mime';
 export { positionBetween } from './dto/position';
 export * from './permissions';
+export * from './dto/realtime-consts';
+export * from './dto/shared-keys';

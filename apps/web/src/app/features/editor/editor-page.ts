@@ -10,10 +10,11 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslocoPipe } from '@jsverse/transloco';
 import type { JSONContent } from '@tiptap/core';
-import { isSafeHref } from '@os-planner/shared';
+import { isSafeHref, Permission } from '@os-planner/shared';
 import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';
 import { Online } from '../../core/online';
+import { AccessStore } from '../../data/access-store';
 import { Db } from '../../data/db';
 import { MediaStore } from '../../data/media-store';
 import { PageStore } from '../../data/page-store';
@@ -45,6 +46,7 @@ export class EditorPage implements OnDestroy {
 
   private readonly injector = inject(Injector);
   private readonly tree = inject(TreeStore);
+  private readonly access = inject(AccessStore);
   private readonly pages = inject(PageStore);
   private readonly media = inject(MediaStore);
   private readonly dbs = inject(Db);
@@ -59,6 +61,19 @@ export class EditorPage implements OnDestroy {
 
   readonly meta = computed(() => this.tree.pageById().get(this.id()));
   readonly trashed = computed(() => !!this.meta()?.deletedAt);
+  /** Whether the person may change this page at all (a shared or team notebook can be read-only for them; a trashed page is too). */
+  readonly mayEdit = computed(() => {
+    const m = this.meta();
+    return !!m && this.access.canEdit(m.notebookId);
+  });
+  readonly mayDelete = computed(() => {
+    const m = this.meta();
+    return !!m && this.access.can(m.notebookId, Permission.DELETE_PAGES);
+  });
+  /** Nothing can be typed: the page is in the trash or the person only reads it. Never a queued write from here. */
+  readonly readOnly = computed(() => this.trashed() || !this.mayEdit());
+  /** Read-only because of what the person may do (not because of the trash): the banner says so. */
+  readonly noWriteAccess = computed(() => !this.trashed() && !!this.meta() && !this.mayEdit());
   readonly crumbs = computed(() => {
     const m = this.meta();
     if (!m) return null;
@@ -105,6 +120,7 @@ export class EditorPage implements OnDestroy {
   private loadedId: string | null = null;
   private loadedBase = -1;
   private titleEdited = false;
+  private focusWhenEditable = false;
 
   constructor() {
     effect(() => {
@@ -126,6 +142,20 @@ export class EditorPage implements OnDestroy {
       removeEventListener('pagehide', rescue);
       document.removeEventListener('visibilitychange', onHidden);
     });
+    // Rights can change while the page is open (the owner turns a share into read-only): the editor follows at once.
+    effect(() => {
+      const editable = !this.readOnly();
+      const editor = this.editor();
+      untracked(() => {
+        if (!editor || editor.isEditable === editable) return;
+        editor.setEditable(editable);
+        // The page opened before the person's rights were known (still loading): it is theirs to type in now.
+        if (editable && this.focusWhenEditable) {
+          this.focusWhenEditable = false;
+          queueMicrotask(() => editor.commands.focus('end'));
+        }
+      });
+    });
     // The title input follows the stored title (it can change on another device), unless the person
     // has typed in it since this page opened: then their text wins until it is saved.
     effect(() => {
@@ -146,6 +176,7 @@ export class EditorPage implements OnDestroy {
     await this.flush();
     this.closeEditor();
     this.titleEdited = false;
+    this.focusWhenEditable = false;
     this.loading.set(true);
     this.missing.set(false);
     this.outline.set([]);
@@ -176,7 +207,7 @@ export class EditorPage implements OnDestroy {
         editMath: (type, pos, latex) => void this.editMath(type, pos, latex),
       }),
       content: row.content as JSONContent,
-      editable: !this.trashed(),
+      editable: !this.readOnly(),
       editorProps: { attributes: { class: 'doc', spellcheck: 'true' } },
       onUpdate: () => this.onEdit(),
       onCreate: ({ editor: e }) => this.updateStats(e),
@@ -186,7 +217,8 @@ export class EditorPage implements OnDestroy {
     this.watchRemote(id);
 
     if (this.route.snapshot.queryParamMap.get('focus') === 'title') queueMicrotask(() => this.titleInput()?.nativeElement.focus());
-    else if (!this.trashed()) queueMicrotask(() => editor.commands.focus('end'));
+    else if (!this.readOnly()) queueMicrotask(() => editor.commands.focus('end'));
+    else this.focusWhenEditable = !this.trashed();
   }
 
   private closeEditor(): void {
@@ -216,6 +248,7 @@ export class EditorPage implements OnDestroy {
   // ------------------------------------------------------------------ saving
 
   private onEdit(): void {
+    if (this.readOnly()) return; // nothing is saved, so nothing is queued, for a page the person may not change
     const editor = this.editor();
     if (editor) this.updateStats(editor);
     this.typing.set(true);
@@ -278,6 +311,7 @@ export class EditorPage implements OnDestroy {
   }
 
   onTitle(value: string): void {
+    if (this.readOnly()) return;
     this.titleEdited = true;
     if (this.renameTimer) clearTimeout(this.renameTimer);
     const id = this.id();
@@ -311,12 +345,18 @@ export class EditorPage implements OnDestroy {
     if (files.length) void this.insertFiles(files);
   }
 
+  /** A file used in a notebook that is not the person's own is stored in that notebook's space: say which notebook it is for. */
+  private uploadNotebook(): string | null {
+    const nb = this.meta()?.notebookId;
+    return nb && !this.access.isOwn(this.tree.notebookById().get(nb)) ? nb : null;
+  }
+
   async insertFiles(files: File[], pos?: number): Promise<void> {
     const editor = this.editor();
     if (!editor) return;
     for (const file of files) {
       try {
-        const added = await this.media.add(file);
+        const added = await this.media.add(file, this.uploadNotebook());
         const node =
           added.kind === 'image'
             ? { type: 'imageFigure', attrs: { mediaId: added.id, alt: file.name.replace(/\.[^.]+$/, ''), caption: '', width: null, align: 'center' } }
@@ -336,7 +376,7 @@ export class EditorPage implements OnDestroy {
 
   private async editMath(type: 'inlineMath' | 'blockMath', pos: number, latex: string): Promise<void> {
     const editor = this.editor();
-    if (!editor || this.trashed()) return;
+    if (!editor || this.readOnly()) return;
     const result = await this.dialogs.math({ latex, block: type === 'blockMath', isNew: false });
     if (!result) return;
     const node = editor.state.doc.nodeAt(pos);
@@ -389,7 +429,7 @@ export class EditorPage implements OnDestroy {
 
   async trash(): Promise<void> {
     const m = this.meta();
-    if (!m) return;
+    if (!m || !this.mayDelete()) return;
     await this.flush();
     await this.tree.deletePage(m.id);
     await this.router.navigate(['/app']);
@@ -397,8 +437,9 @@ export class EditorPage implements OnDestroy {
   }
 
   async restore(): Promise<void> {
+    if (!this.mayDelete()) return;
     await this.tree.restorePage(this.id());
-    this.editor()?.setEditable(true);
+    this.editor()?.setEditable(this.mayEdit());
   }
 }
 

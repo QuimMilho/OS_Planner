@@ -104,11 +104,11 @@ export class RolesStore {
 
   // ------------------------------------------------------------------ overwrites
 
-  overwrites(projectId: string): Promise<OverwriteDto[]> {
+  overwrites(targetId: string, kind: 'project' | 'channel' | 'notebook' = 'project'): Promise<OverwriteDto[]> {
     return this.call(() =>
       firstValueFrom(
         this.http.get<OverwriteDto[]>('/api/overwrites', {
-          params: { kind: 'project', id: projectId },
+          params: { kind, id: targetId },
         }),
       ),
     );
@@ -121,11 +121,12 @@ export class RolesStore {
     subjectId: string,
     allow: string,
     deny: string,
+    kind: 'project' | 'channel' | 'notebook' = 'project',
   ): Promise<OverwriteDto | null> {
     return this.call(async () => {
       const row = await firstValueFrom(
         this.http.put<OverwriteDto | null>('/api/overwrites', {
-          targetKind: 'project',
+          targetKind: kind,
           targetId: projectId,
           subjectKind,
           subjectId,
@@ -133,7 +134,7 @@ export class RolesStore {
           deny,
         }),
       );
-      const teamId = this.teams.projectById().get(projectId)?.teamId;
+      const teamId = kind === 'project' ? this.teams.projectById().get(projectId)?.teamId : null;
       if (teamId) await this.teams.refreshTeam(teamId).catch(() => undefined);
       return row;
     });

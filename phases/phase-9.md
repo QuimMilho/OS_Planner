@@ -87,3 +87,46 @@ Notifications are tiny and pruned after 90 days (nightly job); not charged.
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Shared, pure.** `@os-planner/shared/chat`: `mentions.ts` (tokens `<@user:UUID>`, `<@role:UUID>`, `<@everyone>`, `<@here>`; the parser has a `mention` node and a
+  backslash escapes it; `extractMentions` reads the *parsed tree*, so code and escapes cannot disagree with what is drawn), `notify.ts`
+  (`resolveSetting`, `shouldNotify`, `shouldEmail`, `strongest`, `inQuietHours`), and `dto/notifications.ts`. **Resolution rules as built:** every setting is looked up on its
+  own along *channel → projects (nearest first) → team → global* (a conversation: itself → global); the nearest scope that says something wins and `inherit`/nothing falls through.
+  A mute is the nearest scope that set `mutedUntil` at all: still running = muted, **already ended = an explicit un-mute** (which is what "unmute inside a muted team" stores).
+  "Nothing" and a mute silence everything except a direct mention; `suppressEveryone` (@everyone and @here), `suppressRoles` and `suppressDirect` each switch off their own kind
+  whether or not the scope is muted; `suppressDirect` is refused at the global level; replies count as direct mentions. Defaults: channels `mentions`, conversations `all`.
+- **Mentions are decided by the server** (`MentionsService.accept`): a person counts if they are a team member who can see the channel (bulk check
+  `PermissionService.channelViewers`, tested to agree with `channelAccess` for everyone), a role if it is a role that applies here and is mentionable (or the author has
+  `MENTION_EVERYONE`), `@everyone`/`@here` only with that permission; the result is stored in `Message.mentions` and sent in the DTO, the text is never rewritten and a token
+  that was not accepted is drawn as plain text. `@everyone` in a team over 5000 members is `422 everyone_too_large`. Conversations have no mentions.
+- **Pipeline.** `NotificationService.onMessage(tx, …)` runs inside the message's transaction: recipients are the mentioned (user, role, everyone, here = online by presence) and the replied-to
+  author, plus people who asked for *every* message or email (found through their setting rows), all filtered by visibility and by blocks, resolved per person; inbox rows
+  are written in the same transaction (an ordinary message for somebody on "everything" gets a push or mail but **no inbox row**). An edit adds notifications only for newly mentioned
+  people and removes those of people no longer mentioned; a delete removes them all; a message already read becomes a read notification. After the commit: live event
+  `notification.created`, then push; email waits for the sweep.
+- **Counters.** `UnreadDto.mentions` (unread mention/reply notifications per channel) next to `unread`; `GET /api/notifications/count` gives unread, mentions, per team and unread DMs.
+  `PUT /channels/:id/read` marks that channel's notifications read; `notification.read` keeps other devices in step. A randomised test checks both counters against a reference model.
+- **Push.** `web-push` builds the encrypted request, the server sends it itself with `fetch` (no redirects, 10 s timeout) after checking the address: https and a known push
+  service (Google, Mozilla, Apple, Microsoft) or an origin in `PUSH_EXTRA_ENDPOINTS` (also how tests use a local fake). 404/410 removes the device; at most 10 devices per person; no VAPID keys =
+  `404` on the push endpoints and the UI hides it. Sent unless: the person turned push off for the place, quiet hours, a page of theirs is showing that channel and was used in the last
+  minute (the page reports `focus` with `presence:activity`), or one went out for that channel within `NOTIFY_PUSH_COALESCE_SECONDS`. The payload is Angular's service-worker format
+  (`notification.data.onActionClick` opens the deep link), so no custom service worker was needed. **Channels have a new `redactPreviews` option** (age-restricted channels count too): push, email and the inbox then carry
+  no message text at all (it is not even stored in the notification).
+- **Email.** Per chat (`channel` or `dm` scope) from the settings; each message adds to `EmailDigestState`; a sweep (`NOTIFY_SWEEP_SECONDS`) sends at most one mail per chat every
+  `NOTIFY_EMAIL_INTERVAL_MINUTES`, re-reads the person's *current* settings (so unsubscribing drops what was waiting), skips people with a page used in the last `NOTIFY_AWAY_SECONDS` when they asked for "only
+  when away", quiet hours, and messages already read or deleted. Mails are localised, list the last 5 messages, carry `List-Unsubscribe` and two signed 60-day links to
+  `/mail/action` (mute this chat, stop the mails) that need no login, change only that chat and are idempotent.
+- **Deviations.** `NotificationSetting.scopeId` is `''` for the global scope (a unique key over NULL would allow duplicates). `EmailDigestState` also keeps the pending message ids.
+  `PUT /api/notification-settings` and the mute endpoint answer 204 when a row ends up saying nothing. Roles for the `@` list come from `GET /api/teams/:id/roles`.
+  Every scope has its settings button: the team (sidebar), a project (its page), a channel and a conversation (their headers) and the global defaults (Settings). **Web bundle:** the two translation files are imported statically, so the new
+  texts pushed the initial bundle 4 kB over its 2.1 MB budget: the error budget is now 2.2 MB (loading the second language lazily is the real fix, see phase 17).
+- **Web.** `@` autocomplete in the composer (people with presence, roles with colour, @everyone/@here with the permission), chips in messages (stronger when it is you), a highlighted message when it
+  mentions you, the **bell** with the inbox (all / mentions, grouped by day, mark all read), mention badges on channels and on the team in the rail, the **Notification settings** dialog (team, channel, conversation, global) with the
+  effective result, Settings → Notifications (defaults, quiet hours, Web Push for this device and its device list), the `/mail/action` page, and native notifications in the desktop app through the same events.
+  **nginx / README:** nothing new to proxy (`/api/*` and the `/mail/action` page already go to the app); README, `.env.example` and compose got the new settings.
+- **Manual:** the operating system's own look of a push notification, and clicking one (Windows, Linux, the desktop app). The e2e checks the decrypted payload, including its link.
+- Tests: shared +31 (mentions, resolution matrix, quiet hours), server +29 (`notifications.test.ts`: acceptance, mutes, edits, inbox, settings, push with a fake push service, email batching and links, a counter property test, who-may-be-told agreement) plus the migration test, web e2e +4 (`notifications.e2e.mjs`).

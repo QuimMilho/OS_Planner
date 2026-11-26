@@ -37,6 +37,22 @@ services:
       - '127.0.0.1:1025:1025'
       - '127.0.0.1:8025:8025'
 
+  # Shares realtime events between several server instances (set REDIS_URL=redis://redis:6379 on each of them).
+  #   docker compose --profile scale up -d redis
+  # One instance needs no Redis. Only realtime delivery lives here, so it needs no volume.
+  redis:
+    profiles: ['scale']
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   # The whole app: API + website + downloads + PDF export.   docker compose --profile prod up -d --build
   server:
     profiles: ['prod']
@@ -78,6 +94,15 @@ services:
       MAX_ROLES_PER_TEAM: ${MAX_ROLES_PER_TEAM:-100}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      REDIS_URL: ${REDIS_URL:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      PUSH_EXTRA_ENDPOINTS: ${PUSH_EXTRA_ENDPOINTS:-}
+      NOTIFY_AWAY_SECONDS: ${NOTIFY_AWAY_SECONDS:-600}
+      NOTIFY_EMAIL_INTERVAL_MINUTES: ${NOTIFY_EMAIL_INTERVAL_MINUTES:-15}
+      NOTIFY_PUSH_COALESCE_SECONDS: ${NOTIFY_PUSH_COALESCE_SECONDS:-10}
+      NOTIFY_SWEEP_SECONDS: ${NOTIFY_SWEEP_SECONDS:-30}
     volumes:
       - notes-data:/data
 

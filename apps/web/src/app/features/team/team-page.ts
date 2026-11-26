@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TranslocoPipe } from '@jsverse/transloco';
@@ -7,6 +8,7 @@ import { NotFoundPage } from '../shell/not-found';
 import { Permission } from '@os-planner/shared/lite';
 import { TeamStore } from '../../data/team-store';
 import { TreeStore } from '../../data/tree-store';
+import { openNotifyDialog } from '../notifications/notify-dialog';
 import { TeamUi } from './team-ui';
 
 type View = 'loading' | 'ready' | 'missing';
@@ -36,6 +38,9 @@ type View = 'loading' | 'ready' | 'missing';
             }
             <nav class="links">
               @if (project(); as pr) {
+                <button mat-stroked-button type="button" (click)="notifySettings(pr)" data-action="project-notifications">
+                  <mat-icon>notifications</mat-icon>{{ 'notif.open' | transloco }}
+                </button>
                 @if (canPermissions()) {
                   <a mat-stroked-button [routerLink]="['/app/t', t.id, 'p', pr.id, 'settings']" data-action="project-permissions">
                     <mat-icon>lock_person</mat-icon>{{ 'project.permissions' | transloco }}
@@ -247,6 +252,11 @@ export class TeamPage {
   readonly teams = inject(TeamStore);
   readonly ui = inject(TeamUi);
   private readonly tree = inject(TreeStore);
+  private readonly dialog = inject(MatDialog);
+
+  protected notifySettings(project: { id: string; name: string }): void {
+    openNotifyDialog(this.dialog, { scope: { scopeKind: 'project', scopeId: project.id }, title: project.name });
+  }
 
   /** `null` until a check against the server (or the lack of a network) has settled whether the address is real. */
   private readonly verified = signal<{ team: string; project?: string; ok: boolean } | null>(null);

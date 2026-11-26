@@ -10,6 +10,8 @@ import type { RoleDto, TeamMemberDto } from '@os-planner/shared';
 import { AuthStore, toProblem, type ApiProblem } from '../../core/auth-store';
 import { Notify } from '../../core/notify';
 import { MembershipStore } from '../../data/membership-store';
+import { DmStore } from '../../data/dm-store';
+import { PresenceStore } from '../../data/presence-store';
 import { RolesStore } from '../../data/roles-store';
 import { TeamStore } from '../../data/team-store';
 import { Dialogs } from '../../shared/dialogs';
@@ -41,9 +43,10 @@ interface Section {
         <ul class="members">
           @for (m of s.members; track m.userId) {
             <li [attr.data-member-id]="m.userId">
-              <span class="avatar">{{
-                (m.nickname || m.displayName).charAt(0).toUpperCase()
-              }}</span>
+              <span class="avatar"
+                >{{ (m.nickname || m.displayName).charAt(0).toUpperCase()
+                }}<i class="presence" [class]="'presence ' + presence.statusOf(m.userId)" data-presence [attr.data-status]="presence.statusOf(m.userId)" [attr.title]="'presence.' + presence.statusOf(m.userId) | transloco"></i
+              ></span>
               <span class="who">
                 <span class="n" data-name>{{ m.nickname || m.displayName }}</span>
                 @if (m.nickname) {
@@ -96,6 +99,18 @@ interface Section {
                   </mat-menu>
                 }
               </span>
+              @if (m.userId !== me()) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  (click)="message(m)"
+                  [attr.aria-label]="'dm.message' | transloco"
+                  [title]="'dm.message' | transloco"
+                  data-action="message-member"
+                >
+                  <mat-icon>chat</mat-icon>
+                </button>
+              }
               @if (canNickname(m)) {
                 <button
                   mat-icon-button
@@ -194,6 +209,7 @@ interface Section {
       flex-wrap: wrap;
     }
     .avatar {
+      position: relative;
       display: grid;
       place-items: center;
       width: 30px;
@@ -204,6 +220,25 @@ interface Section {
       font-weight: 600;
       font-size: 13px;
       flex: none;
+    }
+    .presence {
+      position: absolute;
+      right: -2px;
+      bottom: -2px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      border: 2px solid var(--surface);
+      background: var(--text-dim);
+      opacity: 0.5;
+    }
+    .presence.online {
+      background: #2f9e44;
+      opacity: 1;
+    }
+    .presence.idle {
+      background: #f59f00;
+      opacity: 1;
     }
     .who {
       display: flex;
@@ -310,6 +345,22 @@ export class MembersTab {
   private readonly dialogs = inject(Dialogs);
   private readonly membership = inject(MembershipStore);
   private readonly router = inject(Router);
+  protected readonly presence = inject(PresenceStore);
+  private readonly dms = inject(DmStore);
+  protected readonly me = computed(() => this.auth.userId());
+
+  /** Opens (or starts) the conversation with a member. If it is not possible, the answer is the same for every reason. */
+  protected async message(m: TeamMemberDto): Promise<void> {
+    try {
+      const dm = await this.dms.start(m.userId);
+      await this.router.navigate(['/app/dm', dm.id]);
+    } catch {
+      this.notify.error('dm.notAllowed');
+    }
+  }
+
+  /** Follow who is online while the member list is on screen. */
+  private readonly watching = effect((onCleanup) => onCleanup(this.presence.watch(this.teamId())));
 
   protected heir = '';
   protected confirmName = '';

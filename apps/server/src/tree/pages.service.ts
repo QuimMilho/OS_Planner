@@ -42,17 +42,19 @@ export class PagesService {
   async list(userId: string, filter: { categoryId?: string; notebookId?: string }): Promise<PageMetaDto[]> {
     let spaceId: string;
     if (filter.categoryId) {
-      const cat = await this.prisma.category.findUnique({ where: { id: filter.categoryId }, select: { spaceId: true } });
+      const cat = await this.prisma.category.findUnique({ where: { id: filter.categoryId }, select: { spaceId: true, notebookId: true } });
       if (!cat) throw notFound();
       spaceId = cat.spaceId;
+      await this.perms.requireNotebook(userId, cat.notebookId);
     } else if (filter.notebookId) {
       const nb = await this.prisma.notebook.findUnique({ where: { id: filter.notebookId }, select: { spaceId: true } });
       if (!nb) throw notFound();
       spaceId = nb.spaceId;
+      await this.perms.requireNotebook(userId, filter.notebookId);
     } else {
       spaceId = await this.spaces.personalSpaceId(userId);
+      await this.perms.requireSpace(userId, spaceId);
     }
-    await this.perms.requireSpace(userId, spaceId);
     const rows = await this.prisma.page.findMany({
       where: { spaceId, deletedAt: null, ...filter },
       select: PAGE_META_SELECT,
@@ -64,23 +66,23 @@ export class PagesService {
   async get(userId: string, id: string): Promise<PageDto> {
     const row = await this.prisma.page.findUnique({ where: { id } });
     if (!row) throw notFound();
-    await this.perms.requireSpace(userId, row.spaceId);
+    await this.perms.requireNotebook(userId, row.notebookId);
     return toPageDto(row);
   }
 
   /** The page's space, after checking the person may do `needed` there; null if there is no such page. */
   private async spaceOf(userId: string, id: string, needed: bigint): Promise<string | null> {
-    const page = await this.prisma.page.findUnique({ where: { id }, select: { spaceId: true } });
+    const page = await this.prisma.page.findUnique({ where: { id }, select: { spaceId: true, notebookId: true } });
     if (!page) return null;
-    await this.perms.requireSpace(userId, page.spaceId, needed);
+    await this.perms.requireNotebook(userId, page.notebookId, needed);
     return page.spaceId;
   }
 
   async create(userId: string, input: CreatePageInput): Promise<PageMetaDto> {
-    const inCategory = await this.prisma.category.findUnique({ where: { id: input.categoryId }, select: { spaceId: true } });
+    const inCategory = await this.prisma.category.findUnique({ where: { id: input.categoryId }, select: { spaceId: true, notebookId: true } });
     if (!inCategory) throw notFound('category');
     const spaceId = inCategory.spaceId;
-    await this.perms.requireSpace(userId, spaceId, Permission.EDIT_PAGES);
+    await this.perms.requireNotebook(userId, inCategory.notebookId, Permission.EDIT_PAGES);
 
     return this.prisma.$transaction(async (tx) => {
       const seq = await this.seq.next(tx, spaceId);
@@ -132,6 +134,8 @@ export class PagesService {
         // A page and the files it uses live in one space; it does not move between spaces.
         if (category.spaceId !== spaceId) throw invalid('a page cannot be moved to another space');
         if (category.deletedAt) throw parentDeleted();
+        // Moving into another notebook also needs the right to write there (and to see it: otherwise 404).
+        if (category.notebookId !== current.notebookId) await this.perms.requireNotebook(userId, category.notebookId, Permission.EDIT_PAGES, tx);
         destination = { categoryId: category.id, notebookId: category.notebookId };
       }
 

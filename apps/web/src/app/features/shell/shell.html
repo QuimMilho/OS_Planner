@@ -12,7 +12,8 @@
       <button mat-icon-button type="button" (click)="toggleSidenav()" [attr.aria-label]="'nav.hideSidebar' | transloco"><mat-icon>menu_open</mat-icon></button>
     </div>
     <div class="side-scroll" (click)="onNavigate()">
-      @if (nav.teamId()) { <app-team-sidebar /> } @else { <app-tree /> }
+      @if (nav.teamId()) { <app-team-sidebar /> } @else if (nav.inDms()) { <app-dm-sidebar /> } @else { <app-tree />
+        @if (treeStore.sharedRows().length) { <app-tree [shared]="true" /> } }
     </div>
     <nav class="side-foot">
       <a routerLink="/app/trash" routerLinkActive="active" (click)="onNavigate()"><mat-icon>delete</mat-icon>{{ 'nav.trash' | transloco }}</a>
@@ -37,6 +38,12 @@
         <input name="q" [(ngModel)]="query" [placeholder]="'nav.search' | transloco" [attr.aria-label]="'nav.search' | transloco" autocomplete="off" />
       </form>
       <span class="grow"></span>
+
+      <app-bell />
+      <span class="live" [class]="'live ' + connection()" data-realtime [attr.data-status]="connection()" role="status" [matTooltip]="'realtime.' + connection() | transloco">
+        <mat-icon>{{ connection() === 'connected' ? 'wifi' : connection() === 'connecting' ? 'wifi_find' : 'wifi_off' }}</mat-icon>
+        <span class="cdk-visually-hidden">{{ 'realtime.' + connection() | transloco }}</span>
+      </span>
 
       <button type="button" class="chip" [class]="'chip ' + status()" (click)="sync.run()" [matTooltip]="'sync.now' | transloco">
         <mat-icon>{{ status() === 'offline' ? 'cloud_off' : status() === 'error' ? 'error' : status() === 'syncing' ? 'sync' : 'cloud_done' }}</mat-icon>

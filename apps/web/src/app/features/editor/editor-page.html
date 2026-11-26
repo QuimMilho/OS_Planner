@@ -26,14 +26,18 @@
       <button mat-icon-button type="button" [matMenuTriggerFor]="more" [attr.aria-label]="'common.more' | transloco"><mat-icon>more_vert</mat-icon></button>
       <mat-menu #more="matMenu">
         <button mat-menu-item type="button" (click)="export()"><mat-icon>download</mat-icon>{{ 'export.title' | transloco }}</button>
-        <button mat-menu-item type="button" (click)="trash()" [disabled]="trashed()"><mat-icon>delete</mat-icon>{{ 'page.moveToTrash' | transloco }}</button>
+        <button mat-menu-item type="button" (click)="trash()" [disabled]="trashed() || !mayDelete()"><mat-icon>delete</mat-icon>{{ 'page.moveToTrash' | transloco }}</button>
       </mat-menu>
     </header>
 
     @if (trashed()) {
       <div class="banner">
         <mat-icon>delete</mat-icon>{{ 'page.inTrash' | transloco }}
-        <button mat-button type="button" (click)="restore()">{{ 'common.restore' | transloco }}</button>
+        @if (mayDelete()) { <button mat-button type="button" (click)="restore()">{{ 'common.restore' | transloco }}</button> }
+      </div>
+    } @else if (noWriteAccess()) {
+      <div class="banner" data-read-only role="status">
+        <mat-icon>visibility</mat-icon>{{ 'page.readOnly' | transloco }}
       </div>
     }
 
@@ -44,14 +48,14 @@
             #titleInput
             class="title"
             [placeholder]="'page.untitledPlaceholder' | transloco"
-            [readOnly]="trashed()"
+            [readOnly]="readOnly()"
             maxlength="200"
             (input)="onTitle($any($event.target).value)"
             (keydown.enter)="focusBody()"
           />
 
           @if (editor(); as ed) {
-            @if (!trashed()) {
+            @if (!readOnly()) {
               <app-toolbar class="tb" [editor]="ed" [items]="insertItems" (link)="editLink()" />
             }
             <div tiptap [editor]="ed" class="content"></div>

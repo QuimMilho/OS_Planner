@@ -44,6 +44,10 @@ export interface TeamDto {
   /** The line shown on the directory card (public teams). */
   listingBlurb: string;
   listingTags: string[];
+  /** Whether members may message each other directly because of this team. */
+  allowMemberDMs: boolean;
+  /** Whether people with SHARE_NOTEBOOKS may make public read links to the team notebooks. */
+  allowPublicLinks: boolean;
   /** The team own space (its notebooks and sync cursor). */
   spaceId: string;
   ownerId: string | null;
@@ -63,6 +67,8 @@ export const updateTeamSchema = z
     joinPolicy: joinPolicySchema,
     listingBlurb: listingBlurbSchema,
     listingTags: listingTagsSchema,
+    allowMemberDMs: z.boolean(),
+    allowPublicLinks: z.boolean(),
   })
   .partial();
 export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;

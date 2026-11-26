@@ -28,6 +28,12 @@ model User {
   displayName     String    @db.VarChar(80)
   locale          String    @default("en") @db.VarChar(5)
   theme           String    @default("system") @db.VarChar(16)
+  /// "auto" | "invisible": invisible people appear offline to everyone else (realtime presence).
+  presenceMode    String    @default("auto") @db.VarChar(10)
+  /// Who may start a direct message with this person: "members" (people who share a team with them) | "nobody".
+  allowDMsFrom    String    @default("members") @db.VarChar(10)
+  /// Quiet hours for push and email (see QuietHoursDto), NULL = none.
+  quietHours      Json?
   emailVerifiedAt DateTime?
   /// Mirror of the personal space changeSeq, kept for clients that still sync with `since` (removed in phase 17).
   changeSeq       BigInt    @default(0)
@@ -51,6 +57,19 @@ model User {
   pendingInvites     PendingInvite[]
   joinRequests       JoinRequest[]   @relation("JoinRequester")
   bans               Ban[]           @relation("Banned")
+  messages           Message[]       @relation("MessageAuthor")
+  reactions          Reaction[]      @relation("ReactionUser")
+  channelReads       ChannelRead[]   @relation("ChannelReadUser")
+  directStates       DirectState[]
+  directAsA          DirectConversation[] @relation("DirectA")
+  directAsB          DirectConversation[] @relation("DirectB")
+  blocking          UserBlock[]     @relation("Blocker")
+  blockedBy          UserBlock[]     @relation("Blocked")
+  notificationSettings NotificationSetting[]
+  notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+  emailDigests       EmailDigestState[]
+  sharedNotebooks    NotebookShare[] @relation("SharedWithUser")
 }
 
 model RefreshToken {
@@ -107,8 +126,81 @@ model Notebook {
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   categories Category[]
   pages      Page[]
+  shares     NotebookShare[]
+  links      ShareLink[]
+  pendingShares PendingShare[]
 
   @@index([userId, seq])
+  @@index([spaceId, seq])
+}
+
+/// A personal notebook shared with one person (read or edit). Ends with the share, the link it came from, or a move.
+model NotebookShare {
+  id         String   @id @db.Char(36)
+  notebookId String   @db.Char(36)
+  userId     String   @db.Char(36)
+  /// "read" | "edit"
+  access     String   @db.VarChar(5)
+  /// Set when the person got it by using an edit link: revoking the link ends the share.
+  linkId     String?  @db.Char(36)
+  createdBy  String   @db.Char(36)
+  createdAt  DateTime @default(now())
+
+  notebook Notebook   @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  user     User       @relation("SharedWithUser", fields: [userId], references: [id], onDelete: Cascade)
+  link     ShareLink? @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@unique([notebookId, userId])
+  @@index([userId])
+  @@index([linkId])
+}
+
+/// An address that opens one notebook without an account (read) or with a login (edit). Only the hash of the token is stored.
+model ShareLink {
+  id           String    @id @db.Char(36)
+  notebookId   String    @db.Char(36)
+  tokenHash    String    @unique @db.Char(64)
+  /// "read" | "edit"
+  access       String    @db.VarChar(5)
+  /// argon2id; NULL = no password.
+  passwordHash String?   @db.VarChar(255)
+  /// Whether the public view names the notebook's owner.
+  showAuthors  Boolean   @default(false)
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  createdBy    String    @db.Char(36)
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  notebook Notebook        @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  shares   NotebookShare[]
+
+  @@index([notebookId])
+}
+
+/// A share for an address that has no verified account yet: applied when somebody verifies that address.
+model PendingShare {
+  id         String   @id @db.Char(36)
+  notebookId String   @db.Char(36)
+  email      String   @db.VarChar(254)
+  access     String   @db.VarChar(5)
+  createdBy  String   @db.Char(36)
+  createdAt  DateTime @default(now())
+
+  notebook Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+
+  @@unique([notebookId, email])
+  @@index([email])
+}
+
+/// A notebook that left a space (moved to another one): clients holding the old space drop it.
+model NotebookMove {
+  id         String @id @db.Char(36)
+  /// The space it left.
+  spaceId    String @db.Char(36)
+  notebookId String @db.Char(36)
+  seq        BigInt
+
   @@index([spaceId, seq])
 }
 
@@ -193,7 +285,8 @@ model Media {
 
   space Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pages PageMedia[]
+  pages      PageMedia[]
+  attachment Attachment?
 
   @@index([userId])
   @@index([spaceId])
@@ -253,6 +346,7 @@ model Space {
   categories Category[]
   pages      Page[]
   media      Media[]
+  channels   Channel[]
 }
 
 /// A "guild": members, projects and a space of its own. Created by an instance admin.
@@ -272,6 +366,10 @@ model Team {
   listingBlurb        String    @default("") @db.VarChar(200)
   /// JSON array of short lowercase tags for the directory (NULL = none).
   listingTags         Json?
+  /// Whether members may start direct messages with each other because of this team.
+  allowMemberDMs      Boolean   @default(true)
+  /// Whether people with SHARE_NOTEBOOKS may create public (read-only) links to the team's notebooks.
+  allowPublicLinks    Boolean   @default(false)
   /// The team own space. A plain pointer (Space.teamId holds the real foreign key).
   spaceId             String    @unique @db.Char(36)
   createdAt           DateTime  @default(now())
@@ -517,4 +615,289 @@ model Ban {
 
   @@id([teamId, userId])
   @@index([userId])
+}
+
+// ---------------------------------------------------------------- chat (phase 7)
+
+/// A text channel, a category that groups channels, or (later) a voice channel. Belongs to a team or project space.
+/// Who may see or use it is decided by the permission engine: the team's roles, the project chain, the category and the
+/// channel's own overwrites (Overwrite rows with targetKind "channel").
+///
+/// A direct message conversation owns a channel of kind "dm" with no space: nothing in a team can see it, and who may
+/// read it is decided by DirectConversation (the two people), never by roles.
+model Channel {
+  id              String    @id @db.Char(36)
+  spaceId         String?   @db.Char(36)
+  /// The category it sits in (a Channel of kind "category").
+  parentId        String?   @db.Char(36)
+  /// "text" | "category" | "voice" | "dm"
+  kind            String    @db.VarChar(10)
+  name            String    @db.VarChar(80)
+  topic           String    @default("") @db.VarChar(500)
+  /// Fractional-index key among siblings (sort in application code, never ORDER BY).
+  position        String    @db.VarChar(64)
+  nsfw            Boolean   @default(false)
+  /// Push and email show a generic text instead of the message.
+  redactPreviews  Boolean   @default(false)
+  slowmodeSeconds Int       @default(0)
+  archivedAt      DateTime?
+  /// Last change sequence handed out in this channel (every change of a message takes the next one; see MessagesService).
+  lastSeq         BigInt    @default(0)
+  createdBy       String?   @db.Char(36)
+  createdAt       DateTime  @default(now())
+
+  space    Space?        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parent   Channel?      @relation("ChannelTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Channel[]     @relation("ChannelTree")
+  messages Message[]
+  threads  Thread[]
+  reads    ChannelRead[]
+  direct   DirectConversation?
+
+  @@index([spaceId])
+  @@index([parentId])
+}
+
+/// A chat message. The id is made by the client (UUIDv7), so a resend is recognised and ids sort by time.
+/// A deleted message stays as a tombstone (deletedAt set, content cleared) so replies can still say "message deleted".
+model Message {
+  id        String    @id @db.Char(36)
+  channelId String    @db.Char(36)
+  /// Set for a message in a thread; those do not show in the channel's list.
+  threadId  String?   @db.Char(36)
+  /// NULL once the author's account is gone.
+  authorId  String?   @db.Char(36)
+  /// Markdown, at most 4000 characters.
+  content   String    @db.Text
+  /// The mentions of `content` the server accepted: { users, roles, everyone, here }. Computed here, never taken from the client.
+  mentions  Json?
+  /// UTF-8 size of `content`; counts toward the space's storage ("documents").
+  sizeBytes Int       @default(0)
+  /// A plain pointer: the message replied to may be a tombstone.
+  replyToId String?   @db.Char(36)
+  editedAt  DateTime?
+  deletedAt DateTime?
+  pinnedAt  DateTime?
+  pinnedBy  String?   @db.Char(36)
+  createdAt DateTime  @default(now())
+  /// The channel's change sequence the last time this message changed (created, edited, deleted, pinned, reacted to).
+  seq       BigInt
+
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User?        @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+  reactions   Reaction[]
+
+  @@index([channelId, id])
+  @@index([channelId, seq])
+  @@index([threadId, id])
+  @@index([authorId])
+  @@fulltext([content])
+}
+
+/// A file sent with a message. Uploaded first (messageId NULL), attached when the message is sent. The bytes are a
+/// Media row of the channel's space, so they count toward its quota and go with it.
+model Attachment {
+  id         String   @id @db.Char(36)
+  channelId  String   @db.Char(36)
+  messageId  String?  @db.Char(36)
+  mediaId    String   @unique @db.Char(36)
+  uploadedBy String?  @db.Char(36)
+  name       String   @db.VarChar(200)
+  createdAt  DateTime @default(now())
+
+  message Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  media   Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([channelId])
+  @@index([createdAt])
+}
+
+model Reaction {
+  messageId String   @db.Char(36)
+  userId    String   @db.Char(36)
+  emoji     String   @db.VarChar(32)
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation("ReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId, emoji])
+  @@index([userId])
+}
+
+/// A discussion that branches off one message of a channel. One per root message.
+model Thread {
+  id            String    @id @db.Char(36)
+  channelId     String    @db.Char(36)
+  rootMessageId String    @unique @db.Char(36)
+  name          String    @db.VarChar(80)
+  archivedAt    DateTime?
+  createdBy     String?   @db.Char(36)
+  lastMessageAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId])
+}
+
+/// What a person has read in a channel (private: nobody else can see it).
+model ChannelRead {
+  userId            String   @db.Char(36)
+  channelId         String   @db.Char(36)
+  lastReadMessageId String?  @db.Char(36)
+  /// When the person first opened the channel. Without READ_MESSAGE_HISTORY they only see messages from then on.
+  openedAt          DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user    User    @relation("ChannelReadUser", fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+  @@index([channelId])
+}
+
+// ---------------------------------------------------------------- direct messages (phase 8)
+
+/// A private conversation between two people. The pair is stored ordered (userA < userB) so it has exactly one row
+/// whoever started it. Its messages live in `channel` (kind "dm", no space). A person whose account is gone becomes NULL
+/// here: the other one keeps the history, shown as "Deleted user".
+model DirectConversation {
+  id            String   @id @db.Char(36)
+  userA         String?  @db.Char(36)
+  userB         String?  @db.Char(36)
+  channelId     String   @unique @db.Char(36)
+  createdAt     DateTime @default(now())
+  /// When the last message was sent (orders the list).
+  lastMessageAt DateTime @default(now())
+
+  channel Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  states  DirectState[]
+  personA User?         @relation("DirectA", fields: [userA], references: [id], onDelete: SetNull)
+  personB User?         @relation("DirectB", fields: [userB], references: [id], onDelete: SetNull)
+
+  @@unique([userA, userB])
+  @@index([userB])
+  @@index([lastMessageAt])
+}
+
+/// One person's side of a conversation. A closed conversation is hidden from their list until a new message arrives.
+model DirectState {
+  conversationId String    @db.Char(36)
+  userId         String    @db.Char(36)
+  closedAt       DateTime?
+
+  conversation DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+/// `blockerId` does not want messages from `blockedId` (and cannot send them either: a block closes the conversation both ways).
+model UserBlock {
+  blockerId String   @db.Char(36)
+  blockedId String   @db.Char(36)
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+// ---------------------------------------------------------------- notifications (phase 9)
+
+/// What one person wants for one scope (global, team, project, channel or conversation). Every column that is NULL (or
+/// "inherit") falls through to the next scope up; see resolveSetting in @os-planner/shared.
+model NotificationSetting {
+  id                String    @id @db.Char(36)
+  userId            String    @db.Char(36)
+  /// "global" | "team" | "project" | "channel" | "dm"
+  scopeKind         String    @db.VarChar(10)
+  /// "" for global (a unique key over a NULL would allow duplicates).
+  scopeId           String    @default("") @db.VarChar(36)
+  /// "all" | "mentions" | "none" | "inherit"
+  level             String    @default("inherit") @db.VarChar(10)
+  suppressEveryone  Boolean?
+  suppressRoles     Boolean?
+  suppressDirect    Boolean?
+  /// NULL = no mute set here. A time in the past is an explicit un-mute inside a muted parent.
+  mutedUntil        DateTime?
+  /// "off" | "mentions" | "all" | "inherit"
+  email             String    @default("inherit") @db.VarChar(10)
+  emailOnlyWhenAway Boolean?
+  push              Boolean?
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scopeKind, scopeId])
+  @@index([scopeKind, scopeId])
+}
+
+/// One item of a person's inbox. Written in the transaction of whatever caused it; removed after 90 days.
+model Notification {
+  id         String    @id @db.Char(36)
+  userId     String    @db.Char(36)
+  kind       String    @db.VarChar(24)
+  actorId    String?   @db.Char(36)
+  /// The team or project space the channel is in (NULL for a conversation).
+  spaceId    String?   @db.Char(36)
+  channelId  String?   @db.Char(36)
+  messageId  String?   @db.Char(36)
+  targetKind String?   @db.VarChar(16)
+  targetId   String?   @db.Char(36)
+  summary    String    @db.VarChar(300)
+  /// summary is a generic text, not the message.
+  redacted   Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, channelId, readAt])
+  @@index([messageId])
+  @@index([createdAt])
+}
+
+/// A browser or device that may receive Web Push for a person.
+model PushSubscription {
+  id           String   @id @db.Char(36)
+  userId       String   @db.Char(36)
+  endpoint     String   @db.Text
+  /// SHA-256 of the endpoint (a unique key over the address itself is too long for an index).
+  endpointHash String   @unique @db.Char(64)
+  p256dh       String   @db.VarChar(200)
+  auth         String   @db.VarChar(100)
+  userAgent    String?  @db.VarChar(300)
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Email waiting to be sent for one chat: at most one mail per chat every 15 minutes carries what accumulated.
+model EmailDigestState {
+  userId        String    @db.Char(36)
+  /// "channel" | "dm"
+  scopeKind     String    @db.VarChar(10)
+  scopeId       String    @db.Char(36)
+  lastEmailedAt DateTime?
+  pendingCount  Int       @default(0)
+  /// The ids of the latest pending messages (newest last).
+  pendingIds    Json?
+  /// Why the first pending message was there ("mention" or "message"), kept for the subject line.
+  pendingSince  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, scopeKind, scopeId])
+  @@index([pendingCount])
 }

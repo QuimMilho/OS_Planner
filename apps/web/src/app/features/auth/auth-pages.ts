@@ -59,7 +59,7 @@ export class Login {
     try {
       await this.auth.login(this.email.trim(), this.password);
       const target = this.returnUrl();
-      await this.router.navigateByUrl(target && (target.startsWith('/app') || target.startsWith('/invite/')) ? target : '/app');
+      await this.router.navigateByUrl(target && (target.startsWith('/app') || target.startsWith('/invite/') || target.startsWith('/s/')) ? target : '/app');
     } catch (e) {
       this.error.set(errorKey(e));
     } finally {

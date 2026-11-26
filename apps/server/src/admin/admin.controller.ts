@@ -22,9 +22,11 @@ import {
   type CreateTeamInput,
   type AdminUsersPage,
   type QuotaOverrideInput,
+  type RealtimeStatsDto,
 } from '@os-planner/shared';
 import { z } from 'zod';
 import { CurrentUser, Public, type AuthUser } from '../common/auth.decorators.js';
+import { RealtimeServer } from '../realtime/realtime.server.js';
 import { QuotaService } from '../quota/quota.service.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { AdminGuard } from './admin.guard.js';
@@ -44,7 +46,14 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly quota: QuotaService,
     private readonly teams: TeamsService,
+    private readonly realtime: RealtimeServer,
   ) {}
+
+  /** Connections and rooms of the instance that answers, and what the gateway has dropped or refused. */
+  @Get('realtime')
+  realtimeStats(): RealtimeStatsDto {
+    return this.realtime.snapshot();
+  }
 
   @Get('users')
   users(

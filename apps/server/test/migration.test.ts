@@ -287,6 +287,133 @@ describe('migrating a database that holds data from before', () => {
     await ask('denied', null);
   });
 
+  it('phase 6: everybody is visible by default; phase 7: the chat tables are empty and nothing else changed', async () => {
+    await apply(only('realtime_presence'));
+    const users = await rows<{ email: string; presenceMode: string }>('SELECT email, presenceMode FROM `User` ORDER BY email');
+    expect(users.map((u) => [u.email, u.presenceMode])).toEqual([
+      [alice.email, 'auto'],
+      [bob.email, 'auto'],
+    ]);
+
+    await apply(only('chat_channels'));
+    await apply(only('reaction_emoji_binary'));
+    for (const table of ['Channel', 'Message', 'Attachment', 'Reaction', 'Thread', 'ChannelRead'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+    // what was there is untouched: the notes, the media (now able to carry an attachment) and the teams
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Page`'))[0]!.n)).toBe(3);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Team`'))[0]!.n)).toBe(2);
+
+    // different emoji are different rows (a case-insensitive collation would call them equal), the same one twice is refused
+    const user = alice.id;
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [user]);
+    const channel = randomUUID();
+    const message = randomUUID();
+    await conn.query("INSERT INTO `Channel` (id, spaceId, kind, name, position) VALUES (?, ?, 'text', 'general', 'a0')", [channel, space!.id]);
+    await conn.query("INSERT INTO `Message` (id, channelId, authorId, content, seq) VALUES (?, ?, ?, 'hi', 1)", [message, channel, user]);
+    const react = (emoji: string) => conn.query('INSERT INTO `Reaction` (messageId, userId, emoji) VALUES (?, ?, ?)', [message, user, emoji]);
+    await react('👍');
+    await react('😂');
+    await expect(react('👍')).rejects.toThrow(/Duplicate entry/);
+    await conn.query('DELETE FROM `Channel` WHERE id = ?', [channel]); // messages and reactions go with it
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Reaction`'))[0]!.n)).toBe(0);
+  });
+
+  it('phase 8: everybody accepts messages from people who share a team, every team allows them, no conversation exists yet, and a conversation channel needs no space', async () => {
+    // some chat that already exists keeps its space
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const oldChannel = randomUUID();
+    const oldMessage = randomUUID();
+    await conn.query("INSERT INTO `Channel` (id, spaceId, kind, name, position) VALUES (?, ?, 'text', 'old', 'a0')", [oldChannel, space!.id]);
+    await conn.query("INSERT INTO `Message` (id, channelId, authorId, content, seq) VALUES (?, ?, ?, 'from before', 1)", [oldMessage, oldChannel, alice.id]);
+
+    await apply(only('direct_messages'));
+    const users = await rows<{ allowDMsFrom: string }>('SELECT allowDMsFrom FROM `User`');
+    expect(users.map((u) => u.allowDMsFrom)).toEqual(['members', 'members']);
+    const teams = await rows<{ allowMemberDMs: number }>('SELECT allowMemberDMs FROM `Team`');
+    expect(teams.map((t) => Number(t.allowMemberDMs))).toEqual([1, 1]);
+    for (const table of ['DirectConversation', 'DirectState', 'UserBlock'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+    expect((await rows<{ spaceId: string }>('SELECT spaceId FROM `Channel` WHERE id = ?', [oldChannel]))[0]!.spaceId).toBe(space!.id);
+
+    // a conversation: a channel with no space, one row per pair, and a person who goes leaves the other one the history
+    const dmChannel = randomUUID();
+    const dm = randomUUID();
+    // (two people made for the occasion: the others are needed by the tests that follow)
+    const ghost = async (): Promise<string> => {
+      const id = randomUUID();
+      await conn.query("INSERT INTO `User` (id, email, passwordHash, displayName, updatedAt) VALUES (?, ?, 'x', 'Ghost', NOW(3))", [id, `${id}@example.com`]);
+      return id;
+    };
+    const [a, b] = [await ghost(), await ghost()].sort() as [string, string];
+    await conn.query("INSERT INTO `Channel` (id, spaceId, kind, name, position) VALUES (?, NULL, 'dm', '', 'a0')", [dmChannel]);
+    const pair = (channel: string) =>
+      conn.query('INSERT INTO `DirectConversation` (id, userA, userB, channelId) VALUES (?, ?, ?, ?)', [randomUUID(), a, b, channel]);
+    await conn.query('INSERT INTO `DirectConversation` (id, userA, userB, channelId) VALUES (?, ?, ?, ?)', [dm, a, b, dmChannel]);
+    const second = randomUUID();
+    await conn.query("INSERT INTO `Channel` (id, spaceId, kind, name, position) VALUES (?, NULL, 'dm', '', 'a0')", [second]);
+    await expect(pair(second)).rejects.toThrow(/Duplicate entry/);
+    await conn.query('DELETE FROM `Channel` WHERE id = ?', [second]);
+    await conn.query('DELETE FROM `User` WHERE id = ?', [b]);
+    const left = (await rows<{ userA: string | null; userB: string | null }>('SELECT userA, userB FROM `DirectConversation` WHERE id = ?', [dm]))[0]!;
+    expect(left).toEqual({ userA: a, userB: null });
+    await conn.query('DELETE FROM `Channel` WHERE id = ?', [dmChannel]); // the conversation goes with its channel
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `DirectConversation`'))[0]!.n)).toBe(0);
+    await conn.query('DELETE FROM `Channel` WHERE id = ?', [oldChannel]);
+  });
+
+  it('phase 9: messages and channels keep their content with neutral new columns, and the notification tables are empty', async () => {
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const channel = randomUUID();
+    await conn.query("INSERT INTO `Channel` (id, spaceId, kind, name, position) VALUES (?, ?, 'text', 'before', 'a0')", [channel, space!.id]);
+    const user = { id: alice.id };
+    await conn.query("INSERT INTO `Message` (id, channelId, authorId, content, seq) VALUES (?, ?, ?, 'old words', 1)", [randomUUID(), channel, user!.id]);
+
+    await apply(only('notifications'));
+    const message = (await rows<{ content: string; mentions: unknown }>('SELECT content, mentions FROM `Message` WHERE channelId = ?', [channel]))[0]!;
+    expect(message).toEqual({ content: 'old words', mentions: null });
+    expect(Number((await rows<{ redactPreviews: number }>('SELECT redactPreviews FROM `Channel` WHERE id = ?', [channel]))[0]!.redactPreviews)).toBe(0);
+    expect((await rows<{ quietHours: unknown }>('SELECT quietHours FROM `User` WHERE id = ?', [alice.id]))[0]!.quietHours).toBeNull();
+    for (const table of ['NotificationSetting', 'Notification', 'PushSubscription', 'EmailDigestState'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+
+    // one row per person and place; a second push subscription for the same address is refused
+    const ghostId = randomUUID();
+    await conn.query("INSERT INTO `User` (id, email, passwordHash, displayName, updatedAt) VALUES (?, ?, 'x', 'Ghost', NOW(3))", [ghostId, `${ghostId}@example.com`]);
+    const setting = () => conn.query("INSERT INTO `NotificationSetting` (id, userId, scopeKind, scopeId, updatedAt) VALUES (?, ?, 'channel', ?, NOW(3))", [randomUUID(), ghostId, channel]);
+    await setting();
+    await expect(setting()).rejects.toThrow(/Duplicate entry/);
+    const device = () => conn.query("INSERT INTO `PushSubscription` (id, userId, endpoint, endpointHash, p256dh, auth) VALUES (?, ?, 'https://fcm.googleapis.com/x', 'h', 'p', 'a')", [randomUUID(), ghostId]);
+    await device();
+    await expect(device()).rejects.toThrow(/Duplicate entry/);
+    await conn.query('DELETE FROM `User` WHERE id = ?', [ghostId]); // their rows go with them
+    await conn.query('DELETE FROM `Channel` WHERE id = ?', [channel]);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `PushSubscription`'))[0]!.n)).toBe(0);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `NotificationSetting`'))[0]!.n)).toBe(0);
+  });
+
+  it('phase 10: teams start with public links off, shares and links hang on their notebook, and a move leaves a trace', async () => {
+    await apply(only('notebook_sharing'));
+    const teams = await rows<{ allowPublicLinks: number }>('SELECT allowPublicLinks FROM `Team`');
+    for (const team of teams) expect(Number(team.allowPublicLinks)).toBe(0);
+
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const nb = randomUUID();
+    await conn.query("INSERT INTO `Notebook` (id, spaceId, userId, name, position, seq, updatedAt) VALUES (?, ?, ?, 'Shared', 'a0', 1, NOW(3))", [nb, space!.id, alice.id]);
+    const linkId = randomUUID();
+    await conn.query("INSERT INTO `ShareLink` (id, notebookId, tokenHash, access, createdBy) VALUES (?, ?, ?, 'edit', ?)", [linkId, nb, 'a'.repeat(64), alice.id]);
+    await expect(conn.query("INSERT INTO `ShareLink` (id, notebookId, tokenHash, access, createdBy) VALUES (?, ?, ?, 'read', ?)", [randomUUID(), nb, 'a'.repeat(64), alice.id])).rejects.toThrow(/Duplicate entry/);
+    const share = () => conn.query("INSERT INTO `NotebookShare` (id, notebookId, userId, access, linkId, createdBy) VALUES (?, ?, ?, 'edit', ?, ?)", [randomUUID(), nb, bob.id, linkId, alice.id]);
+    await share();
+    await expect(share()).rejects.toThrow(/Duplicate entry/); // one share per person and notebook
+    await conn.query("INSERT INTO `PendingShare` (id, notebookId, email, access, createdBy) VALUES (?, ?, 'x@example.com', 'read', ?)", [randomUUID(), nb, alice.id]);
+
+    // deleting the link takes the shares that came from it; deleting the notebook takes the rest
+    await conn.query('DELETE FROM `ShareLink` WHERE id = ?', [linkId]);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `NotebookShare` WHERE notebookId = ?', [nb]))[0]!.n)).toBe(0);
+    await conn.query('DELETE FROM `Notebook` WHERE id = ?', [nb]);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `PendingShare` WHERE notebookId = ?', [nb]))[0]!.n)).toBe(0);
+  });
+
   it('sync returns identical data before and after, through the old cursor and through per-space cursors', async () => {
     const url = new URL(savedUrl!);
     url.pathname = `/${DB}`;
@@ -387,6 +514,19 @@ describe('migrating a database that holds data from before', () => {
       'PendingInvite',
       'JoinRequest',
       'Ban',
+      'Channel',
+      'Message',
+      'Attachment',
+      'Reaction',
+      'Thread',
+      'ChannelRead',
+      'DirectConversation',
+      'DirectState',
+      'UserBlock',
+      'NotificationSetting',
+      'Notification',
+      'PushSubscription',
+      'EmailDigestState',
     ])
       expect(tables).toContain(expected);
     expect(TEST_DB).not.toBe(DB);

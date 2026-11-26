@@ -60,6 +60,8 @@ export class MaintenanceService {
       const pages = await tx.page.deleteMany({ where: old });
       const categories = await tx.category.deleteMany({ where: old });
       const notebooks = await tx.notebook.deleteMany({ where: old });
+      // Overwrites on a notebook are not tied to it by a foreign key: they go with it.
+      if (notebookIds.length) await tx.overwrite.deleteMany({ where: { targetKind: 'notebook', targetId: { in: notebookIds } } });
 
       const freed = new Map<string, number>();
       for (const p of doomed) freed.set(p.spaceId, (freed.get(p.spaceId) ?? 0) + p.sizeBytes);
@@ -91,6 +93,11 @@ export class MaintenanceService {
     const files = spaceIds.length ? await this.prisma.media.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true, userId: true } }) : [];
 
     await this.prisma.$transaction(async (tx) => {
+      // Overwrites on channels are not tied to them by a foreign key: they go with the channels (which go with their spaces).
+      const channels = await tx.channel.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true } });
+      if (channels.length) await tx.overwrite.deleteMany({ where: { targetKind: 'channel', targetId: { in: channels.map((c) => c.id) } } });
+      const notebooks = await tx.notebook.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true } });
+      if (notebooks.length) await tx.overwrite.deleteMany({ where: { targetKind: 'notebook', targetId: { in: notebooks.map((n) => n.id) } } });
       // A project that goes while its team stays gives its bytes back to the team's total.
       const survivors = projects.filter((p) => !teamIds.includes(p.teamId));
       if (survivors.length) {
@@ -115,7 +122,7 @@ export class MaintenanceService {
     let removed = 0;
     for (;;) {
       const batch = await this.prisma.media.findMany({
-        where: { createdAt: { lt: cutoff }, pages: { none: {} } },
+        where: { createdAt: { lt: cutoff }, pages: { none: {} }, attachment: { is: null } }, // chat attachments live as long as their message
         take: 200,
       });
       if (!batch.length) return removed;

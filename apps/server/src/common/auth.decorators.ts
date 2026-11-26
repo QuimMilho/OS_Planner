@@ -4,6 +4,8 @@ export interface AuthUser {
   id: string;
   /** Refresh-token family of the session that issued this access token. */
   sessionId: string;
+  /** When the access token stops being valid (seconds since the epoch). */
+  expiresAt?: number;
 }
 
 export const IS_PUBLIC = 'isPublic';

@@ -409,5 +409,15 @@ export class ProjectsService {
     await tx.overwrite.deleteMany({
       where: { subjectKind: 'member', subjectId: userId, targetKind: 'project', targetId: { in: below } },
     });
+    const channels = await tx.channel.findMany({ where: { space: { projectId: { in: below } } }, select: { id: true } });
+    if (channels.length)
+      await tx.overwrite.deleteMany({
+        where: { subjectKind: 'member', subjectId: userId, targetKind: 'channel', targetId: { in: channels.map((c) => c.id) } },
+      });
+    const notebooks = await tx.notebook.findMany({ where: { space: { projectId: { in: below } } }, select: { id: true } });
+    if (notebooks.length)
+      await tx.overwrite.deleteMany({
+        where: { subjectKind: 'member', subjectId: userId, targetKind: 'notebook', targetId: { in: notebooks.map((n) => n.id) } },
+      });
   }
 }

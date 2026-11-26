@@ -12,6 +12,8 @@ import { ENV, type Env } from '../config/env.js';
 import { newId, randomToken, sha256Hex } from '../common/crypto.js';
 import { MailService } from '../mail/mail.service.js';
 import { InvitesService } from '../membership/invites.service.js';
+import { SharesService } from '../sharing/shares.service.js';
+import { EventBus } from '../events/event-bus.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SpacesService } from '../spaces/spaces.service.js';
 import { TeamsService } from '../teams/teams.service.js';
@@ -59,6 +61,8 @@ export class AuthService {
     private readonly spaces: SpacesService,
     private readonly teams: TeamsService,
     private readonly invites: InvitesService,
+    private readonly shares: SharesService,
+    private readonly bus: EventBus,
     @Inject(ENV) private readonly env: Env,
   ) {
     this.dummyHash = argon2.hash('not-a-real-password', { type: argon2.argon2id });
@@ -147,6 +151,7 @@ export class AuthService {
       if (!row.replacedById) throw new UnauthorizedException('no_session'); // logout / password reset
       if (now.getTime() - row.revokedAt.getTime() > REFRESH_GRACE_MS) {
         await this.revokeFamily(row.familyId);
+        await this.bus.publish('session.revoked', { userId: row.userId, sessionId: row.familyId, reason: 'revoked' });
         this.log.warn(`Refresh token reuse detected for user ${row.userId}; session revoked`);
         throw new UnauthorizedException('no_session');
       }
@@ -185,7 +190,10 @@ export class AuthService {
   async logout(rawToken: string | undefined): Promise<void> {
     if (!rawToken) return;
     const row = await this.prisma.refreshToken.findUnique({ where: { tokenHash: sha256Hex(rawToken) } });
-    if (row) await this.revokeFamily(row.familyId);
+    if (row) {
+      await this.revokeFamily(row.familyId);
+      await this.bus.publish('session.revoked', { userId: row.userId, sessionId: row.familyId, reason: 'signed_out' });
+    }
   }
 
   revokeFamily(familyId: string): Promise<unknown> {
@@ -286,15 +294,17 @@ export class AuthService {
       await tx.user.updateMany({ where: { id: row.userId, emailVerifiedAt: null }, data: { emailVerifiedAt: now } });
       await tx.refreshToken.updateMany({ where: { userId: row.userId, revokedAt: null }, data: { revokedAt: now } });
     });
+    await this.bus.publish('session.revoked', { userId: row.userId, reason: 'password_changed' });
     await this.claimJoins(row.userId);
   }
 
   /**
-   * What waits for a verified address: teams created for it (ownership), and the invite the person registered with.
+   * What waits for a verified address: teams created for it (ownership), the invite the person registered with, and notebooks shared with the address.
    * Both do nothing for an unverified account, so it is safe to call on every sign-in and refresh.
    */
   private async claimJoins(userId: string): Promise<void> {
     await this.teams.claimPending(userId);
     await this.invites.applyPending(userId);
+    await this.shares.applyPending(userId);
   }
 }

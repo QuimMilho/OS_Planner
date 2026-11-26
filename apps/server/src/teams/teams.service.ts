@@ -71,6 +71,8 @@ export class TeamsService {
       joinPolicy: team.joinPolicy as JoinPolicy,
       listingBlurb: team.listingBlurb,
       listingTags: tagsOf(team),
+      allowMemberDMs: team.allowMemberDMs,
+      allowPublicLinks: team.allowPublicLinks,
       spaceId: team.spaceId,
       ownerId: team.ownerId,
       isOwner: team.ownerId === userId,
@@ -118,6 +120,8 @@ export class TeamsService {
           ...(patch.joinPolicy !== undefined && { joinPolicy: patch.joinPolicy }),
           ...(patch.listingBlurb !== undefined && { listingBlurb: patch.listingBlurb }),
           ...(patch.listingTags !== undefined && { listingTags: patch.listingTags }),
+          ...(patch.allowMemberDMs !== undefined && { allowMemberDMs: patch.allowMemberDMs }),
+          ...(patch.allowPublicLinks !== undefined && { allowPublicLinks: patch.allowPublicLinks }),
         },
       });
       const fields = [
@@ -129,6 +133,8 @@ export class TeamsService {
         'joinPolicy',
         'listingBlurb',
         'listingTags',
+        'allowMemberDMs',
+        'allowPublicLinks',
       ] as const;
       const changed = fields.filter((f) => !sameValue(before[f], row[f]));
       if (changed.length)
@@ -262,6 +268,17 @@ export class TeamsService {
     if (projects.length)
       await tx.overwrite.deleteMany({
         where: { subjectKind: 'member', subjectId: userId, targetKind: 'project', targetId: { in: projects.map((p) => p.id) } },
+      });
+    // ...and the ones that named them on a channel or category of the team (or of one of its projects).
+    const channels = await tx.channel.findMany({ where: { space: { OR: [{ teamId }, { project: { teamId } }] } }, select: { id: true } });
+    if (channels.length)
+      await tx.overwrite.deleteMany({
+        where: { subjectKind: 'member', subjectId: userId, targetKind: 'channel', targetId: { in: channels.map((c) => c.id) } },
+      });
+    const notebooks = await tx.notebook.findMany({ where: { space: { OR: [{ teamId }, { project: { teamId } }] } }, select: { id: true } });
+    if (notebooks.length)
+      await tx.overwrite.deleteMany({
+        where: { subjectKind: 'member', subjectId: userId, targetKind: 'notebook', targetId: { in: notebooks.map((n) => n.id) } },
       });
     // Invitations the person made stop working with them: whatever roles they carry were theirs to give.
     await tx.invite.updateMany({

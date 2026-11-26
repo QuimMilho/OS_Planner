@@ -56,6 +56,8 @@ export function configureApp(app: INestApplication, env: Env): void {
   });
   const api = apiOrigin(env);
   const apiSources = api && api !== new URL(env.APP_URL).origin ? [api] : [];
+  // The realtime socket (path /api/realtime) of an API on another origin; same-origin sockets are covered by 'self'.
+  const socketSources = apiSources.map((o) => o.replace(/^http/, 'ws'));
 
   app.use(
     helmet({
@@ -69,7 +71,7 @@ export function configureApp(app: INestApplication, env: Env): void {
           imgSrc: ["'self'", 'data:', 'blob:', ...apiSources],
           mediaSrc: ["'self'", 'blob:', ...apiSources],
           fontSrc: ["'self'", 'data:'],
-          connectSrc: ["'self'", ...apiSources],
+          connectSrc: ["'self'", ...apiSources, ...socketSources],
           frameSrc: ['https://www.youtube-nocookie.com'],
           workerSrc: ["'self'", 'blob:'],
           manifestSrc: ["'self'"],
@@ -90,7 +92,13 @@ export function configureApp(app: INestApplication, env: Env): void {
   // judged by the Origin/Referer the browser sends (its default is to send the origin).
   const embedders = new Set(allowedOrigins(env));
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith('/api/media/')) {
+    // A shared notebook is for the people who hold its address: keep it out of search engines, and never leak the address
+    // through a Referer header (helmet already sends no-referrer; repeated here because this is a promise of the feature).
+    if (req.path.startsWith('/s/') || req.path.startsWith('/api/links/')) {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+    }
+    if (req.path.startsWith('/api/media/') || /^\/api\/links\/[^/]+\/media\//.test(req.path)) {
       res.vary('Referer');
       if (embedders.has(originOf(req.get('origin') ?? req.get('referer')))) res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     }

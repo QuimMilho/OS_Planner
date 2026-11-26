@@ -4,6 +4,8 @@ export interface MailContent {
   subject: string;
   text: string;
   html: string;
+  /** Extra mail headers (List-Unsubscribe). */
+  headers?: Record<string, string>;
 }
 
 const escapeHtml = (s: string): string =>
@@ -209,6 +211,132 @@ export function ownershipMail(locale: Locale, name: string | null, team: string,
     body: offered ? c.offeredBody(team) : c.assignedBody(team),
     button: offered ? c.offeredButton : c.assignedButton,
     ignore: c.ownershipIgnore,
+    url,
+    validity: '',
+  });
+}
+
+// ---------------------------------------------------------------- notification email (phase 9)
+
+export interface DigestMail {
+  /** "#general" or a person's name. */
+  where: string;
+  team: string | null;
+  count: number;
+  lines: { author: string; text: string }[];
+  more: number;
+  openUrl: string;
+  unsubscribeUrl: string;
+  muteUrl: string;
+}
+
+interface DigestCopy {
+  subject: (n: number, where: string) => string;
+  hello: (name: string) => string;
+  intro: (n: number, where: string, team: string | null) => string;
+  more: (n: number) => string;
+  open: string;
+  mute: string;
+  unsubscribe: string;
+  why: string;
+}
+
+const DIGEST_COPY: Record<Locale, DigestCopy> = {
+  en: {
+    subject: (n, where) => (n === 1 ? `New message in ${where}` : `${n} new messages in ${where}`),
+    hello: (name) => `Hi ${name},`,
+    intro: (n, where, team) => `${n === 1 ? 'There is a new message' : `There are ${n} new messages`} in ${where}${team ? ` (${team})` : ''}:`,
+    more: (n) => `…and ${n} more`,
+    open: 'Open the conversation',
+    mute: 'Mute this chat',
+    unsubscribe: 'Stop emails about this chat',
+    why: 'You get this email because you asked for email about this chat in your notification settings.',
+  },
+  pt: {
+    subject: (n, where) => (n === 1 ? `Nova mensagem em ${where}` : `${n} novas mensagens em ${where}`),
+    hello: (name) => `Olá ${name},`,
+    intro: (n, where, team) => `${n === 1 ? 'Há uma nova mensagem' : `Há ${n} novas mensagens`} em ${where}${team ? ` (${team})` : ''}:`,
+    more: (n) => `…e mais ${n}`,
+    open: 'Abrir a conversa',
+    mute: 'Silenciar esta conversa',
+    unsubscribe: 'Deixar de receber email desta conversa',
+    why: 'Recebe este email porque pediu email sobre esta conversa nas definições de notificações.',
+  },
+};
+
+/** The mail about one chat: how many messages, the last few, a button to open it, and links to mute or stop (no login needed). Never carries attachments. */
+export function digestMail(locale: Locale, name: string, d: DigestMail): MailContent {
+  const c = DIGEST_COPY[locale];
+  const subject = c.subject(d.count, d.where);
+  const text = [
+    c.hello(name),
+    '',
+    c.intro(d.count, d.where, d.team),
+    '',
+    ...d.lines.map((l) => `${l.author}: ${l.text}`),
+    ...(d.more ? [c.more(d.more)] : []),
+    '',
+    `${c.open}: ${d.openUrl}`,
+    '',
+    c.why,
+    `${c.mute}: ${d.muteUrl}`,
+    `${c.unsubscribe}: ${d.unsubscribeUrl}`,
+  ].join('\n');
+  const rows = d.lines
+    .map((l) => `<tr><td style="padding:6px 0;font-size:15px;line-height:1.4"><strong>${escapeHtml(l.author)}</strong><br>${escapeHtml(l.text)}</td></tr>`)
+    .join('');
+  const html = `<!doctype html>
+<html lang="${locale}"><body style="margin:0;padding:24px;background:#f4f5f7;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d2330">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
+    <table role="presentation" width="520" cellspacing="0" cellpadding="0" style="max-width:520px;background:#ffffff;border-radius:12px;padding:32px">
+      <tr><td>
+        <p style="margin:0 0 16px;font-size:16px">${escapeHtml(c.hello(name))}</p>
+        <p style="margin:0 0 16px;font-size:16px;line-height:1.5">${escapeHtml(c.intro(d.count, d.where, d.team))}</p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px">${rows}${d.more ? `<tr><td style="padding:6px 0;font-size:14px;color:#5b6475">${escapeHtml(c.more(d.more))}</td></tr>` : ''}</table>
+        <p style="margin:0 0 24px"><a href="${escapeHtml(d.openUrl)}" style="display:inline-block;background:#3b5bdb;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600">${escapeHtml(c.open)}</a></p>
+        <p style="margin:0 0 8px;font-size:13px;color:#5b6475">${escapeHtml(c.why)}</p>
+        <p style="margin:0;font-size:13px"><a href="${escapeHtml(d.muteUrl)}" style="color:#3b5bdb">${escapeHtml(c.mute)}</a> · <a href="${escapeHtml(d.unsubscribeUrl)}" style="color:#3b5bdb">${escapeHtml(c.unsubscribe)}</a></p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+  return { subject, text, html, headers: { 'List-Unsubscribe': `<${d.unsubscribeUrl}>` } };
+}
+
+// ---------------------------------------------------------------- notebook shared with you (phase 10)
+
+const SHARE_COPY: Record<Locale, {
+  subject: (nb: string) => string;
+  body: (who: string, nb: string, access: 'read' | 'edit') => string;
+  signIn: string;
+  register: string;
+  ignore: string;
+}> = {
+  en: {
+    subject: (nb) => `A notebook was shared with you: ${nb}`,
+    body: (who, nb, access) => `${who} shared the notebook "${nb}" with you (${access === 'edit' ? 'you can edit it' : 'read only'}).`,
+    signIn: 'Open OS_Planner',
+    register: 'Create an account to open it',
+    ignore: 'You get this message because somebody typed your address. If you do not know them, ignore it.',
+  },
+  pt: {
+    subject: (nb) => `Partilharam um caderno consigo: ${nb}`,
+    body: (who, nb, access) => `${who} partilhou consigo o caderno "${nb}" (${access === 'edit' ? 'pode editá-lo' : 'só leitura'}).`,
+    signIn: 'Abrir o OS_Planner',
+    register: 'Crie uma conta para o abrir',
+    ignore: 'Recebe esta mensagem porque alguém indicou o seu endereço. Se não conhece a pessoa, ignore-a.',
+  },
+};
+
+/** "<person> shared a notebook with you". For an address without an account the button leads to registration. */
+export function shareMail(locale: Locale, sharer: string, notebook: string, access: 'read' | 'edit', url: string, hasAccount: boolean): MailContent {
+  const c = SHARE_COPY[locale];
+  return render(locale, {
+    name: null,
+    subject: c.subject(notebook),
+    body: c.body(sharer, notebook, access),
+    button: hasAccount ? c.signIn : c.register,
+    ignore: c.ignore,
     url,
     validity: '',
   });

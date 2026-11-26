@@ -77,3 +77,47 @@ None (no stored bytes). Rate limits protect the server instead.
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Server.** `RealtimeServer` (Socket.IO on the API's own HTTP server, path `/api/realtime`, websocket first with polling kept), `RealtimeGateway`
+  (handshake, limits, token lifetime), `RoomAuthorizer`, `PresenceService` and `RealtimeBridge` in `apps/server/src/realtime/`; the typed `EventBus`
+  in `src/events/`. No `@nestjs/websockets`: a plain Socket.IO server is attached in `onModuleInit`, which keeps the handshake, origin check,
+  Redis adapter and limits in one place and works with `app.init()` in tests.
+- **Events are published after the commit.** `PrismaService.afterCommit(tx, fn)` runs `fn` (and *waits for it*) once an interactive
+  transaction has committed, and never if it rolls back. `AuditService.record` publishes `team.audited` this way, so revocation is driven by
+  the audit entries themselves and is in effect **before the request that changed the permission answers** (tested: a member removed over REST
+  gets nothing published immediately afterwards). `ChangeSeqService.next` publishes `space.changed` the same way.
+- **Rooms.** `user:<id>` and `team:<id>` (presence, member changes) are joined by the server and refreshed on every access change; clients
+  may join only `space`, `channel` and `thread` (`RoomAuthorizer.register(kind, check)`: phase 7 registered the last two). A refusal is one
+  `{ok:false}` for "not allowed" and "does not exist". Limits: 5 connections per person (cluster-wide, via `fetchSockets`), 100 rooms per
+  socket, 1 MB payloads, 60-event burst refilling at 30/s per connection; unknown events, bad payloads and floods are dropped and counted
+  (`GET /api/admin/realtime`).
+- **Tokens and sessions.** A connection lives as long as its access token; `auth:refresh` brings a new one (same person and same login or the
+  connection is closed *after* answering `{ok:false}`). A signed-out login's token no longer opens a connection (the handshake checks that the
+  refresh-token family is alive). `session.revoked` is published by logout, reuse detection, password reset, password change (other logins
+  only) and revoking a session in Settings.
+- **Presence derives from live connections, not from counters in Redis**: a person is online if any of their connections (on any instance, found
+  with `fetchSockets`) was active in the last five minutes, idle if they have connections but none was, offline otherwise; invisible people read
+  as offline to everyone else. Announcements go to `team:<id>` rooms, one per person per five seconds (a burst collapses into its final
+  state). `GET /api/teams/:id/presence` gives the snapshot a screen starts from. `User.presenceMode` (`auto|invisible`) is set with `PATCH /api/me`.
+- **Redis** (`REDIS_URL`, compose profile `scale`): `@socket.io/redis-adapter` over `ioredis`. `/api/health` answers `realtime: "ok"` or
+  `"degraded"` (Redis configured but not connected). Tested against a real Redis with two Nest instances: an event published on one reaches a
+  client on the other; without Redis it does not. The adapter drops the promises of its Redis commands, so a down Redis would have crashed the
+  process on shutdown: `sendCommand` of both clients is wrapped to attach a catch.
+- **Client.** `core/realtime.ts` (`RealtimeService`): lazily loads `socket.io-client`, reference-counted `join(kind, id)`, `on(event)`,
+  `resumed` (fires after every reconnect once rooms are re-joined; features catch up), `status`. The browser does not always say the network
+  is back (and the library backs off up to 30 s), so a watchdog looks every 2 s and a connection that lived through an offline period is
+  replaced rather than trusted. Pages hidden for 60 s leave `channel`/`thread` rooms. `Session` joins every space the person can see and
+  turns `space.changed` into a sync, `permissions.changed` into a team refresh then a sync, `session.revoked` into a local sign-out.
+  `PresenceStore` feeds the dots on the member list; the top bar has a connection indicator; Settings → Privacy has "Appear offline".
+- **CSP.** The server's `connect-src` gets the `ws://`/`wss://` form of an API on another origin. **A static host's CSP must list it too**
+  (`http:` does not cover `ws:`): the e2e site host does, and the README says so.
+- **nginx** already passed `/api/realtime` with upgrades; the template's comments now say it is live, and describe `ip_hash` for polling
+  clients behind several instances. No other change.
+- **Deviations.** Presence is not counted in Redis (see above). Socket events are not zod-validated one by one beyond the four client events.
+  The 1 MB cap is enforced by Socket.IO (`maxHttpBufferSize`), which closes that connection.
+- Tests: server +20 (`realtime.test.ts`, incl. two instances on a real Redis and revocation), web e2e +3 (`realtime.e2e.mjs`: live role
+  change without refocus, offline/online catch-up, cross-origin sockets with a refused stranger origin), desktop +1.

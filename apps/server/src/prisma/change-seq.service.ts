@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventBus } from '../events/event-bus.js';
 import type { Tx } from './prisma.service.js';
 
 /**
@@ -15,6 +16,8 @@ import type { Tx } from './prisma.service.js';
  */
 @Injectable()
 export class ChangeSeqService {
+  constructor(private readonly bus: EventBus) {}
+
   async next(tx: Tx, spaceId: string): Promise<bigint> {
     const row = await tx.space.update({
       where: { id: spaceId },
@@ -24,6 +27,8 @@ export class ChangeSeqService {
     if (row.kind === 'personal' && row.userId) {
       await tx.user.update({ where: { id: row.userId }, data: { changeSeq: row.changeSeq } });
     }
+    // Whoever has the space open pulls now instead of waiting for the timer.
+    this.bus.publishAfterCommit(tx, 'space.changed', { spaceId, seq: row.changeSeq.toString(10) });
     return row.changeSeq;
   }
 }

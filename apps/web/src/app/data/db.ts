@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import Dexie, { type Table } from 'dexie';
 import type { JSONContent } from '@tiptap/core';
-import type { CategoryDto, NotebookDto, PageMetaDto, ProjectDto, SyncOp, TeamDto, TeamMemberDto } from '@os-planner/shared';
+import type { CategoryDto, ChannelDto, DmDto, MessageDto, NotebookDto, PageMetaDto, ProjectDto, SharedNotebookDto, SyncOp, TeamDto, TeamMemberDto } from '@os-planner/shared';
 
 /** The document of a page, kept apart from its metadata so autosave never re-renders the sidebar. */
 export interface PageContentRow {
@@ -35,6 +35,8 @@ export interface MediaRow {
   width: number | null;
   height: number | null;
   durationSec: number | null;
+  /** Set for a file used in a notebook that is not the person's own (shared, team, project): it names the space it is stored in. */
+  notebookId?: string | null;
 }
 
 export interface OutboxRow {
@@ -45,6 +47,28 @@ export interface OutboxRow {
 /** A team member as cached on this device. */
 export interface MemberRow extends TeamMemberDto {
   teamId: string;
+}
+
+/** A channel as cached on this device (so the sidebar opens offline). */
+export interface ChannelRow extends ChannelDto {
+  teamId: string;
+}
+
+/** A message waiting to be sent, or one the server refused. Sent one after the other, oldest first, each by its own id. */
+export interface ChatOutboxRow {
+  /** The message id (UUIDv7): a resend of the same row is recognised by the server. */
+  id: string;
+  channelId: string;
+  threadId: string | null;
+  content: string;
+  replyToId: string | null;
+  attachmentIds: string[];
+  createdAt: number;
+  state: 'queued' | 'failed';
+  /** Why it failed (an error code), when it did. */
+  error?: string;
+  /** A slowmode or rate limit says when to try again (ms since the epoch). */
+  retryAt?: number;
 }
 
 export class PlannerDb extends Dexie {
@@ -58,6 +82,14 @@ export class PlannerDb extends Dexie {
   teams!: Table<TeamDto, string>;
   projects!: Table<ProjectDto, string>;
   members!: Table<MemberRow, [string, string]>;
+  channels!: Table<ChannelRow, string>;
+  /** The last messages of each channel that was opened (read-only here: the server owns them). */
+  chatMessages!: Table<MessageDto, string>;
+  chatOutbox!: Table<ChatOutboxRow, string>;
+  /** The person's open direct-message conversations (cached so the list opens offline). */
+  dms!: Table<DmDto, string>;
+  /** Notebooks other people shared with this person (their content is in the tables above, under the owner's space). */
+  shared!: Table<SharedNotebookDto, string>;
 
   constructor(name: string) {
     super(name);
@@ -79,6 +111,16 @@ export class PlannerDb extends Dexie {
       projects: 'id, teamId, parentId, spaceId',
       members: '[teamId+userId], teamId',
     });
+    // Chat: channels, the last messages of the channels that were opened, and messages waiting to be sent.
+    this.version(3).stores({
+      channels: 'id, teamId, spaceId',
+      chatMessages: 'id, channelId, threadId',
+      chatOutbox: 'id, channelId, createdAt',
+    });
+    // Direct messages: the list of conversations.
+    this.version(4).stores({ dms: 'id, channelId' });
+    // Notebooks shared with the person.
+    this.version(5).stores({ shared: 'notebookId, spaceId' });
   }
 }
 

@@ -101,6 +101,34 @@ const envSchema = z.object({
   /** Needed when Chrome runs as root inside a container without a user namespace. */
   PDF_NO_SANDBOX: bool.default(false),
 
+  /**
+   * Redis for running several server instances: realtime events reach people connected to any of them. Unset = one
+   * instance (events stay in memory). Example: redis://localhost:6379
+   */
+  REDIS_URL: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? '').trim() || undefined)
+    .refine((v) => v === undefined || v.startsWith('redis://') || v.startsWith('rediss://'), 'must start with redis:// or rediss://'),
+
+  /**
+   * Web Push (VAPID). Generate a pair with `npx web-push generate-vapid-keys`. Without both keys push is switched off and
+   * the website hides the option. VAPID_SUBJECT is a mailto: or https: address the push services can reach you at.
+   */
+  VAPID_PUBLIC_KEY: z.string().optional().transform((v) => v?.trim() || undefined),
+  VAPID_PRIVATE_KEY: z.string().optional().transform((v) => v?.trim() || undefined),
+  VAPID_SUBJECT: z.string().optional().transform((v) => v?.trim() || undefined),
+  /** Extra push service origins to accept, besides the browsers' own (Google, Mozilla, Apple, Microsoft). Comma-separated. */
+  PUSH_EXTRA_ENDPOINTS: originList,
+  /** A person with no activity on any open page for this long counts as away (email "only when I'm away"). */
+  NOTIFY_AWAY_SECONDS: z.coerce.number().int().min(0).default(600),
+  /** At most one email per chat and person in this time. */
+  NOTIFY_EMAIL_INTERVAL_MINUTES: z.coerce.number().min(0).default(15),
+  /** At most one push per person and channel in this time. */
+  NOTIFY_PUSH_COALESCE_SECONDS: z.coerce.number().int().min(0).default(10),
+  /** How often waiting emails are looked at; 0 turns the sender off. */
+  NOTIFY_SWEEP_SECONDS: z.coerce.number().int().min(0).default(30),
+
   /** Turns request throttling off. Only the integration tests set this. */
   THROTTLE_DISABLED: bool.default(false),
 }).superRefine((env, ctx) => {
@@ -129,6 +157,9 @@ export function loadDotEnv(): void {
   const file = candidates.find((p) => existsSync(p));
   if (file) process.loadEnvFile(file);
 }
+
+/** Push needs both VAPID keys and a contact address. */
+export const pushEnabled = (env: Env): boolean => Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
 
 export const isHttps = (env: Env): boolean => env.APP_URL.startsWith('https://');
 

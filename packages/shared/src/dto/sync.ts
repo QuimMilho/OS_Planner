@@ -11,6 +11,7 @@ import {
   type NotebookDto,
   type PageMetaDto,
 } from './entities';
+import type { SharedNotebookDto } from './sharing';
 
 /** Maximum operations accepted in one POST /sync/batch. */
 export const SYNC_BATCH_MAX = 200;
@@ -65,6 +66,9 @@ export interface SyncBatchResponse {
   results: SyncOpResult[];
 }
 
+/** A space id, or `shared:<notebookId>` for a notebook shared with the person. */
+const cursorKeySchema = z.string().regex(/^(shared:)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/);
+
 /** `cursors` arrives as JSON in the query string: { "<spaceId>": <seq>, ... }. */
 const cursorsSchema = z
   .string()
@@ -77,7 +81,7 @@ const cursorsSchema = z
       return z.NEVER;
     }
   })
-  .pipe(z.record(idSchema, z.number().int().min(0)));
+  .pipe(z.record(cursorKeySchema, z.number().int().min(0)));
 
 export const syncChangesQuerySchema = z.object({
   /** Old clients: one cursor for the personal space. Still accepted for one release. */
@@ -97,6 +101,10 @@ export interface SpaceChangesDto {
   categories: CategoryDto[];
   /** Page metadata only; content is fetched per page. Tombstones have a non-null deletedAt. */
   pages: PageMetaDto[];
+  /** Notebooks of this space the person may not see (a notebook overwrite denies them): drop what is held locally. */
+  hiddenNotebooks?: string[];
+  /** Notebooks that moved to another space after the cursor: drop them from this one (unless already held under the new space). */
+  movedOut?: string[];
 }
 
 export interface SyncChangesDto extends SpaceChangesDto {
@@ -104,4 +112,6 @@ export interface SyncChangesDto extends SpaceChangesDto {
   spaces: Record<string, SpaceChangesDto>;
   /** Requested spaces the person can no longer see (left or removed from a team, deleted team or project): purge them locally. */
   revokedSpaces: string[];
+  /** Every notebook currently shared with the person; each has its own cursor key (see sharedCursorKey) in `spaces`. */
+  sharedNotebooks?: SharedNotebookDto[];
 }

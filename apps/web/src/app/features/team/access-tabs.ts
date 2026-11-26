@@ -207,6 +207,22 @@ export class BansTab {
         </label>
       </fieldset>
 
+      <label class="check">
+        <input type="checkbox" name="allowDMs" [(ngModel)]="allowDMs" data-field="allow-dms" />
+        <span>
+          {{ 'team.allowDMs' | transloco }}
+          <span class="muted small">{{ 'team.allowDMsHint' | transloco }}</span>
+        </span>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" name="allowLinks" [(ngModel)]="allowLinks" data-field="allow-public-links" />
+        <span>
+          {{ 'team.allowPublicLinks' | transloco }}
+          <span class="muted small">{{ 'team.allowPublicLinksHint' | transloco }}</span>
+        </span>
+      </label>
+
       <div>
         <button mat-flat-button type="submit" [disabled]="busy()" data-action="save-discover">
           {{ 'common.save' | transloco }}
@@ -270,6 +286,8 @@ export class DiscoverTab {
   /** Same as MAX_TAGS in the shared package, which is not loaded on this path (it carries zod); the server enforces it. */
   protected readonly maxTags = 8;
   protected isPublic = false;
+  protected allowDMs = true;
+  protected allowLinks = false;
   protected policy: JoinPolicy = 'request';
   protected blurb = '';
   protected tags = '';
@@ -284,6 +302,8 @@ export class DiscoverTab {
       this.loadedFor = team.id;
       untracked(() => {
         this.isPublic = team.isPublic;
+        this.allowDMs = team.allowMemberDMs ?? true;
+        this.allowLinks = team.allowPublicLinks ?? false;
         this.policy = team.joinPolicy;
         this.blurb = team.listingBlurb ?? '';
         this.tags = (team.listingTags ?? []).join(', ');
@@ -296,6 +316,8 @@ export class DiscoverTab {
     try {
       await this.store.updateTeam(this.teamId(), {
         isPublic: this.isPublic,
+        allowMemberDMs: this.allowDMs,
+        allowPublicLinks: this.allowLinks,
         joinPolicy: this.policy,
         listingBlurb: this.blurb.trim(),
         listingTags: this.tags

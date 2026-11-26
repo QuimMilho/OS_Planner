@@ -119,6 +119,34 @@
   }
 }
 
+.live {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-dim);
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+  &.connected {
+    opacity: 0.55;
+  }
+  &.connecting {
+    color: #e8590c;
+    mat-icon {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+  }
+  &.offline {
+    color: #e8590c;
+  }
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

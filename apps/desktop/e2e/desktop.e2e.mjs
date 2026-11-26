@@ -81,6 +81,38 @@ describe('desktop shell', () => {
     }
   });
 
+  test('the window opens the live connection and reacts to an event the server pushes', T, async () => {
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
+    const { app, page } = await launchApp(userData, base);
+    try {
+      await register(page, base);
+      await page.waitForSelector('[data-realtime][data-status="connected"]', { timeout: 30_000 });
+
+      // Something changes in the person's space without the app asking (a request made from outside the app's own
+      // sync): the server announces it on the socket, and the app pulls at once instead of waiting for its 60 s timer.
+      const pulls = [];
+      page.on('request', (r) => r.url().includes('/api/sync/changes') && pulls.push(Date.now()));
+      await page.waitForTimeout(3000); // the first sync cycles settle
+      const before = pulls.length;
+      const created = await page.evaluate(async () => {
+        const refresh = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'os_planner' } });
+        const { accessToken } = await refresh.json();
+        const res = await fetch('/api/notebooks', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: crypto.randomUUID(), name: 'Pushed', position: 'a0' }),
+        });
+        return res.status;
+      });
+      assert.equal(created, 201);
+      for (let i = 0; i < 40 && pulls.length === before; i++) await page.waitForTimeout(250);
+      assert.ok(pulls.length > before, 'the app pulled after the push, well before its 60 s timer');
+    } finally {
+      await app.close();
+      rmSync(userData, { recursive: true, force: true });
+    }
+  });
+
   test('"Save as" goes through the native dialog and writes the real file', T, async () => {
     const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
     const out = join(userData, 'exported.pdf');

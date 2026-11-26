@@ -1,4 +1,4 @@
-import type { Locale, QuotaDto, Theme, UserDto } from '@os-planner/shared';
+import type { AllowDmsFrom, Locale, PresenceMode, QuotaDto, Theme, UserDto } from '@os-planner/shared';
 import type { User } from '../generated/prisma/client.js';
 import { isAdminEmail, type Env } from '../config/env.js';
 
@@ -11,6 +11,8 @@ export function toUserDto(user: User, env: Env, quota: QuotaDto, personalSpaceId
     displayName: user.displayName,
     locale: user.locale as Locale,
     theme: user.theme as Theme,
+    presenceMode: user.presenceMode as PresenceMode,
+    allowDMsFrom: user.allowDMsFrom as AllowDmsFrom,
     emailVerified: verified,
     storageUsedBytes: quota.used,
     storageQuotaBytes: quota.limit,

@@ -104,7 +104,11 @@ server {
   proxy_read_timeout    180s;
   proxy_send_timeout    180s;
 
-  # Real-time paths (reserved: Socket.IO from phase 6, Hocuspocus co-editing from phase 11). Sockets stay open for hours.
+  # Real-time paths: Socket.IO at /api/realtime (live since phase 6; WebSocket first, long polling as the fallback, both pass
+  # here), Hocuspocus co-editing at /api/collab (phase 11). Sockets stay open for hours, so no buffering and a long read timeout.
+  # Several OS_Planner servers behind this proxy: set REDIS_URL on each of them (the sockets then share their rooms). Clients that
+  # fall back to long polling need requests of one session to reach the same server: add `ip_hash;` to the upstream above, or use
+  # one server. Plain WebSocket connections need neither.
   location ~ ^/api/(realtime|collab)(/|$) {
     proxy_pass http://os_planner_app;
     proxy_buffering off;
@@ -112,7 +116,8 @@ server {
     proxy_send_timeout 3600s;
   }
 
-  # Everything else: the API, the website, /downloads. The server sets its own cache headers; nginx does not cache.
+  # Everything else: the API, the website, /downloads, and shared notebooks (/s/<token> is a page of the app, /api/links/... answers it;
+  # the server adds X-Robots-Tag and Referrer-Policy there, so nginx must not). The server sets its own cache headers; nginx does not cache.
   location / {
     proxy_pass http://os_planner_app;
   }
