@@ -55,7 +55,7 @@ TaskActivity { id, taskId, actorId, kind, data JSON, createdAt }                
 - Visibility inherited: no `VIEW_BOARDS` → 404 on boards, tasks, comments, attachments, labels in that space/board.
 - Assignees must be able to view the board; assigning someone who cannot is rejected with a clear error.
 - Comment edit by author only; delete by author or `EDIT_TASKS`/`MANAGE_BOARDS`.
-- The description subset is validated server-side (reduced schema from `@notes/shared`); no embedded media types beyond images/links.
+- The description subset is validated server-side (reduced schema from `@os-planner/shared`); no embedded media types beyond images/links.
 - `/api/me/tasks` returns only tasks in spaces the caller can view at request time.
 
 ## Quota impact

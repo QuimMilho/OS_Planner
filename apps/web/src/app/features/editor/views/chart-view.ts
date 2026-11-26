@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { AngularNodeViewComponent } from 'ngx-tiptap';
-import { CHART_TYPES, chartDataSchema, SERIES_PALETTE, type ChartData, type ChartOptions, type ChartType } from '@notes/shared';
+import { CHART_TYPES, chartDataSchema, SERIES_PALETTE, type ChartData, type ChartOptions, type ChartType } from '@os-planner/shared';
 import { ThemeService, chartColors } from '../../../core/theme';
 import { loadLibs } from '../lazy-libs';
 

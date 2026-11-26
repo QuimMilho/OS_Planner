@@ -60,7 +60,7 @@ export class Home {
   readonly recent = computed(() =>
     this.store
       .pages()
-      .filter((p) => !p.deletedAt)
+      .filter((p) => !p.deletedAt && this.store.isPersonal(p))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, 12),
   );

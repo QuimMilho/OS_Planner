@@ -4,9 +4,9 @@ import { ENV, type Env } from '../config/env.js';
 import type { AuthUser } from '../common/auth.decorators.js';
 import { ACCESS_TTL_SECONDS, MEDIA_TTL_SECONDS } from './auth.constants.js';
 
-const ISSUER = 'notes';
-const AUD_API = 'notes-api';
-const AUD_MEDIA = 'notes-media';
+const ISSUER = 'os_planner';
+const AUD_API = 'os_planner-api';
+const AUD_MEDIA = 'os_planner-media';
 
 /** Signs and verifies the short-lived access token and the media token (HS256). */
 @Injectable()

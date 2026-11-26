@@ -18,7 +18,7 @@ import {
   MermaidNode,
   VIDEO_MIMES,
   VideoNode,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import { SlashCommand, type SlashState } from './slash';
 import { CalloutView } from './views/callout-view';
 import { ChartView } from './views/chart-view';

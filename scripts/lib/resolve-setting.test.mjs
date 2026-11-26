@@ -6,7 +6,7 @@ import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { canPrompt, normaliseUrl, readDotEnv, resolveSetting, urlOrEmpty } from './resolve-setting.mjs';
 
-const base = { name: 'NOTES_API_URL', question: 'API address?', validate: urlOrEmpty, envFile: join(tmpdir(), 'does-not-exist.env') };
+const base = { name: 'OS_PLANNER_API_URL', question: 'API address?', validate: urlOrEmpty, envFile: join(tmpdir(), 'does-not-exist.env') };
 
 /** A fake terminal: answers are written to stdin, the questions end up in `shown`. */
 function terminal(answers) {
@@ -20,7 +20,7 @@ function terminal(answers) {
 }
 
 function withEnvFile(content, run) {
-  const dir = mkdtempSync(join(tmpdir(), 'notes-env-'));
+  const dir = mkdtempSync(join(tmpdir(), 'os-planner-env-'));
   const file = join(dir, '.env');
   writeFileSync(file, content);
   return Promise.resolve(run(file)).finally(() => rmSync(dir, { recursive: true, force: true }));
@@ -47,8 +47,8 @@ test('urlOrEmpty allows an empty value (same origin)', () => {
 });
 
 test('readDotEnv finds the key, strips quotes and trailing comments, and ignores a missing file', async () => {
-  await withEnvFile('# comment\nA=1\nNOTES_API_URL="https://q.example.com"  \nB=https://c.example.com # note\nEMPTY=\n', (file) => {
-    assert.equal(readDotEnv(file, 'NOTES_API_URL'), 'https://q.example.com');
+  await withEnvFile('# comment\nA=1\nOS_PLANNER_API_URL="https://q.example.com"  \nB=https://c.example.com # note\nEMPTY=\n', (file) => {
+    assert.equal(readDotEnv(file, 'OS_PLANNER_API_URL'), 'https://q.example.com');
     assert.equal(readDotEnv(file, 'B'), 'https://c.example.com');
     assert.equal(readDotEnv(file, 'EMPTY'), '');
     assert.equal(readDotEnv(file, 'MISSING'), undefined);
@@ -57,9 +57,9 @@ test('readDotEnv finds the key, strips quotes and trailing comments, and ignores
 });
 
 test('the environment wins over .env, which wins over a question', async () => {
-  await withEnvFile('NOTES_API_URL=https://file.example.com\n', async (envFile) => {
+  await withEnvFile('OS_PLANNER_API_URL=https://file.example.com\n', async (envFile) => {
     const t = terminal(['https://typed.example.com']);
-    const fromEnv = await resolveSetting({ ...base, envFile, env: { NOTES_API_URL: 'https://env.example.com/' }, ...t });
+    const fromEnv = await resolveSetting({ ...base, envFile, env: { OS_PLANNER_API_URL: 'https://env.example.com/' }, ...t });
     assert.deepEqual(fromEnv, { value: 'https://env.example.com', source: 'env' });
 
     const fromFile = await resolveSetting({ ...base, envFile, env: {}, ...terminal(['https://typed.example.com']) });
@@ -91,11 +91,11 @@ test('three invalid answers in a row fail instead of looping', async () => {
   await assert.rejects(resolveSetting({ ...base, env: {}, input: t.input, output: t.output }), /no valid value/);
 });
 
-test('never asks without a terminal, in CI, with NOTES_NO_PROMPT, or when prompt is false', async () => {
+test('never asks without a terminal, in CI, with OS_PLANNER_NO_PROMPT, or when prompt is false', async () => {
   const noTty = new PassThrough(); // isTTY is undefined
   assert.deepEqual(await resolveSetting({ ...base, env: {}, input: noTty }), { value: '', source: 'default' });
 
-  for (const env of [{ CI: 'true' }, { NOTES_NO_PROMPT: '1' }]) {
+  for (const env of [{ CI: 'true' }, { OS_PLANNER_NO_PROMPT: '1' }]) {
     const t = terminal(['https://typed.example.com']);
     const result = await resolveSetting({ ...base, env, input: t.input, output: t.output, defaultValue: 'https://fallback.example.com' });
     assert.deepEqual(result, { value: 'https://fallback.example.com', source: 'default' });
@@ -107,19 +107,19 @@ test('never asks without a terminal, in CI, with NOTES_NO_PROMPT, or when prompt
 
 test('an explicitly empty variable counts as an answer (and skips the question)', async () => {
   const t = terminal(['https://typed.example.com']);
-  const result = await resolveSetting({ ...base, env: { NOTES_API_URL: '' }, input: t.input, output: t.output });
+  const result = await resolveSetting({ ...base, env: { OS_PLANNER_API_URL: '' }, input: t.input, output: t.output });
   assert.deepEqual(result, { value: '', source: 'env' });
 });
 
 test('an invalid value in the environment fails the build with a readable message', async () => {
-  await assert.rejects(resolveSetting({ ...base, env: { NOTES_API_URL: 'ftp://x' } }), /NOTES_API_URL is not valid/);
+  await assert.rejects(resolveSetting({ ...base, env: { OS_PLANNER_API_URL: 'ftp://x' } }), /OS_PLANNER_API_URL is not valid/);
 });
 
 test('canPrompt reflects the terminal and the CI switches', () => {
   const tty = { isTTY: true };
   assert.equal(canPrompt({ env: {}, input: tty }), true);
   assert.equal(canPrompt({ env: { CI: '1' }, input: tty }), false);
-  assert.equal(canPrompt({ env: { NOTES_NO_PROMPT: '1' }, input: tty }), false);
+  assert.equal(canPrompt({ env: { OS_PLANNER_NO_PROMPT: '1' }, input: tty }), false);
   assert.equal(canPrompt({ env: {}, input: {} }), false);
   assert.equal(canPrompt({ env: { CI: '1' }, input: {}, force: true }), true);
 });

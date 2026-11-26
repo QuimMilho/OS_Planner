@@ -4,20 +4,31 @@ import {
   idSchema,
   updateMeSchema,
   type SessionDto,
+  type StorageBreakdownDto,
   type UpdateMeInput,
   type UserDto,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import type { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../common/auth.decorators.js';
+import { QuotaService } from '../quota/quota.service.js';
 import { UsersService } from './users.service.js';
 
 @Controller('me')
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly quota: QuotaService,
+  ) {}
 
   @Get()
   get(@CurrentUser() user: AuthUser): Promise<UserDto> {
     return this.users.get(user.id);
+  }
+
+  /** Settings → Storage: usage and limit with the split by kind. */
+  @Get('storage')
+  storage(@CurrentUser() user: AuthUser): Promise<StorageBreakdownDto> {
+    return this.quota.breakdown('user', user.id);
   }
 
   @Patch()

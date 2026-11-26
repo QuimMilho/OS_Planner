@@ -1,5 +1,5 @@
 /**
- * Entry point of `notes-libs.js` (see libs-types.ts). Bundled with plain esbuild into one
+ * Entry point of `planner-libs.js` (see libs-types.ts). Bundled with plain esbuild into one
  * self-contained browser script: it has no network access and no dependencies at run time.
  * (Function plots are not here: they are drawn by shared/schema/plot.ts, which needs no library.)
  */
@@ -8,7 +8,7 @@ import hljs from 'highlight.js/lib/common';
 import katex from 'katex';
 import mermaid from 'mermaid';
 import { chartJsConfig } from '../schema/render-config';
-import type { NotesLibs } from './libs-types';
+import type { PlannerLibs } from './libs-types';
 
 Chart.register(...registerables);
 
@@ -32,7 +32,7 @@ function withColors(type: string, options: any, { text, grid }: { text: string; 
   };
 }
 
-const libs: NotesLibs = {
+const libs: PlannerLibs = {
   async mermaid(id, code, dark) {
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'neutral', fontFamily: 'inherit' });
     try {
@@ -62,4 +62,4 @@ const libs: NotesLibs = {
   },
 };
 
-window.NotesLibs = libs;
+window.PlannerLibs = libs;

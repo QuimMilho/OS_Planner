@@ -1,21 +1,21 @@
-import type { NotesLibs } from '@notes/shared';
+import type { PlannerLibs } from '@os-planner/shared';
 
 /**
  * Mermaid, Chart.js, function-plot and KaTeX's renderer are large, so they live in one standalone
- * script (`/print/notes-libs.js`, built from @notes/shared with plain esbuild) that is fetched the
+ * script (`/print/planner-libs.js`, built from @os-planner/shared with plain esbuild) that is fetched the
  * first time a page actually contains a diagram, chart or plot. The PDF renderer loads the very same
  * file, so a diagram looks identical on screen and on paper. The service worker caches it, so after
  * the first use it works offline too.
  */
-let loading: Promise<NotesLibs> | null = null;
+let loading: Promise<PlannerLibs> | null = null;
 
-export function loadLibs(): Promise<NotesLibs> {
-  return (loading ??= new Promise<NotesLibs>((resolve, reject) => {
-    if (window.NotesLibs) return resolve(window.NotesLibs);
+export function loadLibs(): Promise<PlannerLibs> {
+  return (loading ??= new Promise<PlannerLibs>((resolve, reject) => {
+    if (window.PlannerLibs) return resolve(window.PlannerLibs);
     const script = document.createElement('script');
-    script.src = '/print/notes-libs.js';
+    script.src = '/print/planner-libs.js';
     script.async = true;
-    script.onload = () => (window.NotesLibs ? resolve(window.NotesLibs) : reject(new Error('The drawing libraries did not initialise.')));
+    script.onload = () => (window.PlannerLibs ? resolve(window.PlannerLibs) : reject(new Error('The drawing libraries did not initialise.')));
     script.onerror = () => {
       loading = null; // offline the first time: allow a retry once the connection is back
       script.remove();

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { positionBetween } from '@notes/shared';
+import { positionBetween } from '@os-planner/shared';
+import { QuotaService } from '../src/quota/quota.service.js';
 import type { TestApp } from './app.js';
 import { GOOD_PASSWORD, uniqueEmail } from './app.js';
 
@@ -12,8 +13,7 @@ export interface Account {
   auth: { Authorization: string };
 }
 
-export async function signup(t: TestApp, verified = true): Promise<Account> {
-  const email = uniqueEmail();
+export async function signup(t: TestApp, verified = true, email = uniqueEmail()): Promise<Account> {
   const res = await t.http.post('/api/auth/register').send({ email, password: GOOD_PASSWORD, displayName: 'Test' });
   if (res.status !== 201) throw new Error(`signup failed: ${res.status} ${JSON.stringify(res.body)}`);
   if (verified) await t.prisma.user.update({ where: { email }, data: { emailVerifiedAt: new Date() } });
@@ -23,6 +23,16 @@ export async function signup(t: TestApp, verified = true): Promise<Account> {
     token: res.body.accessToken,
     auth: { Authorization: `Bearer ${res.body.accessToken}` },
   };
+}
+
+/** The id of a person's own space (their notebooks, sync cursor and storage live there). */
+export async function personalSpaceId(t: TestApp, userId: string): Promise<string> {
+  return (await t.prisma.space.findUniqueOrThrow({ where: { userId }, select: { id: true } })).id;
+}
+
+/** Bytes counted against a person's storage (media + documents), whichever table holds the counter. */
+export async function usedBytes(t: TestApp, userId: string): Promise<number> {
+  return t.app.get(QuotaService).usage('user', userId);
 }
 
 /** Thin wrappers that create tree items through the REST API and return the DTO. */

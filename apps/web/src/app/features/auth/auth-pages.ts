@@ -29,7 +29,7 @@ const SHARED = [FormsModule, RouterLink, MatButtonModule, MatFormFieldModule, Ma
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.signIn' | transloco }}</h1>
         <form (ngSubmit)="submit()" #f="ngForm">
           <mat-form-field appearance="outline"><mat-label>{{ 'auth.email' | transloco }}</mat-label><input matInput type="email" name="email" [(ngModel)]="email" autocomplete="username" required /></mat-form-field>
@@ -59,7 +59,7 @@ export class Login {
     try {
       await this.auth.login(this.email.trim(), this.password);
       const target = this.returnUrl();
-      await this.router.navigateByUrl(target && target.startsWith('/app') ? target : '/app');
+      await this.router.navigateByUrl(target && (target.startsWith('/app') || target.startsWith('/invite/')) ? target : '/app');
     } catch (e) {
       this.error.set(errorKey(e));
     } finally {
@@ -76,8 +76,9 @@ export class Login {
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.createAccount' | transloco }}</h1>
+        @if (invite()) { <p class="muted" data-register-invite>{{ 'invite.registerHint' | transloco }}</p> }
         <form (ngSubmit)="submit()" #f="ngForm">
           <mat-form-field appearance="outline"><mat-label>{{ 'auth.name' | transloco }}</mat-label><input matInput name="name" [(ngModel)]="name" autocomplete="name" maxlength="80" required /></mat-form-field>
           <mat-form-field appearance="outline"><mat-label>{{ 'auth.email' | transloco }}</mat-label><input matInput type="email" name="email" [(ngModel)]="email" autocomplete="email" required /></mat-form-field>
@@ -98,6 +99,8 @@ export class Register {
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private readonly lang = inject(Language);
+  /** `/register?invite=<token>`: the person came from an invitation, which is applied once their address is verified. */
+  readonly invite = input<string>();
   name = '';
   email = '';
   password = '';
@@ -108,8 +111,15 @@ export class Register {
     this.busy.set(true);
     this.error.set('');
     try {
-      await this.auth.register({ email: this.email.trim(), password: this.password, displayName: this.name.trim(), locale: this.lang.current });
-      await this.router.navigateByUrl('/app');
+      const invite = this.invite();
+      await this.auth.register({
+        email: this.email.trim(),
+        password: this.password,
+        displayName: this.name.trim(),
+        locale: this.lang.current,
+        ...(invite ? { inviteToken: invite } : {}),
+      });
+      await this.router.navigateByUrl(invite ? `/invite/${invite}` : '/app');
     } catch (e) {
       this.error.set(errorKey(e));
     } finally {
@@ -126,7 +136,7 @@ export class Register {
   template: `
     <main class="auth-page">
       <div class="auth-card center">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         @switch (state()) {
           @case ('working') { <mat-spinner diameter="36" /><p>{{ 'auth.verifying' | transloco }}</p> }
           @case ('ok') { <mat-icon class="big ok">check_circle</mat-icon><h1>{{ 'auth.verified' | transloco }}</h1><a mat-flat-button routerLink="/app">{{ 'auth.continue' | transloco }}</a> }
@@ -164,7 +174,7 @@ export class VerifyEmail implements OnInit {
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.forgotTitle' | transloco }}</h1>
         @if (sent()) {
           <p>{{ 'auth.forgotSent' | transloco }}</p>
@@ -208,7 +218,7 @@ export class ForgotPassword {
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.resetTitle' | transloco }}</h1>
         @if (done()) {
           <p>{{ 'auth.resetDone' | transloco }}</p>

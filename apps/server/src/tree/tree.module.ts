@@ -4,11 +4,11 @@ import { CategoriesService } from './categories.service.js';
 import { NotebooksService } from './notebooks.service.js';
 import { PagesService } from './pages.service.js';
 import { SyncService } from './sync.service.js';
-import { CategoriesController, NotebooksController, PagesController, SyncController } from './tree.controllers.js';
+import { CategoriesController, NotebooksController, PagesController, SpacesController, SyncController } from './tree.controllers.js';
 import { TreeErrorFilter } from './tree.error.js';
 
 @Module({
-  controllers: [NotebooksController, CategoriesController, PagesController, SyncController],
+  controllers: [NotebooksController, CategoriesController, PagesController, SpacesController, SyncController],
   providers: [
     NotebooksService,
     CategoriesService,

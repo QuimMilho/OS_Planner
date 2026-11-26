@@ -1,6 +1,6 @@
 // Runs after tsc: bakes the website address into this build and copies the icon the window uses.
 //
-// NOTES_SERVER_URL is the website the window opens (it tells the app where its API is, through the site's config.json).
+// OS_PLANNER_SERVER_URL is the website the window opens (it tells the app where its API is, through the site's config.json).
 // It is taken from the environment, then the repo .env, then asked on an interactive terminal (default http://localhost:3000).
 // People can still change the address from File > Change server.
 import { copyFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
@@ -12,8 +12,8 @@ const root = resolve(import.meta.dirname, '..');
 let serverUrl;
 try {
   ({ value: serverUrl } = await resolveSetting({
-    name: 'NOTES_SERVER_URL',
-    question: 'Which Notes website should the desktop app open? (e.g. https://notes.example.com)',
+    name: 'OS_PLANNER_SERVER_URL',
+    question: 'Which OS_Planner website should the desktop app open? (e.g. https://planner.example.com)',
     validate: normaliseUrl,
     defaultValue: 'http://localhost:3000',
   }));

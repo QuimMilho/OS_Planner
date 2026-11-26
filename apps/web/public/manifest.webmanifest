@@ -1,8 +1,8 @@
 {
   "id": "/app",
-  "name": "Notes",
-  "short_name": "Notes",
-  "description": "Rich notes with notebooks, categories, math, diagrams, charts and code. Works offline.",
+  "name": "OS_Planner",
+  "short_name": "OS_Planner",
+  "description": "An open source planner: notebooks, teams, math, diagrams, charts and code. Works offline.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",

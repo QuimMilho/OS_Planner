@@ -6,3 +6,7 @@ export * from './entities';
 export * from './sync';
 export * from './media';
 export * from './downloads';
+export * from './quota';
+export * from './teams';
+export * from './roles';
+export * from './membership';

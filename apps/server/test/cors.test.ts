@@ -7,9 +7,9 @@ import { createTestApp, GOOD_PASSWORD, uniqueEmail, type TestApp } from './app.j
 import { png } from './fixtures.js';
 import { signup, uuid } from './helpers.js';
 
-const SITE = 'https://notes.example.com';
+const SITE = 'https://planner.example.com';
 const OTHER = 'https://evil.example.org';
-const CSRF = { 'X-Requested-With': 'notes' };
+const CSRF = { 'X-Requested-With': 'os_planner' };
 
 /** Puts process.env back the way it was (assigning a whole new object to process.env would detach it from the real environment). */
 function restoreEnv(saved: NodeJS.ProcessEnv): void {
@@ -29,7 +29,7 @@ describe('CORS / cookie settings in the environment', () => {
     const env = parseEnv(baseEnv);
     expect(env.CORS_ORIGINS).toEqual([]);
     expect(env.COOKIE_SAMESITE).toBe('strict');
-    expect(env.NOTES_API_URL).toBeUndefined();
+    expect(env.OS_PLANNER_API_URL).toBeUndefined();
     expect(allowedOrigins(env)).toEqual(['http://localhost:4200']);
   });
 
@@ -51,9 +51,9 @@ describe('CORS / cookie settings in the environment', () => {
   });
 
   it('takes the API address as one origin', () => {
-    expect(parseEnv({ ...baseEnv, NOTES_API_URL: 'https://api.example.com/' }).NOTES_API_URL).toBe('https://api.example.com');
-    expect(parseEnv({ ...baseEnv, NOTES_API_URL: '' }).NOTES_API_URL).toBeUndefined();
-    expect(() => parseEnv({ ...baseEnv, NOTES_API_URL: 'a.example.com, b.example.com' })).toThrow(/NOTES_API_URL/);
+    expect(parseEnv({ ...baseEnv, OS_PLANNER_API_URL: 'https://api.example.com/' }).OS_PLANNER_API_URL).toBe('https://api.example.com');
+    expect(parseEnv({ ...baseEnv, OS_PLANNER_API_URL: '' }).OS_PLANNER_API_URL).toBeUndefined();
+    expect(() => parseEnv({ ...baseEnv, OS_PLANNER_API_URL: 'a.example.com, b.example.com' })).toThrow(/OS_PLANNER_API_URL/);
   });
 });
 
@@ -184,7 +184,7 @@ describe('the API address shown to the browser', () => {
   const saved = { ...process.env };
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'notes-cfg-'));
+    dir = await mkdtemp(join(tmpdir(), 'os-planner-cfg-'));
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, 'index.html'), '<!doctype html><app-root></app-root>');
     await writeFile(join(dir, 'config.json'), JSON.stringify({ apiUrl: 'https://api.example.com/' }));

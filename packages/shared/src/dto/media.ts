@@ -9,6 +9,8 @@ export type MediaKind = 'image' | 'video';
 export const mediaUploadFieldsSchema = z.object({
   /** Chosen by the client so the page content can reference the media before the upload finishes. */
   id: idSchema,
+  /** The space the file belongs to (the one of the page that uses it); the person own space when left out. */
+  spaceId: idSchema.optional(),
   /** Client-measured hints for videos (the server cannot probe them). Images are measured server-side. */
   width: z.coerce.number().int().min(1).max(16384).optional(),
   height: z.coerce.number().int().min(1).max(16384).optional(),

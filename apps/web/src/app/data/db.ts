@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import Dexie, { type Table } from 'dexie';
 import type { JSONContent } from '@tiptap/core';
-import type { CategoryDto, NotebookDto, PageMetaDto, SyncOp } from '@notes/shared';
+import type { CategoryDto, NotebookDto, PageMetaDto, ProjectDto, SyncOp, TeamDto, TeamMemberDto } from '@os-planner/shared';
 
 /** The document of a page, kept apart from its metadata so autosave never re-renders the sidebar. */
 export interface PageContentRow {
@@ -13,6 +13,11 @@ export interface PageContentRow {
   dirty: 0 | 1;
   /** Bumped on every local edit, so a save that finishes after a newer edit does not clear `dirty`. */
   rev: number;
+  /**
+   * Set to `rev` when the server has this edit except for pictures/videos that could not be uploaded yet
+   * (storage full). The text is safe; the full document is sent once the files are up.
+   */
+  heldRev?: number;
 }
 
 export interface MediaRow {
@@ -25,6 +30,8 @@ export interface MediaRow {
   uploaded: 0 | 1;
   /** Set when the server permanently refused the file (too large, unsupported, ...). Not retried. */
   failed?: string | null;
+  /** The server has room for nothing more: the file stays queued here and is retried every cycle. */
+  blocked?: 'quota' | null;
   width: number | null;
   height: number | null;
   durationSec: number | null;
@@ -35,7 +42,12 @@ export interface OutboxRow {
   op: SyncOp;
 }
 
-export class NotesDb extends Dexie {
+/** A team member as cached on this device. */
+export interface MemberRow extends TeamMemberDto {
+  teamId: string;
+}
+
+export class PlannerDb extends Dexie {
   notebooks!: Table<NotebookDto, string>;
   categories!: Table<CategoryDto, string>;
   pages!: Table<PageMetaDto, string>;
@@ -43,6 +55,9 @@ export class NotesDb extends Dexie {
   outbox!: Table<OutboxRow, number>;
   media!: Table<MediaRow, string>;
   meta!: Table<{ key: string; value: unknown }, string>;
+  teams!: Table<TeamDto, string>;
+  projects!: Table<ProjectDto, string>;
+  members!: Table<MemberRow, [string, string]>;
 
   constructor(name: string) {
     super(name);
@@ -55,6 +70,15 @@ export class NotesDb extends Dexie {
       media: 'id, uploaded',
       meta: 'key',
     });
+    // Teams and projects (cached so the tree and the notebook list open offline) and a space index on the content tables.
+    this.version(2).stores({
+      notebooks: 'id, spaceId',
+      categories: 'id, notebookId, parentId, spaceId',
+      pages: 'id, notebookId, categoryId, spaceId',
+      teams: 'id, spaceId',
+      projects: 'id, teamId, parentId, spaceId',
+      members: '[teamId+userId], teamId',
+    });
   }
 }
 
@@ -65,18 +89,18 @@ export class NotesDb extends Dexie {
 @Injectable({ providedIn: 'root' })
 export class Db {
   /** Null until a user is signed in. */
-  readonly current = signal<NotesDb | null>(null);
+  readonly current = signal<PlannerDb | null>(null);
 
-  open(userId: string): NotesDb {
+  open(userId: string): PlannerDb {
     const existing = this.current();
-    if (existing?.name === `notes-${userId}`) return existing;
+    if (existing?.name === `os_planner-${userId}`) return existing;
     existing?.close();
-    const db = new NotesDb(`notes-${userId}`);
+    const db = new PlannerDb(`os_planner-${userId}`);
     this.current.set(db);
     return db;
   }
 
-  get db(): NotesDb {
+  get db(): PlannerDb {
     const db = this.current();
     if (!db) throw new Error('No user database is open');
     return db;

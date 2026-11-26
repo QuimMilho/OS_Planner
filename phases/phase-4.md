@@ -79,3 +79,41 @@ Audit rows are small and not charged; retention keeps them bounded. Role/overwri
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Role positions** are one integer scale per team, shared by team roles and project roles. A new role starts at position 1 and the
+  others of its scope move up one; reordering rewrites a scope as n..1. A person's *rank* is the highest position among the roles that
+  apply to them in the context (team roles, plus the project roles of the project chain). Everything is in
+  `packages/shared/src/permissions/hierarchy.ts` (pure, with the reference table as a unit test) and enforced by `RoleHierarchy`.
+- **Who sees a project**: a member who has at least one `VIEW_*` permission there after the overwrites, or anyone with
+  `MANAGE_PROJECTS` at team level (so an overwrite that hides a project can always be repaired). `PermissionService.visibleProjects`
+  is the one place that decides it; lists, `/me`, sync and spaces all use it.
+- **Overwrites exist on projects only**. The schema and API accept `channel`, `notebook` and `board` targets so the data model does not
+  change later; they answer 422 `unsupported_target` until those things exist. Whoever adds one registers it in `OverwritesService`
+  and in `PermissionService.chainLevels`.
+- **Roles and overwrites are read in three batched queries per question** (the team's roles, the member's role ids, the overwrites of the
+  project chain) instead of a per-request cache; `visibleProjects` does one overwrite query for the whole team.
+- **Extra audit actions** beyond the plan: `role.reorder`, `project.update`, `project.member.add|remove`, `team.create|delete`.
+  Reordering siblings and no-op requests (assigning a role someone already holds) write nothing. `quota.override` is recorded for team
+  and project limits (a personal limit has no team to belong to).
+- **Last administrator**: owner and members holding `ADMINISTRATOR` count. With an owner the rule can never fire; it protects a team
+  whose owner account was deleted (`Team.ownerId` becomes NULL). It is checked when a role carrying `ADMINISTRATOR` is deleted, edited
+  or taken from someone, and when such a member leaves.
+- **Preview**: `GET /api/permissions/preview?subject=role:<id>|member:<id>&kind=team|project&id=…`. A role is simulated as a member who
+  holds exactly that role, so member overwrites never apply to it. It needs *Manage roles* in that context.
+- **i18n key names**: the hint of a permission is `permissions.hint.<NAME>` (JSON cannot hold both `permissions.X` as text and as an
+  object); audit action texts are `audit.action.<action with . replaced by _>`, the filter label is `audit.actionLabel`. The i18n check
+  reads the permission names, groups and audit actions from the built shared package, so a new bit or action cannot ship without texts.
+- **New endpoint**: `PATCH /api/teams/:id/members/:userId {nickname}` (own nickname, or *Manage members*). Also `GET /api/teams/:id/members`
+  and `/api/projects/:id/members` now list `roleIds`.
+- **Web**: Team settings (`/app/t/:id/settings`, tabs Members / Roles / View as / Audit log) and Project permissions
+  (`/app/t/:id/p/:id/settings`). The permission grid and tri-state control are `PermissionGrid`. Permissions refresh when the app
+  syncs (it already does on regaining focus or coming online); the socket event arrives with phase 6.
+- **e2e limits**: the team notebooks UI belongs to phase 10, so scenario 8 checks "can edit a page, cannot create a notebook" through the
+  API as the member's own session, and "the UI updates" by reading the permissions the app stored after its refresh.
+- `Team.everyonePermissions` is gone; the migration copies it into each team's `@everyone` role before dropping the column, and is
+  tested on a database with phase 3 data. `MAX_ROLES_PER_TEAM` (100) and `AUDIT_RETENTION_DAYS` (365) are new settings.
+- The nginx proxy needed no change (no new prefixes, origins or upload limits; every endpoint is under `/api`).

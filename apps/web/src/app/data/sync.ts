@@ -2,17 +2,19 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom, Subject, debounceTime } from 'rxjs';
 import type { JSONContent } from '@tiptap/core';
-import { collectMediaIds, EMPTY_DOC, positionBetween } from '@notes/shared/lite';
-import type { SyncBatchResponse, SyncChangesDto, SyncOp } from '@notes/shared';
+import { collectMediaIds, EMPTY_DOC, positionBetween } from '@os-planner/shared/lite';
+import type { SpaceChangesDto, SyncBatchResponse, SyncChangesDto, SyncOp } from '@os-planner/shared';
 import { AuthStore, isUnreachable } from '../core/auth-store';
 import { Language } from '../core/i18n';
 import { uuidv7 } from '../core/ids';
 import { Online } from '../core/online';
 import { Platform } from '../core/platform';
+import { QuotaStore } from '../core/quota';
 import { Db, type MediaRow, type PageContentRow } from './db';
 import { liveSignal } from './live';
 import { Outbox } from './outbox';
 import { PageStore } from './page-store';
+import { TeamStore } from './team-store';
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -66,6 +68,8 @@ export class Sync {
   private readonly online = inject(Online);
   private readonly lang = inject(Language);
   private readonly platform = inject(Platform);
+  private readonly quota = inject(QuotaStore);
+  private readonly teamStore = inject(TeamStore);
 
   readonly state = signal<SyncState>('idle');
   readonly lastSyncAt = signal<Date | null>(null);
@@ -76,7 +80,11 @@ export class Sync {
   /** Changes waiting to reach the server: queued operations + edited pages + files not yet uploaded. */
   readonly pending = liveSignal(
     this.dbs,
-    async (d) => (await d.outbox.count()) + (await d.contents.where('dirty').equals(1).count()) + (await d.media.where('uploaded').equals(0).filter((m) => !m.failed).count()),
+    async (d) =>
+      (await d.outbox.count()) +
+      (await d.contents.where('dirty').equals(1).filter((c) => c.heldRev !== c.rev).count()) +
+      // A file waiting for room is not "in flight": the storage message already says so.
+      (await d.media.where('uploaded').equals(0).filter((m) => !m.failed && !m.blocked).count()),
     0,
   );
 
@@ -87,6 +95,8 @@ export class Sync {
   private channel: BroadcastChannel | null = null;
   private started = false;
   private readonly toFetch = new Set<string>();
+  private refusedThisCycle = false;
+  private quotaNotified = false;
 
   /** Starts background syncing for the open database. Safe to call repeatedly. */
   start(): void {
@@ -101,7 +111,7 @@ export class Sync {
     document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && void this.run());
     this.timer = setInterval(() => void this.run(), POLL_MS);
     if (typeof BroadcastChannel !== 'undefined') {
-      this.channel = new BroadcastChannel('notes-sync');
+      this.channel = new BroadcastChannel('os_planner-sync');
       this.channel.onmessage = () => this.kick$.next();
     }
     void this.run();
@@ -148,6 +158,7 @@ export class Sync {
         await this.cycle();
         this.lastSyncAt.set(new Date());
         this.state.set('idle');
+        void this.quota.refresh();
       } catch (e) {
         if (isNetworkError(e)) this.state.set('offline');
         else {
@@ -157,16 +168,23 @@ export class Sync {
       }
     };
     // One tab syncs at a time; the others are told to wake up through the BroadcastChannel.
-    if (navigator.locks) await navigator.locks.request(`notes-sync-${userId}`, { ifAvailable: true }, async (lock) => lock && body());
+    if (navigator.locks) await navigator.locks.request(`os_planner-sync-${userId}`, { ifAvailable: true }, async (lock) => lock && body());
     else await body();
   }
 
   private async cycle(): Promise<void> {
+    this.refusedThisCycle = false;
     await this.pushOperations();
     await this.uploadMedia();
     await this.pushContents();
+    await this.teamStore.refreshAll(); // teams, projects, members: also tells which spaces to ask for
     await this.pull();
     await this.prefetch();
+    if (!this.refusedThisCycle) {
+      // Everything that was held back for lack of room has gone through.
+      this.quotaNotified = false;
+      this.quota.refused.set(false);
+    }
   }
 
   // ------------------------------------------------------------------ push: tree operations
@@ -183,8 +201,9 @@ export class Sync {
       let blocked = false;
       for (const row of rows) {
         const result = byOp.get(row.op.opId);
-        if (!result || (!result.ok && result.error === 'internal')) {
-          blocked = true; // retry later; keep order
+        if (!result || (!result.ok && (result.error === 'internal' || result.error === 'quota_exceeded'))) {
+          if (result && !result.ok && result.error === 'quota_exceeded') this.quotaRefused();
+          blocked = true; // retry later (for a full quota: once space is freed); keep order
           break;
         }
         done.push(row.n!);
@@ -193,6 +212,14 @@ export class Sync {
       await db.outbox.bulkDelete(done);
       if (blocked || rows.length < BATCH) return;
     }
+  }
+
+  /** Tells the person once (not every minute) that storage is full and that nothing is lost. */
+  private quotaRefused(): void {
+    this.refusedThisCycle = true;
+    if (!this.quotaNotified) this.addIssue({ messageKey: 'sync.quotaExceeded' });
+    this.quotaNotified = true;
+    this.quota.markRefused();
   }
 
   private dropped(op: SyncOp, reason: string): void {
@@ -204,7 +231,7 @@ export class Sync {
 
   private async uploadMedia(): Promise<void> {
     const db = this.dbs.db;
-    const pending = await db.media.where('uploaded').equals(0).filter((m) => !m.failed).toArray();
+    const pending = await db.media.where('uploaded').equals(0).filter((m) => !m.failed).toArray(); // blocked ones too: they are retried
     for (const row of pending) {
       if (!(await this.uploadOne(row))) break; // unverified email or server trouble: try again next cycle
     }
@@ -220,7 +247,7 @@ export class Sync {
     form.append('file', row.blob, row.id);
     try {
       await firstValueFrom(this.http.post('/api/media', form));
-      await this.dbs.db.media.update(row.id, { uploaded: 1 });
+      await this.dbs.db.media.update(row.id, { uploaded: 1, blocked: null });
       this.needsVerification.set(false);
       return true;
     } catch (e) {
@@ -233,9 +260,15 @@ export class Sync {
       }
       if (status === 409) return (await this.dbs.db.media.update(row.id, { uploaded: 1 }), true); // already there
       if (status >= 500 || status === 401 || status === 429) return false;
-      // 413 / 415 / 422: the server will never accept this file
+      if (status === 413 && message === 'quota_exceeded') {
+        // Not the file's fault: it stays on this device, queued, and goes up once there is room.
+        await this.dbs.db.media.update(row.id, { blocked: 'quota' });
+        this.quotaRefused();
+        return true; // a smaller file queued behind it may still fit
+      }
+      // 413 (too large) / 415 / 422: the server will never accept this file
       await this.dbs.db.media.update(row.id, { failed: message || `http_${status}` });
-      this.addIssue({ messageKey: message === 'quota_exceeded' ? 'sync.quotaExceeded' : 'sync.uploadRefused', params: { reason: message } });
+      this.addIssue({ messageKey: 'sync.uploadRefused', params: { reason: message } });
       return true;
     }
   }
@@ -257,20 +290,31 @@ export class Sync {
     const db = this.dbs.db;
     // Files used by this page must be on the server first, or it would reject the reference.
     const mediaIds = collectMediaIds(row.content);
+    let content = row.content;
+    let held = false;
     if (mediaIds.length) {
       const media = await db.media.bulkGet(mediaIds);
-      if (media.some((m) => m && !m.uploaded && !m.failed)) return; // wait for the upload
+      const waiting = mediaIds.filter((_id, i) => media[i] && !media[i]!.uploaded && !media[i]!.failed);
+      const blocked = waiting.filter((id) => media[mediaIds.indexOf(id)]!.blocked === 'quota');
+      if (waiting.length > blocked.length) return; // wait for the upload
       const refused = mediaIds.filter((id, i) => media[i]?.failed);
       if (refused.length) return this.rewrite(row, stripMedia(row.content, new Set(refused)));
+      if (blocked.length) {
+        // Storage is full: the files wait here, but the text must still reach the server.
+        if (row.heldRev === row.rev) return; // it already has this text
+        content = stripMedia(row.content, new Set(blocked));
+        held = true;
+      }
     }
 
     try {
-      const res = await firstValueFrom(this.http.put<{ version: number }>(`/api/pages/${row.id}/content`, { content: row.content, baseVersion: row.baseVersion }));
+      const res = await firstValueFrom(this.http.put<{ version: number }>(`/api/pages/${row.id}/content`, { content, baseVersion: row.baseVersion }));
       await db.transaction('rw', db.contents, async () => {
         const now = await db.contents.get(row.id);
         if (!now) return;
         // If the user typed while this was in flight, keep it dirty so the newer text is sent next.
-        await db.contents.put({ ...now, baseVersion: res.version, dirty: now.rev === row.rev ? 0 : 1 });
+        const same = now.rev === row.rev;
+        await db.contents.put({ ...now, baseVersion: res.version, dirty: same && !held ? 0 : 1, heldRev: same && held ? row.rev : undefined });
       });
     } catch (e) {
       if (isNetworkError(e)) throw e;
@@ -290,6 +334,10 @@ export class Sync {
       }
       if (status === 422) {
         this.addIssue({ messageKey: 'sync.invalidDocument', pageId: row.id });
+        return;
+      }
+      if (status === 413 && body['message'] === 'quota_exceeded') {
+        this.quotaRefused(); // the text stays dirty on this device and is sent once there is room
         return;
       }
       if (status === 401 || status >= 500 || status === 429) throw e;
@@ -344,7 +392,42 @@ export class Sync {
 
   // ------------------------------------------------------------------ pull
 
+  /**
+   * Asks for what changed in every space this device holds: the personal one, and the space of
+   * each team and project the person can see. One cursor per space, kept in `meta.cursors`.
+   * Spaces the server says were revoked (left the team, project deleted, ...) are purged here.
+   */
   private async pull(): Promise<void> {
+    const db = this.dbs.db;
+    const personal = this.auth.user()?.personalSpaceId;
+    if (!personal) return this.pullLegacy(); // an offline session restored from before spaces existed: one cursor, personal data
+
+    const stored = ((await db.meta.get('cursors'))?.value as Record<string, number> | undefined) ?? {};
+    const cursors: Record<string, number> = { ...stored };
+    if (cursors[personal] === undefined) cursors[personal] = ((await db.meta.get('cursor'))?.value as number | undefined) ?? 0; // the single cursor of older versions
+    // Read the tables themselves: the live signals may not have caught up with what refreshAll just wrote.
+    const spaces = [personal, ...(await db.teams.toArray()).map((t) => t.spaceId), ...(await db.projects.toArray()).map((p) => p.spaceId)];
+    for (const id of spaces) cursors[id] ??= 0;
+
+    for (;;) {
+      const res = await firstValueFrom(this.http.get<SyncChangesDto>('/api/sync/changes', { params: { cursors: JSON.stringify(cursors) } }));
+      let more = false;
+      for (const [spaceId, changes] of Object.entries(res.spaces)) {
+        await this.apply(changes);
+        cursors[spaceId] = changes.cursor;
+        more ||= changes.hasMore;
+      }
+      if (res.revokedSpaces.length) {
+        await this.teamStore.purgeSpaces(res.revokedSpaces);
+        for (const id of res.revokedSpaces) delete cursors[id];
+      }
+      // purgeSpaces rewrites the stored cursors; keep the ones we hold now
+      await db.meta.put({ key: 'cursors', value: cursors });
+      if (!more) return;
+    }
+  }
+
+  private async pullLegacy(): Promise<void> {
     const db = this.dbs.db;
     let cursor = ((await db.meta.get('cursor'))?.value as number | undefined) ?? 0;
     for (;;) {
@@ -357,7 +440,7 @@ export class Sync {
   }
 
   /** Writes server changes locally, except for things with queued local changes (those are sent first and win). */
-  private async apply(changes: SyncChangesDto): Promise<void> {
+  private async apply(changes: SpaceChangesDto): Promise<void> {
     const db = this.dbs.db;
     await db.transaction('rw', db.notebooks, db.categories, db.pages, db.contents, db.outbox, async () => {
       const protectedIds = new Set((await db.outbox.toArray()).map((o) => ('id' in o.op ? o.op.id : '')));

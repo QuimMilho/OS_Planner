@@ -4,7 +4,7 @@ import { MaintenanceService } from '../src/media/maintenance.service.js';
 import { StorageService } from '../src/media/storage.service.js';
 import { createTestApp, type TestApp } from './app.js';
 import { png } from './fixtures.js';
-import { builders, signup, uuid, type Account } from './helpers.js';
+import { builders, signup, uuid, type Account, usedBytes } from './helpers.js';
 
 let t: TestApp;
 let me: Account;
@@ -47,7 +47,7 @@ describe('orphan media collection', () => {
     expect((await t.http.put(`/api/pages/${page.id}/content`).set(me.auth).send({ content: doc, baseVersion: 0 })).status).toBe(200);
 
     await t.prisma.media.updateMany({ where: { id: { in: [used.id, oldOrphan.id] } }, data: { createdAt: daysAgo(10) } });
-    const before = Number((await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } })).storageUsedBytes);
+    const before = await usedBytes(t, me.id);
 
     expect(await maintenance.collectOrphanMedia()).toBe(1);
 
@@ -56,7 +56,7 @@ describe('orphan media collection', () => {
     expect(await t.prisma.media.findUnique({ where: { id: used.id } })).not.toBeNull();
     expect(await exists(storage.mediaPath(me.id, used.id))).toBe(true);
     expect(await t.prisma.media.findUnique({ where: { id: recentOrphan.id } })).not.toBeNull();
-    const after = Number((await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } })).storageUsedBytes);
+    const after = await usedBytes(t, me.id);
     expect(after).toBe(before - oldOrphan.size);
   });
 

@@ -39,7 +39,7 @@ export class Session {
     this.media.forgetUrls();
     try {
       // unsaved editor drafts are notes too
-      for (const key of Object.keys(localStorage)) if (key.startsWith('notes.draft.')) localStorage.removeItem(key);
+      for (const key of Object.keys(localStorage)) if (key.startsWith('os_planner.draft.')) localStorage.removeItem(key);
     } catch {
       /* storage unavailable */
     }

@@ -1,6 +1,6 @@
 {
   "app": {
-    "updateReady": "A new version of Notes is ready.",
+    "updateReady": "A new version of OS_Planner is ready.",
     "reload": "Reload"
   },
   "common": {
@@ -27,7 +27,8 @@
     "settings": "Settings",
     "getApp": "Get the app",
     "account": "Account",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "admin": "Administration"
   },
   "tree": {
     "notebooks": "Notebooks",
@@ -44,7 +45,7 @@
     "deleted": "“{{name}}” moved to the trash."
   },
   "home": {
-    "welcome": "Welcome to Notes",
+    "welcome": "Welcome to OS_Planner",
     "welcomeText": "Organise your notes in notebooks and categories. Write with math, diagrams, charts, code, images and video. Everything works offline.",
     "createFirst": "Create your first notebook",
     "title": "Your notes",
@@ -63,7 +64,11 @@
     "title": "Trash",
     "info": "Deleted items stay here for 30 days, then they are removed permanently.",
     "empty": "The trash is empty.",
-    "kind": { "notebook": "Notebook", "category": "Category", "page": "Page" }
+    "kind": {
+      "notebook": "Notebook",
+      "category": "Category",
+      "page": "Page"
+    }
   },
   "search": {
     "none": "Nothing found.",
@@ -82,7 +87,7 @@
     "pageGone": "This page no longer exists on the server. Your text was kept as a new page.",
     "opDropped": "A change could not be applied ({{reason}}) and was skipped.",
     "uploadRefused": "A file could not be uploaded ({{reason}}) and was left out of the page.",
-    "quotaExceeded": "You have used all of your storage. A file was not uploaded.",
+    "quotaExceeded": "Your storage is full. Files and changes stay on this device and are sent as soon as there is room.",
     "mediaRemoved": "Some files could not be uploaded and were removed from this page.",
     "invalidDocument": "This page could not be saved because its content is invalid."
   },
@@ -151,9 +156,25 @@
     "youtubeTitle": "Embed a YouTube video",
     "youtubeLabel": "YouTube link",
     "youtubeInvalid": "Enter a YouTube link.",
-    "state": { "saved": "Saved", "saving": "Saving…", "offline": "Saved on this device" },
-    "chartTypes": { "bar": "Bar", "line": "Line", "pie": "Pie", "doughnut": "Doughnut", "scatter": "Scatter", "radar": "Radar" },
-    "callout": { "info": "Info", "tip": "Tip", "warning": "Warning", "danger": "Danger" },
+    "state": {
+      "saved": "Saved",
+      "saving": "Saving…",
+      "offline": "Saved on this device"
+    },
+    "chartTypes": {
+      "bar": "Bar",
+      "line": "Line",
+      "pie": "Pie",
+      "doughnut": "Doughnut",
+      "scatter": "Scatter",
+      "radar": "Radar"
+    },
+    "callout": {
+      "info": "Info",
+      "tip": "Tip",
+      "warning": "Warning",
+      "danger": "Danger"
+    },
     "tableOps": {
       "addRowBefore": "Add row above",
       "addRowAfter": "Add row below",
@@ -201,7 +222,11 @@
     "mdHintZip": "Downloads a .zip with one .md file per page, in folders, plus the media.",
     "failed": "The export failed. Please try again.",
     "localPrint": "The server could not create the PDF, so your browser's print dialog was opened. Choose “Save as PDF”.",
-    "scope": { "page": "Page", "category": "Category", "notebook": "Notebook" }
+    "scope": {
+      "page": "Page",
+      "category": "Category",
+      "notebook": "Notebook"
+    }
   },
   "auth": {
     "email": "Email",
@@ -236,7 +261,12 @@
     "password_too_common": "That password is too common. Please choose a different one.",
     "offline": "The server cannot be reached. Check your connection and try again.",
     "invalid_or_expired_token": "This link is invalid or has expired.",
-    "http_429": "Too many attempts. Please wait a minute and try again."
+    "http_429": "Too many attempts. Please wait a minute and try again.",
+    "quotaExceeded": "Not enough storage left for that.",
+    "notFoundTitle": "Page not found",
+    "notFound": "This page does not exist, or you do not have access to it.",
+    "backHome": "Back to my notes",
+    "forbidden": "You do not have permission to do that."
   },
   "theme": {
     "system": "Same as device",
@@ -271,37 +301,61 @@
     "unsyncedWarning": "Some changes have not reached the server yet. Signing out removes the notes stored on this device, so they would be lost. Wait for syncing to finish, or sign out anyway."
   },
   "site": {
-    "openApp": "Open Notes",
+    "openApp": "Open OS_Planner",
     "getStarted": "Get started",
-    "heroTitle": "Notes that go as far as your ideas.",
+    "heroTitle": "Plans that go as far as your ideas.",
     "heroText": "Notebooks, categories and pages with a rich editor: math, diagrams, charts, code, images and video. Export to PDF. Works offline, in your browser or as an app.",
     "features": "Features",
-    "footer": "Notes · your notes stay yours",
+    "footer": "OS_Planner · your notes stay yours",
     "f": {
-      "organise": { "title": "Organised your way", "text": "Notebooks with nested categories and pages. Name and reorder everything." },
-      "editor": { "title": "A real editor", "text": "Headings, lists, tables, to-dos, callouts, toggles and a “/” command menu." },
-      "math": { "title": "Math and code", "text": "LaTeX equations and syntax-highlighted code blocks for dozens of languages." },
-      "charts": { "title": "Diagrams and graphs", "text": "Mermaid diagrams, bar/line/pie charts, and plots of functions like sin(x)/x." },
-      "media": { "title": "Images and video", "text": "Drop or paste pictures and videos. Resize, align and caption them." },
-      "pdf": { "title": "Export to PDF", "text": "Turn a page, a category or a whole notebook into a PDF, with a table of contents." },
-      "offline": { "title": "Works offline", "text": "Keep writing without a connection. Changes sync, and conflicts never lose text." },
-      "everywhere": { "title": "Everywhere", "text": "Use it in the browser, install it as an app, or download it for Windows and Linux." }
+      "organise": {
+        "title": "Organised your way",
+        "text": "Notebooks with nested categories and pages. Name and reorder everything."
+      },
+      "editor": {
+        "title": "A real editor",
+        "text": "Headings, lists, tables, to-dos, callouts, toggles and a “/” command menu."
+      },
+      "math": {
+        "title": "Math and code",
+        "text": "LaTeX equations and syntax-highlighted code blocks for dozens of languages."
+      },
+      "charts": {
+        "title": "Diagrams and graphs",
+        "text": "Mermaid diagrams, bar/line/pie charts, and plots of functions like sin(x)/x."
+      },
+      "media": {
+        "title": "Images and video",
+        "text": "Drop or paste pictures and videos. Resize, align and caption them."
+      },
+      "pdf": {
+        "title": "Export to PDF",
+        "text": "Turn a page, a category or a whole notebook into a PDF, with a table of contents."
+      },
+      "offline": {
+        "title": "Works offline",
+        "text": "Keep writing without a connection. Changes sync, and conflicts never lose text."
+      },
+      "everywhere": {
+        "title": "Everywhere",
+        "text": "Use it in the browser, install it as an app, or download it for Windows and Linux."
+      }
     }
   },
   "apps": {
-    "intro": "Notes runs in your browser. Install it as an app, or download the desktop version for Windows or Linux. Your notes are the same everywhere.",
+    "intro": "OS_Planner runs in your browser. Install it as an app, or download the desktop version for Windows or Linux. Your notes are the same everywhere.",
     "browser": "Use it in your browser",
     "browserText": "Nothing to install. Sign in on any device.",
     "openBrowser": "Open in browser",
     "pwa": "Install as an app",
-    "pwaText": "Adds Notes to your apps with its own window, and keeps working offline.",
+    "pwaText": "Adds OS_Planner to your apps with its own window, and keeps working offline.",
     "installNow": "Install app",
     "alreadyInstalled": "You are using the installed app.",
-    "justInstalled": "Installed. Look for Notes among your apps.",
+    "justInstalled": "Installed. Look for OS_Planner among your apps.",
     "how": {
-      "windows": "In Chrome or Edge, open the browser menu and choose “Install Notes” (or use the install icon in the address bar).",
-      "linux": "In Chrome, Chromium or Edge, open the browser menu and choose “Install Notes”. Firefox does not support installing web apps: use the desktop download below.",
-      "mac": "In Safari choose File › Add to Dock. In Chrome or Edge choose “Install Notes” from the browser menu.",
+      "windows": "In Chrome or Edge, open the browser menu and choose “Install OS_Planner” (or use the install icon in the address bar).",
+      "linux": "In Chrome, Chromium or Edge, open the browser menu and choose “Install OS_Planner”. Firefox does not support installing web apps: use the desktop download below.",
+      "mac": "In Safari choose File › Add to Dock. In Chrome or Edge choose “Install OS_Planner” from the browser menu.",
       "android": "Open the browser menu and tap “Install app” or “Add to Home screen”.",
       "ios": "Tap the Share button, then “Add to Home Screen”.",
       "other": "Open your browser menu and look for “Install” or “Add to Home screen”."
@@ -314,5 +368,451 @@
     "noRelease": "The desktop apps have not been published on this server yet.",
     "noDesktopForOs": "There is no desktop build for this device. Use the browser or install it as an app.",
     "smartscreen": "Windows may show a “SmartScreen” warning the first time, because the installer is not code-signed. Choose “More info” › “Run anyway”."
+  },
+  "quota": {
+    "title": "Storage",
+    "used": "used",
+    "of": "of",
+    "limit": "Limit",
+    "images": "Images",
+    "video": "Video",
+    "documents": "Notes (text)",
+    "warning": "You are close to your storage limit. Free some space or ask an administrator for more.",
+    "full": "Your storage is full. New files wait on this device and are uploaded once there is room; text you add may not be saved until then.",
+    "manage": "Storage"
+  },
+  "admin": {
+    "title": "Administration",
+    "users": "Accounts",
+    "stats": "Overview",
+    "statUsers": "Accounts",
+    "statVerified": "Verified",
+    "statStorage": "Stored",
+    "statTeams": "Teams",
+    "searchUsers": "Search by name or email",
+    "user": "Account",
+    "usage": "Storage",
+    "override": "custom limit",
+    "edit": "Limits",
+    "clear": "Use default",
+    "storageMb": "Storage limit (MB)",
+    "fileMb": "Largest file (MB)",
+    "note": "Note",
+    "defaultHint": "Empty = default ({{value}} MB)",
+    "saved": "Limits saved.",
+    "cleared": "Back to the default limit.",
+    "invalid": "Enter valid numbers.",
+    "noUsers": "No accounts found.",
+    "loadMore": "Load more",
+    "teams": {
+      "title": "Teams",
+      "name": "Team name",
+      "owner": "Owner email",
+      "ownerHint": "If there is no verified account yet, the team waits for it.",
+      "public": "Public (listed for everyone)",
+      "openJoin": "Anyone can join",
+      "create": "Create team",
+      "members": "members",
+      "projects": "projects",
+      "pending": "waiting for account",
+      "none": "No teams yet.",
+      "created": "Team created.",
+      "deleteTitle": "Delete team?",
+      "deleteMessage": "“{{name}}” and all its projects and content will be removed. Its storage is released after 30 days."
+    }
+  },
+  "rail": {
+    "home": "My notes",
+    "label": "Spaces",
+    "browse": "Browse public teams"
+  },
+  "breadcrumb": {
+    "label": "Where you are"
+  },
+  "project": {
+    "new": "New project",
+    "newSub": "New sub-project",
+    "name": "Project name",
+    "rename": "Rename",
+    "moveTo": "Move to…",
+    "topLevel": "Top level",
+    "actions": "Project actions",
+    "archive": "Archive",
+    "unarchive": "Restore from archive",
+    "archived": "Archived",
+    "subProjects": "Sub-projects",
+    "deleteTitle": "Delete project?",
+    "deleteMessage": "“{{name}}” and everything below it will be deleted. This cannot be undone.",
+    "limitReached": "This team has reached its limit of projects.",
+    "invalid": "That is not possible here: a project cannot be moved into itself or below its own sub-projects, and the nesting depth is limited.",
+    "permissions": "Permissions",
+    "permissionsTitle": "Project permissions",
+    "overwrites": "Who can do what here",
+    "permissionsNoAccess": "You can see this project but not change who can do what in it."
+  },
+  "team": {
+    "projects": "Projects",
+    "noProjects": "No projects yet.",
+    "notebooks": "Notebooks",
+    "noNotebooks": "No notebooks here yet.",
+    "boards": "Boards",
+    "channels": "Channels",
+    "members": "Members",
+    "owner": "Owner",
+    "comingSoon": "Coming soon.",
+    "settings": "Team settings",
+    "settingsTitle": "Team settings",
+    "tab": {
+      "members": "Members",
+      "roles": "Roles",
+      "viewAs": "View as",
+      "audit": "Audit log",
+      "invites": "Invitations",
+      "requests": "Requests",
+      "bans": "Bans",
+      "discover": "Discoverability"
+    }
+  },
+  "members": {
+    "nickname": "Nickname",
+    "nicknameLabel": "Nickname (leave empty to remove)",
+    "moderate": "Remove or ban",
+    "kick": "Remove from team",
+    "kickTitle": "Remove from team",
+    "kickText": "{{name}} will lose access to the team and everything in it. They can come back with a new invitation.",
+    "ban": "Ban",
+    "banTitle": "Ban from team",
+    "banReason": "Reason (only the people who manage members see it)",
+    "leaveTitle": "Leave team",
+    "leaveHint": "You lose access to the team and everything in it. You can come back with a new invitation.",
+    "leave": "Leave team",
+    "leaveConfirm": "Leave \"{{name}}\"?"
+  },
+  "roles": {
+    "title": "Roles",
+    "projectTitle": "Project roles",
+    "projectHint": "These roles exist only in this project and its sub-projects.",
+    "new": "New role",
+    "dragHint": "Drag to reorder. A role can only be moved below your own highest role.",
+    "members": "Members",
+    "none": "No roles yet.",
+    "name": "Role name",
+    "color": "Colour",
+    "noColor": "No colour",
+    "hoist": "Show members with this role separately",
+    "mentionable": "Allow anyone to @mention this role",
+    "permissions": "Permissions",
+    "readOnly": "You cannot change this role: it is at or above your own highest role, or you may not manage roles.",
+    "pick": "Choose a role to edit it.",
+    "saved": "Role saved.",
+    "deleteTitle": "Delete this role?",
+    "deleteMessage": "“{{name}}” will be removed from its {{count}} member(s) and from every overwrite. This cannot be undone.",
+    "removeFrom": "Remove the role {{role}}",
+    "addRole": "Add a role",
+    "err": {
+      "role_at_or_above": "That role is at or above your own highest role.",
+      "permission_not_held": "You cannot give or take a permission you do not have yourself.",
+      "missing_manage_roles": "You may not manage roles.",
+      "everyone_protected": "@everyone cannot be deleted, renamed or recoloured.",
+      "administrator_owner_only": "Only the owner can give @everyone the Administrator permission.",
+      "last_administrator": "That would leave the team without an administrator.",
+      "role_limit_reached": "This team has reached its limit of roles.",
+      "invalid_order": "That order is not valid. Reload and try again."
+    }
+  },
+  "permissions": {
+    "search": "Search permissions",
+    "noMatch": "No permission matches.",
+    "group": {
+      "general": "General",
+      "chat": "Chat",
+      "notebooks": "Notebooks",
+      "boards": "Boards",
+      "calendar": "Calendar",
+      "voice": "Voice and video"
+    },
+    "hint": {
+      "ADMINISTRATOR": "Every permission, and no overwrite applies. Give it with great care.",
+      "MANAGE_TEAM": "Change the team’s name, icon and settings.",
+      "MANAGE_ROLES": "Create and edit roles, and give them to members, below their own.",
+      "MANAGE_MEMBERS": "Remove members and change their nicknames.",
+      "CREATE_INVITES": "Invite people to the team.",
+      "VIEW_AUDIT_LOG": "See who changed what in the team.",
+      "MANAGE_PROJECTS": "Create, rename, move, archive and delete projects, and set who can do what in them.",
+      "VIEW_CHANNEL": "See channels and read their messages.",
+      "SEND_MESSAGES": "Write in channels.",
+      "READ_MESSAGE_HISTORY": "Read messages sent earlier.",
+      "ATTACH_FILES": "Add files and images to messages.",
+      "ADD_REACTIONS": "React to messages.",
+      "CREATE_THREADS": "Start a thread from a message.",
+      "SEND_IN_THREADS": "Write in threads.",
+      "MENTION_EVERYONE": "Use @everyone and @here.",
+      "MANAGE_MESSAGES": "Delete and pin other people’s messages.",
+      "MANAGE_CHANNELS": "Create, edit and delete channels.",
+      "VIEW_NOTEBOOKS": "See and read notebooks and pages.",
+      "CREATE_NOTEBOOKS": "Add notebooks and categories.",
+      "EDIT_PAGES": "Create pages and write in them.",
+      "DELETE_PAGES": "Move pages to the trash.",
+      "MANAGE_NOTEBOOKS": "Rename, move and delete notebooks.",
+      "SHARE_NOTEBOOKS": "Share notebooks with people or by link.",
+      "VIEW_BOARDS": "See boards and their tasks.",
+      "CREATE_TASKS": "Add tasks to boards.",
+      "EDIT_TASKS": "Change, move and complete tasks.",
+      "ASSIGN_TASKS": "Choose who a task is assigned to.",
+      "MANAGE_BOARDS": "Create, edit and delete boards and columns.",
+      "MANAGE_LABELS": "Create, edit and delete labels.",
+      "VIEW_CALENDAR": "See the calendar and its meetings.",
+      "CREATE_MEETINGS": "Schedule meetings.",
+      "MANAGE_MEETINGS": "Edit and cancel other people’s meetings.",
+      "ADD_TO_MEMBER_CALENDARS": "Put a meeting straight into the calendars of invited members.",
+      "CONNECT": "Join voice and video channels.",
+      "SPEAK": "Talk in voice channels.",
+      "VIDEO": "Turn the camera on.",
+      "SCREEN_SHARE": "Share a screen or window.",
+      "MUTE_MEMBERS": "Mute other people in voice channels.",
+      "MOVE_MEMBERS": "Move people between voice channels."
+    },
+    "ADMINISTRATOR": "Administrator",
+    "MANAGE_TEAM": "Manage team",
+    "MANAGE_ROLES": "Manage roles",
+    "MANAGE_MEMBERS": "Manage members",
+    "CREATE_INVITES": "Create invites",
+    "VIEW_AUDIT_LOG": "View audit log",
+    "MANAGE_PROJECTS": "Manage projects",
+    "VIEW_CHANNEL": "View channels",
+    "SEND_MESSAGES": "Send messages",
+    "READ_MESSAGE_HISTORY": "Read message history",
+    "ATTACH_FILES": "Attach files",
+    "ADD_REACTIONS": "Add reactions",
+    "CREATE_THREADS": "Create threads",
+    "SEND_IN_THREADS": "Send in threads",
+    "MENTION_EVERYONE": "Mention everyone",
+    "MANAGE_MESSAGES": "Manage messages",
+    "MANAGE_CHANNELS": "Manage channels",
+    "VIEW_NOTEBOOKS": "View notebooks",
+    "CREATE_NOTEBOOKS": "Create notebooks",
+    "EDIT_PAGES": "Edit pages",
+    "DELETE_PAGES": "Delete pages",
+    "MANAGE_NOTEBOOKS": "Manage notebooks",
+    "SHARE_NOTEBOOKS": "Share notebooks",
+    "VIEW_BOARDS": "View boards",
+    "CREATE_TASKS": "Create tasks",
+    "EDIT_TASKS": "Edit tasks",
+    "ASSIGN_TASKS": "Assign tasks",
+    "MANAGE_BOARDS": "Manage boards",
+    "MANAGE_LABELS": "Manage labels",
+    "VIEW_CALENDAR": "View calendar",
+    "CREATE_MEETINGS": "Create meetings",
+    "MANAGE_MEETINGS": "Manage meetings",
+    "ADD_TO_MEMBER_CALENDARS": "Add to members’ calendars",
+    "CONNECT": "Connect",
+    "SPEAK": "Speak",
+    "VIDEO": "Video",
+    "SCREEN_SHARE": "Share screen",
+    "MUTE_MEMBERS": "Mute members",
+    "MOVE_MEMBERS": "Move members"
+  },
+  "overwrite": {
+    "allow": "Allow",
+    "inherit": "Inherit",
+    "deny": "Deny",
+    "syncedWithParent": "Synced with the parent: nothing is set here, so this gets what the levels above give it.",
+    "custom": "Set at this level",
+    "reset": "Reset to inherited",
+    "subjects": "Roles and members",
+    "addMember": "Add a member",
+    "pickMember": "Choose…",
+    "pick": "Choose a role or a member.",
+    "saved": "Permissions saved."
+  },
+  "viewAs": {
+    "title": "View as",
+    "pick": "See what this role or member can do",
+    "choose": "Choose…",
+    "roles": "Roles",
+    "members": "Members",
+    "summary": "{{name}} holds {{count}} permissions here.",
+    "reason": {
+      "owner": "Owner of the team",
+      "administratorRole": "Administrator through {{roles}}",
+      "administratorEveryone": "Administrator through @everyone",
+      "base": "Granted by {{from}}",
+      "member": "this member",
+      "allowed": "Allowed for {{who}} on {{where}}",
+      "denied": "Denied for {{who}} on {{where}}",
+      "masked": "Removed: needs “{{missing}}”",
+      "none": "Not granted"
+    }
+  },
+  "audit": {
+    "action": {
+      "role_create": "Role created",
+      "role_update": "Role changed",
+      "role_delete": "Role deleted",
+      "role_reorder": "Roles reordered",
+      "role_assign": "Role given",
+      "role_unassign": "Role removed from a member",
+      "overwrite_set": "Overwrite set",
+      "overwrite_clear": "Overwrite removed",
+      "member_remove": "Member removed",
+      "member_nickname": "Nickname changed",
+      "project_create": "Project created",
+      "project_update": "Project changed",
+      "project_move": "Project moved",
+      "project_delete": "Project deleted",
+      "project_member_add": "Member added to a project",
+      "project_member_remove": "Member removed from a project",
+      "team_create": "Team created",
+      "team_update": "Team changed",
+      "team_delete": "Team deleted",
+      "team_owner_transfer": "Ownership changed",
+      "quota_override": "Storage limit changed",
+      "member_add": "Member joined",
+      "member_ban": "Member banned",
+      "member_unban": "Ban lifted",
+      "invite_create": "Invitation created",
+      "invite_resend": "Invitation sent again",
+      "invite_revoke": "Invitation withdrawn",
+      "request_approve": "Request to join approved",
+      "request_deny": "Request to join denied"
+    },
+    "actor": "Done by",
+    "from": "From",
+    "to": "To",
+    "apply": "Filter",
+    "any": "Any",
+    "empty": "Nothing recorded yet.",
+    "more": "Load more",
+    "before": "Before",
+    "after": "After",
+    "system": "The system",
+    "target": {
+      "team": "the team",
+      "project": "a project",
+      "user": "an account",
+      "invite": "an invitation"
+    },
+    "actionLabel": "Action"
+  },
+  "ownership": {
+    "transfer": {
+      "hint": "You are the owner. Hand the team to another member before you leave it. You keep your roles but are no longer above everybody.",
+      "to": "New owner",
+      "typeName": "Type the team name ({{name}}) to confirm",
+      "password": "Your password",
+      "button": "Transfer ownership",
+      "done": "Ownership transferred.",
+      "wrongPassword": "That password is not right."
+    }
+  },
+  "invite": {
+    "invitedTo": "You are invited to join",
+    "members": "Members: {{count}}",
+    "createAccount": "Create account to join",
+    "signIn": "Sign in to join",
+    "join": "Join team",
+    "signOut": "Sign out and use another account",
+    "verifyFirst": "Confirm your email address first (we sent you a message). You join the team as soon as you do.",
+    "invalidTitle": "This invitation does not work",
+    "invalidText": "It may have expired, been withdrawn or already been used. Ask for a new one.",
+    "registerHint": "If the invitation was sent to an email address, use that address to create your account.",
+    "roles": "Roles they get",
+    "linkTitle": "Invite link",
+    "linkHint": "Anyone with the link can join, up to the limit you set. It stops working when it expires.",
+    "expires": "Expires after (days)",
+    "days": "{{count}}",
+    "maxUses": "Most people who may use it",
+    "unlimited": "No limit",
+    "createLink": "Create link",
+    "linkCreated": "Copy the link now. It is not shown again.",
+    "copy": "Copy",
+    "copied": "Link copied.",
+    "emailTitle": "Invite by email",
+    "emailHint": "Each address gets its own invitation, good for that address only, for 14 days.",
+    "emailLabel": "Email addresses",
+    "emailPlaceholder": "ana@example.com, rui@example.com",
+    "sendEmails": "Send invitations",
+    "sent": "Invitations sent: {{count}}",
+    "badAddress": "\"{{address}}\" is not an email address.",
+    "list": "Invitations",
+    "none": "No invitations yet.",
+    "kindLink": "Invite link",
+    "by": "by {{name}}",
+    "usesOf": "used {{used}} of {{max}}",
+    "uses": "used {{used}}",
+    "expiresOn": "expires {{date}}",
+    "status": {
+      "active": "Open",
+      "used": "Used",
+      "expired": "Expired",
+      "revoked": "Withdrawn"
+    },
+    "resend": "Send again",
+    "resent": "Sent again to {{email}}.",
+    "revoke": "Withdraw",
+    "revokeTitle": "Withdraw this invitation?",
+    "revokeText": "It stops working at once. {{what}}",
+    "err": {
+      "invite_other_address": "This invitation was sent to another email address. Sign out and use the address it was sent to.",
+      "email_not_verified": "Confirm your email address first.",
+      "quota_exceeded": "This team is full.",
+      "invalid_role": "One of the roles cannot be used.",
+      "project_must_be_top_level": "Invitations can add people to top-level projects only.",
+      "role_at_or_above": "You can only give roles below your own.",
+      "permission_not_held": "You cannot give a role with permissions you do not have.",
+      "missing_manage_roles": "You need the \"Manage roles\" permission to attach roles.",
+      "forbidden": "You do not have permission to do that.",
+      "invite_closed": "This invitation is no longer open.",
+      "not_an_email_invite": "Only invitations to an email address can be sent again."
+    }
+  },
+  "requests": {
+    "none": "No requests waiting.",
+    "approve": "Approve",
+    "deny": "Deny",
+    "approved": "{{name}} is in the team now.",
+    "denied": "Request from {{name}} denied."
+  },
+  "bans": {
+    "hint": "People on this list cannot join the team in any way (invitation, link, directory or request) until you lift the ban.",
+    "none": "Nobody is banned.",
+    "unban": "Lift ban",
+    "lifted": "{{name}} can join again."
+  },
+  "discover": {
+    "public": "List this team in the public directory",
+    "publicHint": "Anyone signed in can find it, see its name, description and size, and join or ask to join.",
+    "policy": "How people get in",
+    "policyRequest": "They ask, and someone approves",
+    "policyOpen": "Anyone can join at once",
+    "blurb": "One line about the team",
+    "tags": "Tags",
+    "tagsPlaceholder": "rust, open source",
+    "tagsHint": "Separate with commas. Up to {{max}}.",
+    "saved": "Saved.",
+    "invalid": "Check the line and the tags: they are too long or not allowed."
+  },
+  "directory": {
+    "title": "Public teams",
+    "hint": "Teams that welcome new people. Private teams are never listed.",
+    "search": "Search by name or topic",
+    "searchButton": "Search",
+    "tag": "Tag",
+    "clearTag": "Show all",
+    "verifyFirst": "Confirm your email address to join a team.",
+    "empty": "No public teams match."
+  },
+  "join": {
+    "open": "Join",
+    "request": "Ask to join",
+    "requested": "Request sent",
+    "withdraw": "Withdraw",
+    "requestTitle": "Ask to join",
+    "messageLabel": "A few words for the team (optional)",
+    "sent": "Your request to join {{team}} was sent.",
+    "err": {
+      "banned": "You cannot join this team.",
+      "full": "This team is full."
+    }
   }
 }

@@ -17,7 +17,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { publishReleaseSchema, type DownloadsDto, type PublishReleaseInput, type ReleaseManifest } from '@notes/shared';
+import { publishReleaseSchema, type DownloadsDto, type PublishReleaseInput, type ReleaseManifest } from '@os-planner/shared';
 import { Public } from '../common/auth.decorators.js';
 import { ENV, type Env } from '../config/env.js';
 import { DownloadsService } from './downloads.service.js';

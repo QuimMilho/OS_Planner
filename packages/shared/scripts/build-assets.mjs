@@ -10,8 +10,8 @@ const phase = process.argv[2];
 if (phase === 'clean') {
   rmSync(join(root, 'dist'), { recursive: true, force: true });
 } else if (phase === 'assets') {
-  // tsup names IIFE output "*.global.js"; the pages ask for plain "notes-libs.js" / "print-runtime.js".
-  for (const name of ['notes-libs', 'print-runtime']) {
+  // tsup names IIFE output "*.global.js"; the pages ask for plain "planner-libs.js" / "print-runtime.js".
+  for (const name of ['planner-libs', 'print-runtime']) {
     cpSync(join(root, 'dist', 'print', `${name}.global.js`), join(root, 'dist', 'print', `${name}.js`));
     rmSync(join(root, 'dist', 'print', `${name}.global.js`));
   }

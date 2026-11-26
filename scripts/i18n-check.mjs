@@ -8,6 +8,7 @@
 //   node scripts/i18n-check.mjs --list   print the static keys and dynamic prefixes found in the source
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const root = resolve(import.meta.dirname, '../apps/web/src/app');
 const read = (p) => JSON.parse(readFileSync(p, 'utf8'));
@@ -18,6 +19,13 @@ const flatten = (obj, prefix = '') =>
   Object.entries(obj).flatMap(([k, v]) => (v && typeof v === 'object' ? flatten(v, `${prefix}${k}.`) : [[`${prefix}${k}`, v]]));
 const enKeys = new Map(flatten(en));
 const ptKeys = new Map(flatten(pt));
+
+// The permission names, groups and audit actions come from the shared package itself, so a new permission or action
+// cannot ship without its texts. (Build @os-planner/shared first, as every other check here assumes.)
+const shared = await import(pathToFileURL(resolve(import.meta.dirname, '../packages/shared/dist/lite.js')).href).catch(() => null);
+const PERMISSION_NAMES = shared?.PERMISSION_NAMES ?? [];
+const AUDIT_ACTIONS = (shared?.AUDIT_ACTIONS ?? []).map((a) => a.replaceAll('.', '_'));
+const PERMISSION_GROUPS = (shared?.PERMISSION_GROUPS ?? []).map((g) => g.id);
 
 /** Prefixes built at run time, with every suffix the code can produce. */
 const DYNAMIC = {
@@ -31,6 +39,16 @@ const DYNAMIC = {
   'theme.': ['system', 'light', 'dark', 'purple', 'red', 'green', 'blue', 'darkblue'],
   'apps.how.': ['windows', 'linux', 'mac', 'android', 'ios', 'other'],
   'site.f.': ['organise', 'editor', 'math', 'charts', 'media', 'pdf', 'offline', 'everywhere'].flatMap((f) => [`${f}.title`, `${f}.text`]),
+  'permissions.': PERMISSION_NAMES,
+  'permissions.hint.': PERMISSION_NAMES,
+  'permissions.group.': PERMISSION_GROUPS,
+  'overwrite.': ['allow', 'inherit', 'deny'],
+  'roles.err.': ['role_at_or_above', 'permission_not_held', 'missing_manage_roles', 'everyone_protected', 'administrator_owner_only', 'last_administrator', 'role_limit_reached', 'invalid_order'],
+  'team.tab.': ['members', 'invites', 'requests', 'bans', 'discover', 'roles', 'viewAs', 'audit'],
+  'invite.status.': ['active', 'used', 'expired', 'revoked'],
+  'invite.err.': ['invite_other_address', 'email_not_verified', 'quota_exceeded', 'invalid_role', 'project_must_be_top_level', 'role_at_or_above', 'permission_not_held', 'missing_manage_roles', 'forbidden', 'invite_closed', 'not_an_email_invite'],
+  'audit.action.': AUDIT_ACTIONS,
+  'audit.target.': ['team', 'project', 'user', 'invite'],
   'errors.': ['invalid_credentials', 'email_taken', 'password_too_common', 'offline', 'invalid_or_expired_token', 'http_429', 'generic'],
 };
 
@@ -39,6 +57,9 @@ const EXTRA = [
   'common.ok', 'editor.mathBlock', 'editor.mathInline', 'editor.removeLink', 'editor.youtubeInvalid', 'editor.linkInvalid',
   'export.failed', 'export.mdHintPage', 'export.mdHintZip', 'auth.verifyBanner', 'auth.verifyBannerUploads',
   'sync.quotaExceeded', 'sync.uploadRefused', 'sync.conflictCopy', 'sync.restoredCopy',
+  'ownership.transfer.wrongPassword', 'invite.usesOf', 'invite.uses', 'requests.approved', 'requests.denied', 'discover.invalid', 'join.open', 'join.err.banned', 'join.err.full',
+  'roles.title', 'viewAs.reason.owner', 'viewAs.reason.administratorRole', 'viewAs.reason.administratorEveryone', 'viewAs.reason.base',
+  'viewAs.reason.member', 'viewAs.reason.allowed', 'viewAs.reason.denied', 'viewAs.reason.masked', 'viewAs.reason.none',
 ];
 
 function* files(dir) {
@@ -50,6 +71,7 @@ function* files(dir) {
 }
 
 const used = new Set();
+if (!shared) console.error('packages/shared is not built (npm run build -w @os-planner/shared): permission and audit texts cannot be checked.');
 const prefixes = new Set();
 const KEY = /^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/;
 for (const file of files(root)) {

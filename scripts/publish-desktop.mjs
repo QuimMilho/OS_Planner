@@ -1,9 +1,9 @@
-// Publishes the desktop builds to a Notes server, so they appear on its /download page and installed
+// Publishes the desktop builds to an OS_Planner server, so they appear on its /download page and installed
 // apps can update themselves from /downloads/.
 //
-//   NOTES_API_URL=https://api.example.com RELEASE_TOKEN=... node scripts/publish-desktop.mjs
+//   OS_PLANNER_API_URL=https://api.example.com RELEASE_TOKEN=... node scripts/publish-desktop.mjs
 //
-// The upload goes to the API (NOTES_API_URL). When the API shares the website's origin, NOTES_SERVER_URL works too.
+// The upload goes to the API (OS_PLANNER_API_URL). When the API shares the website's origin, OS_PLANNER_SERVER_URL works too.
 //
 // Reads the artifacts that `npm run dist:win` / `npm run dist:linux` left in apps/desktop/release,
 // uploads them (streamed, so large installers are fine), then tells the server which files form the
@@ -14,12 +14,12 @@ import { Readable } from 'node:stream';
 
 const root = resolve(import.meta.dirname, '..');
 const releaseDir = resolve(root, 'apps/desktop/release');
-const server = (process.env.NOTES_SERVER_URL ?? '').replace(/\/+$/, '');
+const server = (process.env.OS_PLANNER_SERVER_URL ?? '').replace(/\/+$/, '');
 const token = process.env.RELEASE_TOKEN;
 const notes = process.env.RELEASE_NOTES ?? '';
 
 if (!server || !token) {
-  console.error("Set NOTES_API_URL (or NOTES_SERVER_URL when the API is on the website's origin) and RELEASE_TOKEN (the server must have RELEASE_TOKEN configured too).");
+  console.error("Set OS_PLANNER_API_URL (or OS_PLANNER_SERVER_URL when the API is on the website's origin) and RELEASE_TOKEN (the server must have RELEASE_TOKEN configured too).");
   process.exit(1);
 }
 if (!existsSync(releaseDir)) {
@@ -31,11 +31,11 @@ const version = JSON.parse(readFileSync(resolve(root, 'apps/desktop/package.json
 
 /** Works out what a file is from its name (electron-builder.yml fixes the naming scheme). */
 function describe(name) {
-  if (new RegExp(`^Notes-${version}-win-(x64|arm64)-setup\\.exe$`).test(name)) return { os: 'windows', arch: RegExp.$1, format: 'nsis' };
-  if (new RegExp(`^Notes-${version}-win-(x64|arm64)-portable\\.exe$`).test(name)) return { os: 'windows', arch: RegExp.$1, format: 'portable' };
-  if (new RegExp(`^Notes-${version}-linux-(x64|arm64)\\.AppImage$`).test(name)) return { os: 'linux', arch: RegExp.$1, format: 'appimage' };
-  if (new RegExp(`^Notes-${version}-linux-(x64|arm64)\\.deb$`).test(name)) return { os: 'linux', arch: RegExp.$1, format: 'deb' };
-  if (new RegExp(`^Notes-${version}-linux-(x64|arm64)\\.rpm$`).test(name)) return { os: 'linux', arch: RegExp.$1, format: 'rpm' };
+  if (new RegExp(`^OS_Planner-${version}-win-(x64|arm64)-setup\\.exe$`).test(name)) return { os: 'windows', arch: RegExp.$1, format: 'nsis' };
+  if (new RegExp(`^OS_Planner-${version}-win-(x64|arm64)-portable\\.exe$`).test(name)) return { os: 'windows', arch: RegExp.$1, format: 'portable' };
+  if (new RegExp(`^OS_Planner-${version}-linux-(x64|arm64)\\.AppImage$`).test(name)) return { os: 'linux', arch: RegExp.$1, format: 'appimage' };
+  if (new RegExp(`^OS_Planner-${version}-linux-(x64|arm64)\\.deb$`).test(name)) return { os: 'linux', arch: RegExp.$1, format: 'deb' };
+  if (new RegExp(`^OS_Planner-${version}-linux-(x64|arm64)\\.rpm$`).test(name)) return { os: 'linux', arch: RegExp.$1, format: 'rpm' };
   return null;
 }
 
@@ -45,7 +45,7 @@ const builds = files.map((name) => ({ name, info: describe(name) })).filter((f) 
 const extras = files.filter((n) => /^latest(-linux)?\.yml$/.test(n) || /\.blockmap$/.test(n));
 
 if (!builds.length) {
-  console.error(`No Notes ${version} installers found in ${releaseDir}.`);
+  console.error(`No OS_Planner ${version} installers found in ${releaseDir}.`);
   process.exit(1);
 }
 
@@ -65,7 +65,7 @@ async function upload(name) {
   console.log('ok');
 }
 
-console.log(`Publishing Notes ${version} to ${server}`);
+console.log(`Publishing OS_Planner ${version} to ${server}`);
 for (const name of [...builds.map((b) => b.name), ...extras]) await upload(name);
 
 const res = await fetch(`${server}/api/admin/releases`, {

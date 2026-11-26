@@ -1,8 +1,8 @@
 // Decides which API the website talks to and writes it to apps/web/public/config.json,
 // which ends up next to index.html in the build:   { "apiUrl": "https://api.example.com" }
 //
-//   NOTES_API_URL=https://api.example.com npm run build -w @notes/web     (no question asked)
-//   npm run build -w @notes/web                                           (asks on a terminal; blank = same origin)
+//   OS_PLANNER_API_URL=https://api.example.com npm run build -w @os-planner/web     (no question asked)
+//   npm run build -w @os-planner/web                                           (asks on a terminal; blank = same origin)
 //
 // An empty apiUrl (the default) means the API is on the same origin as the website, i.e. /api/...
 // Whoever deploys the build can edit dist/.../config.json later without rebuilding.
@@ -16,8 +16,8 @@ const out = resolve(import.meta.dirname, '../apps/web/public/config.json');
 
 try {
   const { value, source } = await resolveSetting({
-    name: 'NOTES_API_URL',
-    question: 'Where is the Notes API? (address of the server, e.g. https://api.example.com)',
+    name: 'OS_PLANNER_API_URL',
+    question: 'Where is the OS_Planner API? (address of the server, e.g. https://api.example.com)',
     validate: urlOrEmpty,
     prompt: process.argv.includes('--no-prompt') ? false : undefined,
   });

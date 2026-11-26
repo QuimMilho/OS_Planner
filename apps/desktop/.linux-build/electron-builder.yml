@@ -1,6 +1,6 @@
-appId: app.notes.desktop
-productName: Notes
-copyright: Copyright © Notes
+appId: app.os-planner.desktop
+productName: OS_Planner
+copyright: Copyright © OS_Planner
 directories:
   output: release
   buildResources: build
@@ -25,16 +25,16 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
-  artifactName: Notes-${version}-win-${arch}-setup.${ext}
+  artifactName: OS_Planner-${version}-win-${arch}-setup.${ext}
 portable:
-  artifactName: Notes-${version}-win-${arch}-portable.${ext}
+  artifactName: OS_Planner-${version}-win-${arch}-portable.${ext}
 
 linux:
   icon: build/icon.png
   category: Office
-  synopsis: Rich notes with notebooks, math, diagrams and charts
+  synopsis: An open source planner with notebooks, math, diagrams and charts
   target:
     - { target: AppImage, arch: [x64] }
     - { target: deb, arch: [x64] }
     - { target: rpm, arch: [x64] }
-  artifactName: Notes-${version}-linux-${arch}.${ext}
+  artifactName: OS_Planner-${version}-linux-${arch}.${ext}

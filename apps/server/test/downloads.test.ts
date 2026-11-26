@@ -40,15 +40,15 @@ describe('publishing a release', () => {
   const deb = randomBytes(3000);
 
   async function publish() {
-    expect((await putFile('Notes-1.2.0-setup.exe', exe)).status).toBe(200);
-    expect((await putFile('notes_1.2.0_amd64.deb', deb)).status).toBe(200);
+    expect((await putFile('OS_Planner-1.2.0-setup.exe', exe)).status).toBe(200);
+    expect((await putFile('os-planner_1.2.0_amd64.deb', deb)).status).toBe(200);
     expect((await putFile('latest.yml', Buffer.from('version: 1.2.0\n'))).status).toBe(200);
     return t.http.post('/api/admin/releases').set(bearer).send({
       version: '1.2.0',
       notes: 'Dark mode and faster sync',
       files: [
-        { name: 'Notes-1.2.0-setup.exe', os: 'windows', arch: 'x64', format: 'nsis' },
-        { name: 'notes_1.2.0_amd64.deb', os: 'linux', arch: 'x64', format: 'deb' },
+        { name: 'OS_Planner-1.2.0-setup.exe', os: 'windows', arch: 'x64', format: 'nsis' },
+        { name: 'os-planner_1.2.0_amd64.deb', os: 'linux', arch: 'x64', format: 'deb' },
       ],
     });
   }
@@ -60,14 +60,14 @@ describe('publishing a release', () => {
     expect(list.version).toBe('1.2.0');
     expect(list.notes).toBe('Dark mode and faster sync');
     const win = list.files.find((f: { os: string }) => f.os === 'windows');
-    expect(win).toMatchObject({ name: 'Notes-1.2.0-setup.exe', size: exe.length, sha256: sha(exe), format: 'nsis' });
+    expect(win).toMatchObject({ name: 'OS_Planner-1.2.0-setup.exe', size: exe.length, sha256: sha(exe), format: 'nsis' });
     const linux = list.files.find((f: { os: string }) => f.os === 'linux');
     expect(linux.sha256).toBe(sha(deb));
   });
 
   it('serves the files as attachments, resumable, and the updater feed uncached', async () => {
     await publish();
-    const file = await t.http.get('/downloads/Notes-1.2.0-setup.exe').buffer(true).parse((r, cb) => {
+    const file = await t.http.get('/downloads/OS_Planner-1.2.0-setup.exe').buffer(true).parse((r, cb) => {
       const chunks: Buffer[] = [];
       r.on('data', (c: Buffer) => chunks.push(c));
       r.on('end', () => cb(null, Buffer.concat(chunks)));
@@ -76,7 +76,7 @@ describe('publishing a release', () => {
     expect(file.headers['content-disposition']).toBe('attachment');
     expect((file.body as Buffer).equals(exe)).toBe(true);
 
-    const part = await t.http.get('/downloads/Notes-1.2.0-setup.exe').set('Range', 'bytes=10-19');
+    const part = await t.http.get('/downloads/OS_Planner-1.2.0-setup.exe').set('Range', 'bytes=10-19');
     expect(part.status).toBe(206);
     expect(part.headers['content-range']).toBe(`bytes 10-19/${exe.length}`);
 
@@ -88,10 +88,10 @@ describe('publishing a release', () => {
 
   it('replaces the previous release when a new one is published', async () => {
     await publish();
-    await putFile('Notes-1.3.0-setup.exe', randomBytes(100));
+    await putFile('OS_Planner-1.3.0-setup.exe', randomBytes(100));
     await t.http.post('/api/admin/releases').set(bearer).send({
       version: '1.3.0',
-      files: [{ name: 'Notes-1.3.0-setup.exe', os: 'windows', arch: 'x64', format: 'nsis' }],
+      files: [{ name: 'OS_Planner-1.3.0-setup.exe', os: 'windows', arch: 'x64', format: 'nsis' }],
     });
     const rel = (await t.http.get('/api/downloads')).body.release;
     expect(rel.version).toBe('1.3.0');

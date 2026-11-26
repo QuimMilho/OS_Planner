@@ -1,3 +1,4 @@
+<app-rail />
 <mat-sidenav-container class="shell" autosize>
   <mat-sidenav
     class="side"
@@ -7,13 +8,18 @@
     [attr.aria-label]="'nav.sidebar' | transloco"
   >
     <div class="side-head">
-      <a routerLink="/app" class="brand" (click)="onNavigate()"><img src="favicon.svg" alt="" width="28" height="28" />Notes</a>
+      <a routerLink="/app" class="brand" (click)="onNavigate()"><img src="favicon.svg" alt="" width="28" height="28" />OS_Planner</a>
       <button mat-icon-button type="button" (click)="toggleSidenav()" [attr.aria-label]="'nav.hideSidebar' | transloco"><mat-icon>menu_open</mat-icon></button>
     </div>
-    <div class="side-scroll" (click)="onNavigate()"><app-tree /></div>
+    <div class="side-scroll" (click)="onNavigate()">
+      @if (nav.teamId()) { <app-team-sidebar /> } @else { <app-tree /> }
+    </div>
     <nav class="side-foot">
       <a routerLink="/app/trash" routerLinkActive="active" (click)="onNavigate()"><mat-icon>delete</mat-icon>{{ 'nav.trash' | transloco }}</a>
       <a routerLink="/app/settings" routerLinkActive="active" (click)="onNavigate()"><mat-icon>settings</mat-icon>{{ 'nav.settings' | transloco }}</a>
+      @if (auth.user()?.isAdmin) {
+        <a routerLink="/app/admin" routerLinkActive="active" data-nav="admin" (click)="onNavigate()"><mat-icon>admin_panel_settings</mat-icon>{{ 'nav.admin' | transloco }}</a>
+      }
       @if (platform.mode === 'browser') {
         <a routerLink="/download" (click)="onNavigate()"><mat-icon>install_desktop</mat-icon>{{ 'nav.getApp' | transloco }}</a>
       }
@@ -25,6 +31,7 @@
       @if (!sidenavOpen()) {
         <button mat-icon-button type="button" (click)="toggleSidenav()" [attr.aria-label]="'nav.showSidebar' | transloco"><mat-icon>menu</mat-icon></button>
       }
+      <app-breadcrumb class="crumbs" />
       <form class="search" role="search" (ngSubmit)="search()">
         <mat-icon>search</mat-icon>
         <input name="q" [(ngModel)]="query" [placeholder]="'nav.search' | transloco" [attr.aria-label]="'nav.search' | transloco" autocomplete="off" />
@@ -54,6 +61,13 @@
         <mat-icon>mark_email_unread</mat-icon>
         <span>{{ (sync.needsVerification() ? 'auth.verifyBannerUploads' : 'auth.verifyBanner') | transloco }}</span>
         <button mat-button type="button" (click)="resendVerification()">{{ 'auth.resend' | transloco }}</button>
+      </div>
+    }
+    @if (quota.level() !== 'ok') {
+      <div class="banner" [class.warn]="quota.level() === 'full'" role="status" data-quota-banner>
+        <mat-icon>{{ quota.level() === 'full' ? 'block' : 'storage' }}</mat-icon>
+        <span>{{ (quota.level() === 'full' ? 'quota.full' : 'quota.warning') | transloco }}</span>
+        <a mat-button routerLink="/app/settings" fragment="storage">{{ 'quota.manage' | transloco }}</a>
       </div>
     }
     @if (auth.offlineSession()) {

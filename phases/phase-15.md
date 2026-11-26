@@ -65,7 +65,7 @@ LocalHistory { id, at, device, entity, entityId, entityTitle, spaceId, spaceName
 Merges that store bytes (task text, attachments, event text) charge the space at apply time. Oversized pending uploads stay queued (`quota_exceeded`, retryable). History is device-local (bounded by the settings above) and not charged to any quota.
 
 ## Implementation steps
-1. Add `fieldSeq` to the syncable models (migration + backfill with the row `seq`), extend sync DTOs in `@notes/shared`.
+1. Add `fieldSeq` to the syncable models (migration + backfill with the row `seq`), extend sync DTOs in `@os-planner/shared`.
 2. Server merge engine as a pure module (`mergeOp(entity, op) → {apply, rejected}`) with exhaustive unit tests, then wire it to `SyncService`.
 3. Client: outbox ops with `changes/base`, handling of per-op results, Dexie `localHistory`.
 4. History UI + actions + settings.

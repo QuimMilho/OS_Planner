@@ -13,3 +13,5 @@ data
 .env
 .env.*
 *.log
+.codegraph
+deploy

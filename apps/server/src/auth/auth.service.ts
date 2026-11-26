@@ -7,11 +7,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import argon2 from 'argon2';
-import type { AuthResponse, Locale, MediaTokenResponse, RegisterInput } from '@notes/shared';
+import type { AuthResponse, Locale, MediaTokenResponse, RegisterInput } from '@os-planner/shared';
 import { ENV, type Env } from '../config/env.js';
 import { newId, randomToken, sha256Hex } from '../common/crypto.js';
 import { MailService } from '../mail/mail.service.js';
+import { InvitesService } from '../membership/invites.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SpacesService } from '../spaces/spaces.service.js';
+import { TeamsService } from '../teams/teams.service.js';
+import { QuotaService } from '../quota/quota.service.js';
 import { toUserDto } from '../users/user.mapper.js';
 import type { User } from '../generated/prisma/client.js';
 import {
@@ -51,6 +55,10 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
     private readonly mail: MailService,
+    private readonly quota: QuotaService,
+    private readonly spaces: SpacesService,
+    private readonly teams: TeamsService,
+    private readonly invites: InvitesService,
     @Inject(ENV) private readonly env: Env,
   ) {
     this.dummyHash = argon2.hash('not-a-real-password', { type: argon2.argon2id });
@@ -64,19 +72,25 @@ export class AuthService {
 
     let user: User;
     try {
-      user = await this.prisma.user.create({
-        data: {
-          id: newId(),
-          email: input.email,
-          passwordHash,
-          displayName: input.displayName,
-          locale: input.locale,
-        },
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            id: newId(),
+            email: input.email,
+            passwordHash,
+            displayName: input.displayName,
+            locale: input.locale,
+          },
+        });
+        await this.spaces.createPersonal(tx, created.id); // every account has a space of its own
+        return created;
       });
     } catch (e) {
       if (isUniqueViolation(e)) throw new ConflictException('email_taken');
       throw e;
     }
+    // An invite the visitor came with is applied once the address is verified (see claimJoins).
+    if (input.inviteToken) await this.invites.attachToRegistration(user.id, input.inviteToken);
 
     void this.sendVerificationMail(user);
     return this.issueSession(user, ctx);
@@ -87,6 +101,7 @@ export class AuthService {
     const hash = user?.passwordHash ?? (await this.dummyHash);
     const ok = await argon2.verify(hash, password).catch(() => false);
     if (!user || !ok) throw new UnauthorizedException('invalid_credentials');
+    await this.claimJoins(user.id); // teams created for this address wait for a verified sign-in
     return this.issueSession(user, ctx);
   }
 
@@ -112,7 +127,7 @@ export class AuthService {
     return {
       accessToken: await this.tokens.signAccess(user.id, sessionId),
       expiresIn: ACCESS_TTL_SECONDS,
-      user: toUserDto(user, this.env),
+      user: toUserDto(user, this.env, await this.quota.userQuota(user.id), await this.spaces.personalSpaceId(user.id)),
     };
   }
 
@@ -140,6 +155,7 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({ where: { id: row.userId } });
     if (!user) throw new UnauthorizedException('no_session');
+    await this.claimJoins(user.id);
 
     const refreshToken = randomToken();
     const childId = newId();
@@ -218,6 +234,7 @@ export class AuthService {
         data: { emailVerifiedAt: row.user.emailVerifiedAt ?? new Date() },
       }),
     ]);
+    await this.claimJoins(row.userId);
   }
 
   async resendVerification(userId: string): Promise<void> {
@@ -269,5 +286,15 @@ export class AuthService {
       await tx.user.updateMany({ where: { id: row.userId, emailVerifiedAt: null }, data: { emailVerifiedAt: now } });
       await tx.refreshToken.updateMany({ where: { userId: row.userId, revokedAt: null }, data: { revokedAt: now } });
     });
+    await this.claimJoins(row.userId);
+  }
+
+  /**
+   * What waits for a verified address: teams created for it (ownership), and the invite the person registered with.
+   * Both do nothing for an unverified account, so it is safe to call on every sign-in and refresh.
+   */
+  private async claimJoins(userId: string): Promise<void> {
+    await this.teams.claimPending(userId);
+    await this.invites.applyPending(userId);
   }
 }

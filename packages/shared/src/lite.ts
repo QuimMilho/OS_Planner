@@ -1,4 +1,4 @@
-// The light entry point (`@notes/shared/lite`): the few helpers the app needs before anything else loads.
+// The light entry point (`@os-planner/shared/lite`): the few helpers the app needs before anything else loads.
 //
 // The full package carries the editor schema, validation (TipTap/ProseMirror, KaTeX) and every DTO schema
 // (zod): roughly 1 MB that a visitor looking at the landing page or the sign-in form does not need. Code on
@@ -8,3 +8,4 @@ export { EMPTY_DOC } from './doc/empty';
 export { collectMediaIds, countWords, extractText } from './doc/text';
 export { IMAGE_MIMES, VIDEO_MIMES } from './dto/mime';
 export { positionBetween } from './dto/position';
+export * from './permissions';

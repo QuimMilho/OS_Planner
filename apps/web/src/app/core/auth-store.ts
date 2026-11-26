@@ -1,10 +1,10 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { AuthResponse, Locale, RegisterInput, Theme, UserDto } from '@notes/shared';
+import type { AuthResponse, Locale, RegisterInput, Theme, UserDto } from '@os-planner/shared';
 
-const LAST_USER_KEY = 'notes.lastUser';
-const CSRF = { 'X-Requested-With': 'notes' };
+const LAST_USER_KEY = 'os_planner.lastUser';
+const CSRF = { 'X-Requested-With': 'os_planner' };
 
 /** What a person typed vs what the server rejected; templates show `code` through the translation table. */
 export class ApiProblem extends Error {
@@ -94,7 +94,7 @@ export class AuthStore {
         return false;
       }
     };
-    return navigator.locks ? navigator.locks.request('notes-token-refresh', run) : run();
+    return navigator.locks ? navigator.locks.request('os_planner-token-refresh', run) : run();
   }
 
   /** No network: trust the last signed-in user so the cached app and local notes keep working. */

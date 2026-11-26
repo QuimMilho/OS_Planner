@@ -75,3 +75,51 @@ Member count limit per team (`maxMembers` override). A user's own quota is unaff
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Data model.** As planned, with these changes: `Invite.expiresAt` is required (every invite expires: 7 days for links, 14 for email, at most 90);
+  `Invite.roleIds` is a JSON array; `JoinRequest.pending` is `1` while pending and `NULL` afterwards, with a unique key on
+  `(teamId, userId, pending)`, because MySQL has no partial unique index (NULLs never collide, so any number of decided requests
+  coexist with one pending); `Team.listingTags` is a nullable JSON array (NULL = none). New table `PendingInvite (userId, inviteId)`
+  remembers the invite a person registered with until their address is verified.
+- **One door for joining.** `TeamsService.addMember(tx, teamId, userId)` locks the team row (`SELECT … FOR UPDATE`), skips people
+  already in (returns `false`) and checks the member limit, throwing the same `413 quota_exceeded` with scope `team` as storage
+  does (this replaced the phase 3 `409 member_limit_reached`). Invites, the directory and request approval all go through it, so joins
+  are serialised per team and the limit holds under load; the invite use is claimed with one atomic `UPDATE … WHERE uses < maxUses`
+  in the same transaction, so a refused join uses nothing up.
+- **Every join needs a verified address**, by every path (invite, link, directory), not only for email invites. A visitor who registers
+  with a token gets a `PendingInvite`; `InvitesService.applyPending` runs wherever `claimPending` already did (sign-in, refresh,
+  verify-email, reset-password) and accepts it once the address is verified. An email invite still needs that address to equal the
+  invited one; a token that does not work is ignored silently at registration.
+- **Roles on an invite** need the same right as assigning them by hand (*Manage roles*, strictly below your rank, no permission you
+  lack) and are checked again when somebody accepts: an inviter who has left, or lost the right, no longer lends the role. A removed or
+  banned inviter's open invites are revoked. `projectId` is limited to **top-level** projects (a sub-project would also need its
+  parent's membership, which would hand out access the inviter may not have): 422 `project_must_be_top_level`.
+- **Same answer for every dead token**: `404 invalid_invite` for unknown, expired, revoked, used-up, deleted-team and banned-person
+  tokens, on both preview and accept (tested by comparing bodies). The two honest refusals are `403 invite_other_address` and
+  `403 email_not_verified`, which only somebody holding a valid token can see. The preview also sends `Cache-Control: no-store`.
+- **Bans** hide the team from that person in the directory (a banned person gets `403 banned` if they try to join by id). Banning
+  removes the member, closes their pending request and drops invites they registered with. Removing or banning needs a rank above
+  the target (the owner outranks everybody; `403 role_at_or_above`); the owner cannot be banned or removed (`422`).
+- **Ownership transfer** needs the password (`403 invalid_password`), a target who is a member (`422 not_a_member`) and mails the new
+  owner. A team created for an address that has no verified account now mails that address (`ownership offered`, in the
+  administrator's language); the mail when ownership is assigned goes to the person in their own language.
+- **Endpoints beyond the plan**: `DELETE /api/teams/:id/members/me` (leave), `GET /api/teams/:id/bans`, and `pendingRequests` in
+  `GET /api/teams/:id/me` (counted only for people who may decide) which drives the rail badge. `POST /api/teams/:id/invites` takes
+  one `email` per call (the web form sends several addresses one after another).
+- **Audit actions added**: `member.add` (with `via`: invite, link or directory), `member.ban`, `member.unban`, `invite.create`,
+  `invite.resend`, `invite.revoke`, `request.approve`, `request.deny`. Creating a join request is not audited (it is not a change to the
+  team); `member.remove` (leave and kick) existed. Resending an email invite rotates its token (the old link stops working), because
+  tokens are only stored hashed.
+- **Web**: `/invite/:token` (public), `/app/directory` (compass at the bottom of the rail), team settings tabs *Invitations*,
+  *Requests* (with a count), *Bans* and *Discoverability*, and per-member *Remove from team* / *Ban* plus *Leave team* or *Transfer
+  ownership* (type the team name and password) at the bottom of the Members tab. Sign-in accepts `returnUrl=/invite/…`.
+- **Not done / for later**: joining does not push live updates (a person approved while the page is open sees the team after a refresh
+  or on regaining focus; the socket arrives with phase 6). No cooldown on asking again after a denial (a ban is the tool for that).
+- The nginx proxy needed no change: the new endpoints are under `/api`, `/invite/<token>` is a page of the website on the same origin,
+  and there are no new origins, upload sizes or slow endpoints.
+- Tests: shared unchanged (206), server +36 (35 in `membership.test.ts`, 1 migration step), web e2e +4 (`joining.e2e.mjs`: scenarios
+  10 to 13; scenario 12 also covers the deny-and-ask-again path, scenario 13 the kicked person's `revokedSpaces` and local database).

@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { filter, map, startWith } from 'rxjs';
-import type { ExportScope } from '@notes/shared';
+import type { ExportScope } from '@os-planner/shared';
 import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';
 import { byPosition, TreeStore, type CategoryNode, type NotebookNode } from '../../data/tree-store';
@@ -15,7 +15,7 @@ import { ExportDialog } from '../export/export-dialog';
 import { MoveDialog } from './move-dialog';
 
 type Kind = 'notebook' | 'category' | 'page';
-const COLLAPSED_KEY = 'notes.collapsed';
+const COLLAPSED_KEY = 'os_planner.collapsed';
 
 /** Which row is being renamed, which branches are collapsed, and what the tree can do. Shared by every row. */
 @Injectable({ providedIn: 'root' })

@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { IMAGE_MIMES, VIDEO_MIMES } from '@notes/shared/lite';
-import type { MediaKind, MediaTokenResponse } from '@notes/shared';
+import { IMAGE_MIMES, VIDEO_MIMES } from '@os-planner/shared/lite';
+import type { MediaKind, MediaTokenResponse } from '@os-planner/shared';
 import { apiUrl } from '../core/api-config';
 import { ApiProblem } from '../core/auth-store';
 import { uuidv7 } from '../core/ids';

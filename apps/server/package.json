@@ -1,9 +1,9 @@
 {
-  "name": "@notes/server",
+  "name": "@os-planner/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Notes API: auth, notebooks/categories/pages, sync, media, search, export, downloads",
+  "description": "OS_Planner API: auth, notebooks/categories/pages, sync, media, search, export, downloads",
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
@@ -20,7 +20,7 @@
     "@nestjs/platform-express": "^12.6.2",
     "@nestjs/schedule": "^12.0.4",
     "@nestjs/throttler": "^6.8.0",
-    "@notes/shared": "*",
+    "@os-planner/shared": "*",
     "@prisma/adapter-mariadb": "7.10.1",
     "@prisma/client": "7.10.1",
     "argon2": "^0.45.2",

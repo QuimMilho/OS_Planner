@@ -262,13 +262,13 @@ export function checkParity(themes) {
   const styled = Object.keys(themes).sort();
   const named = shared.filter((t) => t !== 'system').sort();
   if (styled.join() !== named.join())
-    problems.push(`themes.scss defines [${styled}] but @notes/shared lists [${named}]`);
+    problems.push(`themes.scss defines [${styled}] but @os-planner/shared lists [${named}]`);
   const boot = /\/\^\(([^)]+)\)\$\/\.test/
     .exec(readFileSync(THEME_BOOT, 'utf8'))?.[1]
     .split('|')
     .sort();
   if (!boot) problems.push('theme-boot.js: the list of theme ids was not found');
   else if (boot.join() !== named.join())
-    problems.push(`theme-boot.js accepts [${boot}] but @notes/shared lists [${named}]`);
+    problems.push(`theme-boot.js accepts [${boot}] but @os-planner/shared lists [${named}]`);
   return problems;
 }

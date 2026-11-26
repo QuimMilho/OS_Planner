@@ -1,5 +1,5 @@
 {
-  "name": "@notes/shared",
+  "name": "@os-planner/shared",
   "version": "0.1.0",
   "private": true,
   "description": "Document schema, validation, Markdown interop, print renderer and DTOs shared by server and web",

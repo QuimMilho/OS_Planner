@@ -11,7 +11,7 @@ Voice (and optionally video and screen sharing) channels in teams and projects, 
 
 ## Design
 - **SFU**: LiveKit server (Apache-2.0). Configuration: `LIVEKIT_URL` (public `wss://…`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, optional `LIVEKIT_WEBHOOK_URL`. Compose profile `voice` runs `livekit/livekit-server` and documents the UDP/TCP ports and TLS. Without these variables `GET /api/features` reports `voice:false` and the UI shows no voice option.
-- **Tokens**: the Notes server issues a short-lived (10 min) LiveKit access token per join: `roomName = channelId`, identity = user id, name = nickname, grants derived from effective permissions: `roomJoin` needs `CONNECT`; `canPublish` audio needs `SPEAK`; camera needs `VIDEO`; screen share needs `SCREEN_SHARE`; `canSubscribe` always. Metadata: colour, avatar.
+- **Tokens**: the OS_Planner server issues a short-lived (10 min) LiveKit access token per join: `roomName = channelId`, identity = user id, name = nickname, grants derived from effective permissions: `roomJoin` needs `CONNECT`; `canPublish` audio needs `SPEAK`; camera needs `VIDEO`; screen share needs `SCREEN_SHARE`; `canSubscribe` always. Metadata: colour, avatar.
 - **Presence in voice**: LiveKit webhooks (`participant_joined|left`, signature verified) update a `VoiceParticipant` projection and emit `voice.participants` to room `channel:<id>` so members see who is in a voice channel without joining.
 - **Moderation**: `MUTE_MEMBERS` (server-mute/unmute a participant's microphone), `MOVE_MEMBERS` (move between voice channels they can both see), disconnect via kick (`MANAGE_CHANNELS` or `MOVE_MEMBERS`) using the LiveKit server API; every action audited.
 - **Permission changes** while connected (role change, overwrite, removal) call LiveKit `updateParticipant` permissions or remove the participant within seconds (driven by `permissions.changed` events from phase 6).
@@ -36,7 +36,7 @@ Messages for a voice channel's text chat are out of scope (the channel has an op
 - Voice bar (bottom of the sidebar): channel name, connection quality, mute, deafen, camera, share screen, leave, settings; floating mini-bar when navigating.
 - Voice view: grid of participants (video tiles/avatars), speaker highlight, pin/focus a tile, screen share full view, participant menu for moderators.
 - Settings → Voice & video: devices, input volume, noise suppression, push-to-talk key, test microphone.
-- Browser permission handling with friendly guidance when blocked; the Electron shell adds the media permission handler (`media`, `display-capture`) **only for the Notes origin** and uses `desktopCapturer` for screen source selection.
+- Browser permission handling with friendly guidance when blocked; the Electron shell adds the media permission handler (`media`, `display-capture`) **only for the OS_Planner origin** and uses `desktopCapturer` for screen source selection.
 
 ## i18n keys
 `voice.*` (join, leave, mute, deafen, camera, share, channelFull, noPermission, devices, quality), `voice.admin.*`, `errors.voiceUnavailable`.
@@ -45,7 +45,7 @@ Messages for a voice channel's text chat are out of scope (the channel has an op
 - Tokens are scoped to one room and expire quickly; secrets stay server-side; `LIVEKIT_API_SECRET` ≥ 32 chars validated at startup when voice is enabled.
 - Permission checks happen on token issue and again on any permission change; LiveKit is never trusted to decide access.
 - Webhook signature verified (`Authorization` JWT from LiveKit); replayed/old events ignored.
-- Electron: permission handler allows only the Notes origin; `setDisplayMediaRequestHandler` shows a picker; nothing else changes in the sandbox.
+- Electron: permission handler allows only the OS_Planner origin; `setDisplayMediaRequestHandler` shows a picker; nothing else changes in the sandbox.
 - CSP: `connect-src` and `media-src` gain the LiveKit origin (`wss`) when configured; documented for static hosting (phase 0 rule).
 - Privacy: no recording; the UI shows when the camera/mic/screen is active.
 
@@ -69,7 +69,7 @@ No stored bytes. Limits: maximum participants per channel (`userLimit`, server d
 6. [web e2e] A user without `SPEAK` joins muted and cannot unmute; a moderator server-mutes and the participant sees the reason; moving a participant works.
 7. [web e2e] Screen share starts and appears for the other participant (Chrome's auto-select flag in test); leaving ends it.
 8. [web e2e] With voice not configured, no voice UI is visible and the API reports the feature off.
-9. [desktop] The Electron window grants microphone/display capture only to the Notes origin and refuses another origin (unit test on the permission handler + smoke test).
+9. [desktop] The Electron window grants microphone/display capture only to the OS_Planner origin and refuses another origin (unit test on the permission handler + smoke test).
 10. [manual] Real devices (headset, webcam), network change recovery, behind a typical NAT with the documented ports.
 
 ## Definition of done

@@ -1,12 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   syncOpSchema,
+  type SpaceChangesDto,
   type SyncBatchResponse,
   type SyncChangesDto,
+  type SyncChangesQuery,
   type SyncOp,
   type SyncOpResult,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { QuotaExceeded } from '../quota/quota.errors.js';
+import { PermissionService } from '../spaces/permission.service.js';
+import { SpacesService } from '../spaces/spaces.service.js';
 import { CategoriesService } from './categories.service.js';
 import { PAGE_META_SELECT, toCategoryDto, toNotebookDto, toPageMetaDto } from './mappers.js';
 import { NotebooksService } from './notebooks.service.js';
@@ -19,6 +24,8 @@ import { TreeError } from './tree.error.js';
  */
 export const SYNC_PAGE = { limit: 1000 };
 
+const NOTHING: SpaceChangesDto = { cursor: 0, hasMore: false, notebooks: [], categories: [], pages: [] };
+
 @Injectable()
 export class SyncService {
   private readonly log = new Logger(SyncService.name);
@@ -28,12 +35,37 @@ export class SyncService {
     private readonly notebooks: NotebooksService,
     private readonly categories: CategoriesService,
     private readonly pages: PagesService,
+    private readonly perms: PermissionService,
+    private readonly spaces: SpacesService,
   ) {}
 
   /**
-   * Everything that changed after `since`, tombstones included.
+   * What changed since the client's cursors.
    *
-   * Consistency: the user's `changeSeq` counter is read first as the ceiling, inside one
+   *  - `cursors` (one per space the client holds): every space the person may still see answers
+   *    under `spaces`; the ones they may not (left or removed from a team, deleted team or
+   *    project, no such space) are listed in `revokedSpaces` so the client can purge them.
+   *  - `since` (older clients): one cursor for the personal space, answered at the top level.
+   */
+  async changes(userId: string, query: SyncChangesQuery): Promise<SyncChangesDto> {
+    if (query.cursors) {
+      const visible = await this.perms.notebookSpaces(userId);
+      const spaces: Record<string, SpaceChangesDto> = {};
+      const revokedSpaces: string[] = [];
+      for (const [spaceId, since] of Object.entries(query.cursors)) {
+        if (!visible.has(spaceId)) revokedSpaces.push(spaceId);
+        else spaces[spaceId] = await this.spaceChanges(spaceId, since);
+      }
+      return { ...NOTHING, spaces, revokedSpaces };
+    }
+    const personal = await this.spaces.personalSpaceId(userId);
+    return { ...(await this.spaceChanges(personal, query.since ?? 0)), spaces: {}, revokedSpaces: [] };
+  }
+
+  /**
+   * Everything in one space that changed after `since`, tombstones included.
+   *
+   * Consistency: the space's `changeSeq` counter is read first as the ceiling, inside one
    * snapshot. Writers bump it under a row lock, so nothing at or below the ceiling can still
    * be uncommitted, and nothing above it is returned. The cursor handed back is therefore safe.
    *
@@ -41,16 +73,16 @@ export class SyncService {
    * notebook delete touches every page in it), so a boundary may never split a seq group; if a
    * single group is larger than the limit it is returned whole.
    */
-  changes(userId: string, since: number): Promise<SyncChangesDto> {
+  private spaceChanges(spaceId: string, since: number): Promise<SpaceChangesDto> {
     return this.prisma.$transaction(async (tx) => {
-      const { changeSeq: head } = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { changeSeq: true } });
+      const { changeSeq: head } = await tx.space.findUniqueOrThrow({ where: { id: spaceId }, select: { changeSeq: true } });
       const after = BigInt(since);
       if (after >= head) {
         return { cursor: Number(head), hasMore: false, notebooks: [], categories: [], pages: [] };
       }
 
       const fetch = (upTo: bigint, take?: number) => {
-        const where = { userId, seq: { gt: after, lte: upTo } };
+        const where = { spaceId, seq: { gt: after, lte: upTo } };
         const orderBy = { seq: 'asc' } as const;
         return Promise.all([
           tx.notebook.findMany({ where, orderBy, take }),
@@ -104,6 +136,8 @@ export class SyncService {
       } catch (e) {
         if (e instanceof TreeError) {
           results.push({ opId: op.opId, ok: false, error: e.code, message: e.message });
+        } else if (e instanceof QuotaExceeded) {
+          results.push({ opId: op.opId, ok: false, error: 'quota_exceeded', message: 'quota_exceeded' });
         } else {
           this.log.error(`sync op ${op.type} failed: ${e instanceof Error ? e.stack : e}`);
           results.push({ opId: op.opId, ok: false, error: 'internal' });

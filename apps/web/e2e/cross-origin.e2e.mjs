@@ -88,7 +88,7 @@ describe('website and API on different origins', () => {
 
     // The upload reached the API: the mediaId is in the stored document and the quota went up.
     const stored = await a.page.evaluate(async (apiOrigin) => {
-      const refresh = await fetch(`${apiOrigin}/api/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'X-Requested-With': 'notes' } });
+      const refresh = await fetch(`${apiOrigin}/api/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'X-Requested-With': 'os_planner' } });
       const { accessToken } = await refresh.json();
       const auth = { Authorization: `Bearer ${accessToken}` };
       const list = await (await fetch(`${apiOrigin}/api/pages`, { headers: auth })).json();
@@ -128,18 +128,18 @@ describe('website and API on different origins', () => {
     const { ctx, page, apiOrigins, violations, close } = await device();
     const deb = Buffer.from(Array.from({ length: 2048 }, (_, i) => (i * 17) % 241));
     const auth = { Authorization: `Bearer ${RELEASE_TOKEN}` };
-    const put = await ctx.request.put(`${API}/api/admin/releases/files/notes_8.8.8_amd64.deb`, { headers: { ...auth, 'Content-Type': 'application/octet-stream' }, data: deb });
+    const put = await ctx.request.put(`${API}/api/admin/releases/files/os-planner_8.8.8_amd64.deb`, { headers: { ...auth, 'Content-Type': 'application/octet-stream' }, data: deb });
     assert.equal(put.status(), 200);
     const publish = await ctx.request.post(`${API}/api/admin/releases`, {
       headers: auth,
-      data: { version: '8.8.8', notes: 'Cross-origin release', files: [{ name: 'notes_8.8.8_amd64.deb', os: 'linux', arch: 'x64', format: 'deb' }] },
+      data: { version: '8.8.8', notes: 'Cross-origin release', files: [{ name: 'os-planner_8.8.8_amd64.deb', os: 'linux', arch: 'x64', format: 'deb' }] },
     });
     assert.equal(publish.status(), 200);
 
     await page.goto(`${SITE}/download`);
     await page.waitForSelector('text=Cross-origin release');
-    const link = page.locator('a[href$="/downloads/notes_8.8.8_amd64.deb"]');
-    assert.equal(await link.getAttribute('href'), `${API}/downloads/notes_8.8.8_amd64.deb`, 'the link points at the API, not at the website');
+    const link = page.locator('a[href$="/downloads/os-planner_8.8.8_amd64.deb"]');
+    assert.equal(await link.getAttribute('href'), `${API}/downloads/os-planner_8.8.8_amd64.deb`, 'the link points at the API, not at the website');
 
     const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
     assert.equal(createHash('sha256').update(await readFile(await download.path())).digest('hex'), createHash('sha256').update(deb).digest('hex'));
@@ -154,7 +154,7 @@ describe('website and API on different origins', () => {
     await page.goto(`http://127.0.0.1:${SITE_PORT}/login`);
     const result = await page.evaluate(async (apiOrigin) => {
       try {
-        await fetch(`${apiOrigin}/api/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'X-Requested-With': 'notes' } });
+        await fetch(`${apiOrigin}/api/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'X-Requested-With': 'os_planner' } });
         return 'allowed';
       } catch {
         return 'blocked';

@@ -304,7 +304,7 @@ describe('images and sync', () => {
 
     // the file reached the server (quota usage goes up)...
     await a.page.waitForFunction(async () => {
-      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'notes' } });
+      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'os_planner' } });
       const { accessToken } = await r.json();
       const me = await (await fetch('/api/me', { headers: { Authorization: `Bearer ${accessToken}` } })).json();
       return me.storageUsedBytes > 0;
@@ -375,7 +375,7 @@ describe('working offline', () => {
 
     await ctx.setOffline(false);
     await page.waitForFunction(async () => {
-      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'notes' } });
+      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'os_planner' } });
       if (!r.ok) return false;
       const { accessToken } = await r.json();
       const pages = await (await fetch('/api/pages', { headers: { Authorization: `Bearer ${accessToken}` } })).json();
@@ -411,7 +411,7 @@ describe('working offline', () => {
     // A reconnects first and wins
     await a.ctx.setOffline(false);
     await a.page.waitForFunction(async () => {
-      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'notes' } });
+      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'os_planner' } });
       const { accessToken } = await r.json();
       const pages = await (await fetch('/api/pages', { headers: { Authorization: `Bearer ${accessToken}` } })).json();
       const full = await (await fetch(`/api/pages/${pages[0].id}`, { headers: { Authorization: `Bearer ${accessToken}` } })).json();
@@ -511,7 +511,7 @@ describe('search, language and the public site', () => {
     await writePage(page, 'Linguagem', 'A acentuação das palavras é importante.');
     await waitSaved(page);
     await page.waitForFunction(async () => {
-      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'notes' } });
+      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'os_planner' } });
       const { accessToken } = await r.json();
       const hits = await (await fetch('/api/search?q=acentuacao', { headers: { Authorization: `Bearer ${accessToken}` } })).json();
       return hits.length > 0;
@@ -543,7 +543,7 @@ describe('search, language and the public site', () => {
     const { page, violations, close } = await device();
     await page.goto(base);
     await page.waitForSelector('h1');
-    assert.match(await page.textContent('h1'), /Notes that go as far as your ideas/);
+    assert.match(await page.textContent('h1'), /Plans that go as far as your ideas/);
     await page.click('main a:has-text("Get the app")');
     await page.waitForURL('**/download');
     await page.waitForSelector('text=Install as an app');
@@ -556,7 +556,7 @@ describe('search, language and the public site', () => {
     const exe = Buffer.from(Array.from({ length: 4096 }, (_, i) => (i * 31) % 251));
     const deb = Buffer.from(Array.from({ length: 2048 }, (_, i) => (i * 17) % 241));
     const auth = { Authorization: `Bearer ${RELEASE_TOKEN}` };
-    for (const [name, data] of [['Notes-9.9.9-setup.exe', exe], ['notes_9.9.9_amd64.deb', deb]]) {
+    for (const [name, data] of [['OS_Planner-9.9.9-setup.exe', exe], ['os-planner_9.9.9_amd64.deb', deb]]) {
       const put = await ctx.request.put(`${base}/api/admin/releases/files/${name}`, { headers: { ...auth, 'Content-Type': 'application/octet-stream' }, data });
       assert.equal(put.status(), 200);
     }
@@ -566,8 +566,8 @@ describe('search, language and the public site', () => {
         version: '9.9.9',
         notes: 'End-to-end release',
         files: [
-          { name: 'Notes-9.9.9-setup.exe', os: 'windows', arch: 'x64', format: 'nsis' },
-          { name: 'notes_9.9.9_amd64.deb', os: 'linux', arch: 'x64', format: 'deb' },
+          { name: 'OS_Planner-9.9.9-setup.exe', os: 'windows', arch: 'x64', format: 'nsis' },
+          { name: 'os-planner_9.9.9_amd64.deb', os: 'linux', arch: 'x64', format: 'deb' },
         ],
       },
     });
@@ -579,7 +579,7 @@ describe('search, language and the public site', () => {
     assert.match(await page.textContent('app-apps-panel'), /sudo apt install/); // install hint for the .deb
     assert.ok(await page.locator(`text=SHA-256: ${createHash('sha256').update(deb).digest('hex').slice(0, 16)}`).count());
 
-    const [download] = await Promise.all([page.waitForEvent('download'), page.click('a[href="/downloads/notes_9.9.9_amd64.deb"]')]);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('a[href="/downloads/os-planner_9.9.9_amd64.deb"]')]);
     assert.equal(createHash('sha256').update(await readFile(await download.path())).digest('hex'), createHash('sha256').update(deb).digest('hex'));
     await close();
   });

@@ -5,15 +5,15 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
-import { LIMITS } from '@notes/shared';
+import { LIMITS } from '@os-planner/shared';
 import { allowedOrigins, isHttps, parseOrigins, type Env } from './config/env.js';
 
 /**
- * The origin the website's API calls go to when it is not this server's own. Taken from NOTES_API_URL, else from the
+ * The origin the website's API calls go to when it is not this server's own. Taken from OS_PLANNER_API_URL, else from the
  * apiUrl in the built web app's config.json (so one setting serves the web build and the server). Read at start-up.
  */
 export function apiOrigin(env: Env): string | undefined {
-  if (env.NOTES_API_URL) return env.NOTES_API_URL;
+  if (env.OS_PLANNER_API_URL) return env.OS_PLANNER_API_URL;
   if (!env.WEB_DIST_DIR) return undefined;
   try {
     const { apiUrl } = JSON.parse(readFileSync(join(resolve(env.WEB_DIST_DIR), 'config.json'), 'utf8')) as { apiUrl?: unknown };

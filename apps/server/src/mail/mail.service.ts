@@ -1,8 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import nodemailer, { type Transporter } from 'nodemailer';
-import type { Locale } from '@notes/shared';
+import type { Locale } from '@os-planner/shared';
 import { ENV, type Env } from '../config/env.js';
-import { resetPasswordMail, verifyEmailMail, type MailContent } from './templates.js';
+import {
+  inviteMail,
+  ownershipMail,
+  requestDecisionMail,
+  resetPasswordMail,
+  verifyEmailMail,
+  type MailContent,
+} from './templates.js';
 
 @Injectable()
 export class MailService {
@@ -29,6 +36,25 @@ export class MailService {
 
   sendPasswordReset(to: string, name: string, locale: Locale, token: string): Promise<boolean> {
     return this.send(to, resetPasswordMail(locale, name, this.link('/reset-password', token)));
+  }
+
+  /** An address inside the website, such as `/invite/<token>` or `/app`. */
+  private appUrl(path: string): string {
+    return `${this.env.APP_URL.replace(/\/+$/, '')}${path}`;
+  }
+
+  /** The invite mail. The language is the inviter's: nothing is known about the person, and none may be learned. */
+  sendInvite(to: string, locale: Locale, inviter: string, team: string, token: string, expiresInDays: number): Promise<boolean> {
+    return this.send(to, inviteMail(locale, inviter, team, this.appUrl(`/invite/${encodeURIComponent(token)}`), expiresInDays));
+  }
+
+  sendRequestDecision(to: string, name: string, locale: Locale, team: string, approved: boolean): Promise<boolean> {
+    return this.send(to, requestDecisionMail(locale, name, team, approved, this.appUrl('/app')));
+  }
+
+  /** `offered`: the team waits for an account with this address; `assigned`: ownership was just handed over. */
+  sendOwnership(to: string, name: string | null, locale: Locale, team: string, kind: 'offered' | 'assigned'): Promise<boolean> {
+    return this.send(to, ownershipMail(locale, name, team, kind, this.appUrl(kind === 'offered' ? '/register' : '/app')));
   }
 
   /** Never throws: a broken mail server must not break registration or leak account existence. */

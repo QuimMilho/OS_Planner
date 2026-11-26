@@ -10,7 +10,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslocoPipe } from '@jsverse/transloco';
 import type { JSONContent } from '@tiptap/core';
-import { isSafeHref } from '@notes/shared';
+import { isSafeHref } from '@os-planner/shared';
 import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';
 import { Online } from '../../core/online';
@@ -28,7 +28,7 @@ import { Toolbar } from './toolbar';
 import './tiptap-types';
 
 /** localStorage key prefix for unsaved drafts written as the page unloads. */
-export const DRAFT_PREFIX = 'notes.draft.';
+export const DRAFT_PREFIX = 'os_planner.draft.';
 const AUTOSAVE_MS = 700;
 const RENAME_MS = 500;
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

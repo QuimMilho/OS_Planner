@@ -41,12 +41,12 @@ export function readDotEnv(file, name) {
 /** True when it is reasonable to ask the person running the build a question. */
 export function canPrompt({ env = process.env, input = process.stdin, force } = {}) {
   if (force !== undefined) return force;
-  return Boolean(input.isTTY) && !env.CI && !env.NOTES_NO_PROMPT;
+  return Boolean(input.isTTY) && !env.CI && !env.OS_PLANNER_NO_PROMPT;
 }
 
 /**
  * @param {object} options
- * @param {string} options.name          Environment variable / .env key, e.g. NOTES_API_URL.
+ * @param {string} options.name          Environment variable / .env key, e.g. OS_PLANNER_API_URL.
  * @param {string} options.question      Shown when the person is asked.
  * @param {(value: string) => string | null} options.validate  Returns the normalised value, or null when invalid.
  * @param {string} [options.defaultValue]
@@ -65,7 +65,7 @@ export async function resolveSetting({
   output = process.stdout,
 }) {
   const accept = (raw, source) => {
-    // An explicitly empty value ("NOTES_API_URL=") is a decision, not a gap: it means the default.
+    // An explicitly empty value ("OS_PLANNER_API_URL=") is a decision, not a gap: it means the default.
     if (String(raw).trim() === '') return { value: defaultValue, source };
     const value = validate(String(raw));
     if (value === null) throw new Error(`${name} is not valid: "${raw}". Expected an http(s) address such as https://api.example.com`);

@@ -1,0 +1,119 @@
+# OS_Planner: nginx as an HTTPS reverse proxy in front of the OS_Planner server (API + website + /downloads).
+#
+# This is a TEMPLATE: ${OS_PLANNER_DOMAIN} and ${OS_PLANNER_UPSTREAM} are filled in by envsubst (the nginx Docker image
+# does it for you, see docker-compose.yml, profile "proxy"; on a host, see "HTTPS reverse proxy" in the README).
+#
+# KEEP THIS FILE IN SYNC WITH THE APP. When a change adds or alters any of these, update this file, the README section
+# "HTTPS reverse proxy" and (if a new setting is involved) .env.example / docker-compose.yml in the same change:
+#   - a new URL prefix that is not under /api or /downloads, or a second origin (API on its own host)
+#   - WebSocket paths: Socket.IO /api/realtime (phase 6), Hocuspocus /api/collab (phase 11), LiveKit (phase 16, its own host)
+#   - upload limits (MAX_IMAGE_MB, MAX_VIDEO_MB, installer sizes) -> client_max_body_size
+#   - slow endpoints (PDF export, big exports, ICS import) -> proxy_read_timeout
+#   - headers the server sets itself (HSTS, CSP, CORP, cache headers): do NOT repeat them here, the server owns them
+#   - the container/port of the server, TRUST_PROXY, APP_URL (must be the https address served here)
+
+# "Connection: upgrade" for WebSocket requests, nothing for ordinary ones (keeps upstream connections alive).
+map $http_upgrade $os_planner_connection {
+  default upgrade;
+  ''      '';
+}
+
+upstream os_planner_app {
+  server ${OS_PLANNER_UPSTREAM};
+  keepalive 32;
+}
+
+# Anything that is not our host name (scans, wrong Host header, IP address) gets nothing.
+server {
+  listen 80 default_server;
+  listen [::]:80 default_server;
+  server_name _;
+  return 444;
+}
+
+server {
+  listen 443 ssl default_server;
+  listen [::]:443 ssl default_server;
+  server_name _;
+  ssl_reject_handshake on;
+}
+
+# Plain HTTP: certificate renewal challenges, then everything goes to https.
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${OS_PLANNER_DOMAIN};
+
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+
+  location / {
+    return 301 https://$host$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  http2 on;
+  server_name ${OS_PLANNER_DOMAIN};
+
+  server_tokens off;
+
+  # --- TLS ---
+  ssl_certificate     /etc/nginx/certs/fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
+  ssl_session_cache shared:os_planner_tls:10m;
+  ssl_session_timeout 1d;
+  ssl_session_tickets off;
+  # Only works with a certificate from a public CA (nginx logs a harmless warning for a self-signed one).
+  ssl_stapling on;
+  ssl_stapling_verify on;
+  # HSTS is sent by the OS_Planner server itself when APP_URL is https; adding it here would duplicate the header.
+
+  # --- Uploads ---
+  # At least MAX_VIDEO_MB (default 500) and the largest desktop installer published through /api/admin/releases.
+  # The server applies the real limits and answers 413 with a readable error; nginx must not cut in first.
+  client_max_body_size 1g;
+  # Stream uploads to the server instead of spooling them to disk first.
+  proxy_request_buffering off;
+
+  # --- Compression (the server does not compress; planner-libs.js alone is several MB) ---
+  gzip on;
+  gzip_vary on;
+  gzip_proxied any;
+  gzip_comp_level 5;
+  gzip_min_length 1024;
+  gzip_types text/plain text/css text/javascript application/javascript application/json application/manifest+json
+             application/xml image/svg+xml;
+
+  # --- Proxy defaults for every location below ---
+  proxy_http_version 1.1;
+  proxy_set_header Host              $host;
+  proxy_set_header X-Real-IP         $remote_addr;
+  proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-Host  $host;
+  proxy_set_header Upgrade           $http_upgrade;
+  proxy_set_header Connection        $os_planner_connection;
+  # PDF export starts a headless browser; give it room.
+  proxy_connect_timeout 10s;
+  proxy_read_timeout    180s;
+  proxy_send_timeout    180s;
+
+  # Real-time paths (reserved: Socket.IO from phase 6, Hocuspocus co-editing from phase 11). Sockets stay open for hours.
+  location ~ ^/api/(realtime|collab)(/|$) {
+    proxy_pass http://os_planner_app;
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  }
+
+  # Everything else: the API, the website, /downloads. The server sets its own cache headers; nginx does not cache.
+  location / {
+    proxy_pass http://os_planner_app;
+  }
+}

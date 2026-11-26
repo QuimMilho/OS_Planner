@@ -1,14 +1,14 @@
-# Notes: collaboration roadmap, overview
+# OS_Planner: collaboration roadmap, overview
 
-This folder plans the next stage of Notes as 18 phases (0–17). Read this file first. Each `phase-N.md` is self-contained but relies on the decisions, architecture and conventions below. `todo.md` is the checklist.
+This folder plans the next stage of OS_Planner as 18 phases (0–17). Read this file first. Each `phase-N.md` is self-contained but relies on the decisions, architecture and conventions below. `todo.md` is the checklist.
 
-Today Notes is a single-user app: User → Notebooks → Categories → Pages, offline-first, with a Notes server (NestJS + MySQL), an Angular PWA and an Electron shell. The roadmap adds themes, teams, projects, chat, boards, a calendar, sharing, real-time co-editing and quotas, without breaking the rules in `notes-app-constraints` (website first, MySQL, TipTap JSON, offline sync).
+Today OS_Planner is a single-user app: User → Notebooks → Categories → Pages, offline-first, with an OS_Planner server (NestJS + MySQL), an Angular PWA and an Electron shell. The roadmap adds themes, teams, projects, chat, boards, a calendar, sharing, real-time co-editing and quotas, without breaking the rules in `notes-app-constraints` (website first, MySQL, TipTap JSON, offline sync).
 
 ## 1. Decisions (answered by the project owner, do not re-litigate)
 
 | Topic | Decision |
 | --- | --- |
-| API location | Any origin. Build-time `NOTES_API_URL` (env, then `.env`, then an interactive question), written to `config.json` that can be edited after deploy. Server: `CORS_ORIGINS`, `COOKIE_SAMESITE`. Done in phase 0. |
+| API location | Any origin. Build-time `OS_PLANNER_API_URL` (env, then `.env`, then an interactive question), written to `config.json` that can be edited after deploy. Server: `CORS_ORIGINS`, `COOKIE_SAMESITE`. Done in phase 0. |
 | Realtime | Socket.IO gateway (chat, presence, notifications, live updates). Optional Redis adapter (`REDIS_URL`) for several server instances. Page co-editing uses Hocuspocus (Yjs) mounted on the same HTTP server. |
 | Offline | Notebooks, boards, tasks, labels and calendar are readable and editable offline. On reconnect changes merge field by field. A field that conflicts is won by the server; the local value goes to **Local history** with one-click **Replace** (re-apply local) and **Add as new**. Chat is online-first: cached read, queued sends. |
 | Co-editing | Real-time Yjs co-editing for every page (private ones too), so there is one editor path. Offline edits merge as CRDT updates; pre-merge snapshots also go to local history. |
@@ -119,9 +119,9 @@ Rules: every acceptance criterion names its layer; every authorization rule has 
 
 ### 4.3 Definition of done (all phases)
 1. All acceptance criteria green.
-2. The full regression passes: `npm test`, `npm run e2e`, `npm test -w @notes/desktop`.
+2. The full regression passes: `npm test`, `npm run e2e`, `npm test -w @os-planner/desktop`.
 3. `node scripts/i18n-check.mjs` passes; `npm run format:check` passes.
-4. README updated where behaviour or configuration changed; `.env.example` and `docker-compose.yml` updated for new settings.
+4. README updated where behaviour or configuration changed; `.env.example` and `docker-compose.yml` updated for new settings. **`deploy/nginx/os-planner.conf.template` (and the README section "HTTPS reverse proxy") updated whenever the change adds URL prefixes or origins, WebSocket paths (phases 6, 11, 16), larger uploads or slower endpoints, or alters what the server sends/expects behind a proxy.**
 5. Migrations are forward-only, tested on a database with data from the previous phase.
 6. `phases/todo.md` ticked.
 

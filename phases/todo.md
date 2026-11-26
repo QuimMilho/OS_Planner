@@ -1,9 +1,9 @@
-# Notes: collaboration roadmap, checklist
+# OS_Planner: collaboration roadmap, checklist
 
 Tick a phase only when its **Definition of done** (see [overview.md](overview.md#43-definition-of-done-all-phases)) holds. Details and acceptance criteria are in each phase file.
 
 - [x] **Phase 0**: [Configurable API URL](phase-0.md)
-  - [x] build-time setting with prompt (`NOTES_API_URL`, `NOTES_SERVER_URL`)
+  - [x] build-time setting with prompt (`OS_PLANNER_API_URL`, `OS_PLANNER_SERVER_URL`)
   - [x] runtime `config.json` + API base interceptor
   - [x] server CORS, cookie SameSite, media embedding
   - [x] tests: scripts 13, server +14, cross-origin e2e 5
@@ -13,24 +13,26 @@ Tick a phase only when its **Definition of done** (see [overview.md](overview.md
   - [x] stored per account, restored at login, OS default when unset
   - [x] no flash on load; picker with live preview
   - [x] tests: scripts +10 (contrast), shared +1, server +1, themes e2e 8
-- [ ] **Phase 2**: [Admin & quotas foundation](phase-2.md)
-  - [ ] `ADMIN_EMAILS` + admin area
-  - [ ] `QuotaPolicy` / `QuotaService` (user, team, project scopes)
-  - [ ] usage bars and `413 quota_exceeded`
-- [ ] **Phase 3**: [Spaces, teams and hierarchy core](phase-3.md)
-  - [ ] Space model + data-preserving migration
-  - [ ] teams, projects, sub-projects, members
-  - [ ] permission engine (shared) + guards
-  - [ ] team rail, project tree, breadcrumbs
-- [ ] **Phase 4**: [Roles, overwrites and audit log](phase-4.md)
-  - [ ] team roles and project roles
-  - [ ] allow/deny overwrites (tri-state editor)
-  - [ ] audit log + viewer
-- [ ] **Phase 5**: [Joining teams](phase-5.md)
-  - [ ] email invites (with or without an account)
-  - [ ] invite links
-  - [ ] public directory, join policy, requests
-  - [ ] leave, kick, ownership transfer
+- [x] **Phase 2**: [Admin & quotas foundation](phase-2.md)
+  - [x] `ADMIN_EMAILS` + admin area
+  - [x] `QuotaPolicy` / `QuotaService` (user, team, project scopes)
+  - [x] usage bars and `413 quota_exceeded`
+- [x] **Phase 3**: [Spaces, teams and hierarchy core](phase-3.md)
+  - [x] Space model + data-preserving migration
+  - [x] teams, projects, sub-projects, members
+  - [x] permission engine (shared) + guards
+  - [x] team rail, project tree, breadcrumbs
+- [x] **Phase 4**: [Roles, overwrites and audit log](phase-4.md)
+  - [x] team roles and project roles
+  - [x] allow/deny overwrites (tri-state editor)
+  - [x] audit log + viewer
+  - [x] tests: shared +116 (hierarchy matrix, 5000-case decision trace), server +37 (incl. migration), web e2e +2
+- [x] **Phase 5**: [Joining teams](phase-5.md)
+  - [x] email invites (with or without an account)
+  - [x] invite links
+  - [x] public directory, join policy, requests
+  - [x] leave, kick, ban, ownership transfer
+  - [x] tests: server +36 (incl. migration), web e2e +4
 - [ ] **Phase 6**: [Realtime infrastructure](phase-6.md)
   - [ ] Socket.IO gateway with JWT auth and permission-checked rooms
   - [ ] presence, event bus, Redis adapter

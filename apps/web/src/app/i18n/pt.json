@@ -1,6 +1,6 @@
 {
   "app": {
-    "updateReady": "Está disponível uma nova versão do Notes.",
+    "updateReady": "Está disponível uma nova versão do OS_Planner.",
     "reload": "Recarregar"
   },
   "common": {
@@ -27,7 +27,8 @@
     "settings": "Definições",
     "getApp": "Obter a aplicação",
     "account": "Conta",
-    "signOut": "Terminar sessão"
+    "signOut": "Terminar sessão",
+    "admin": "Administração"
   },
   "tree": {
     "notebooks": "Cadernos",
@@ -44,7 +45,7 @@
     "deleted": "“{{name}}” foi movido para a reciclagem."
   },
   "home": {
-    "welcome": "Bem-vindo ao Notes",
+    "welcome": "Bem-vindo ao OS_Planner",
     "welcomeText": "Organize as suas notas em cadernos e categorias. Escreva com fórmulas, diagramas, gráficos, código, imagens e vídeo. Tudo funciona sem ligação.",
     "createFirst": "Criar o primeiro caderno",
     "title": "As suas notas",
@@ -63,7 +64,11 @@
     "title": "Reciclagem",
     "info": "Os itens eliminados ficam aqui durante 30 dias e depois são removidos definitivamente.",
     "empty": "A reciclagem está vazia.",
-    "kind": { "notebook": "Caderno", "category": "Categoria", "page": "Página" }
+    "kind": {
+      "notebook": "Caderno",
+      "category": "Categoria",
+      "page": "Página"
+    }
   },
   "search": {
     "none": "Nada encontrado.",
@@ -82,7 +87,7 @@
     "pageGone": "Esta página já não existe no servidor. O seu texto foi guardado como uma nova página.",
     "opDropped": "Não foi possível aplicar uma alteração ({{reason}}) e foi ignorada.",
     "uploadRefused": "Não foi possível carregar um ficheiro ({{reason}}) e foi deixado de fora da página.",
-    "quotaExceeded": "Esgotou o seu espaço de armazenamento. Um ficheiro não foi carregado.",
+    "quotaExceeded": "O seu armazenamento está cheio. Os ficheiros e alterações ficam neste dispositivo e são enviados assim que houver espaço.",
     "mediaRemoved": "Alguns ficheiros não puderam ser carregados e foram removidos desta página.",
     "invalidDocument": "Não foi possível guardar esta página porque o conteúdo é inválido."
   },
@@ -151,9 +156,25 @@
     "youtubeTitle": "Incorporar um vídeo do YouTube",
     "youtubeLabel": "Ligação do YouTube",
     "youtubeInvalid": "Introduza uma ligação do YouTube.",
-    "state": { "saved": "Guardado", "saving": "A guardar…", "offline": "Guardado neste dispositivo" },
-    "chartTypes": { "bar": "Barras", "line": "Linhas", "pie": "Circular", "doughnut": "Anel", "scatter": "Dispersão", "radar": "Radar" },
-    "callout": { "info": "Informação", "tip": "Dica", "warning": "Aviso", "danger": "Perigo" },
+    "state": {
+      "saved": "Guardado",
+      "saving": "A guardar…",
+      "offline": "Guardado neste dispositivo"
+    },
+    "chartTypes": {
+      "bar": "Barras",
+      "line": "Linhas",
+      "pie": "Circular",
+      "doughnut": "Anel",
+      "scatter": "Dispersão",
+      "radar": "Radar"
+    },
+    "callout": {
+      "info": "Informação",
+      "tip": "Dica",
+      "warning": "Aviso",
+      "danger": "Perigo"
+    },
     "tableOps": {
       "addRowBefore": "Adicionar linha acima",
       "addRowAfter": "Adicionar linha abaixo",
@@ -201,7 +222,11 @@
     "mdHintZip": "Transfere um .zip com um ficheiro .md por página, em pastas, mais os ficheiros multimédia.",
     "failed": "A exportação falhou. Tente novamente.",
     "localPrint": "O servidor não conseguiu criar o PDF, por isso foi aberta a janela de impressão do navegador. Escolha “Guardar como PDF”.",
-    "scope": { "page": "Página", "category": "Categoria", "notebook": "Caderno" }
+    "scope": {
+      "page": "Página",
+      "category": "Categoria",
+      "notebook": "Caderno"
+    }
   },
   "auth": {
     "email": "Email",
@@ -236,7 +261,12 @@
     "password_too_common": "Essa palavra-passe é demasiado comum. Escolha outra.",
     "offline": "Não foi possível contactar o servidor. Verifique a ligação e tente novamente.",
     "invalid_or_expired_token": "Esta ligação é inválida ou expirou.",
-    "http_429": "Demasiadas tentativas. Aguarde um minuto e tente novamente."
+    "http_429": "Demasiadas tentativas. Aguarde um minuto e tente novamente.",
+    "quotaExceeded": "Não há espaço suficiente para isso.",
+    "notFoundTitle": "Página não encontrada",
+    "notFound": "Esta página não existe ou não tem acesso a ela.",
+    "backHome": "Voltar às minhas notas",
+    "forbidden": "Não tem permissão para fazer isso."
   },
   "theme": {
     "system": "Igual ao dispositivo",
@@ -271,37 +301,61 @@
     "unsyncedWarning": "Algumas alterações ainda não chegaram ao servidor. Terminar a sessão remove as notas guardadas neste dispositivo, pelo que seriam perdidas. Aguarde pela sincronização ou termine a sessão mesmo assim."
   },
   "site": {
-    "openApp": "Abrir o Notes",
+    "openApp": "Abrir o OS_Planner",
     "getStarted": "Começar",
-    "heroTitle": "Notas que vão tão longe quanto as suas ideias.",
+    "heroTitle": "Planos que vão tão longe quanto as suas ideias.",
     "heroText": "Cadernos, categorias e páginas com um editor completo: fórmulas, diagramas, gráficos, código, imagens e vídeo. Exporte para PDF. Funciona sem ligação, no navegador ou como aplicação.",
     "features": "Funcionalidades",
-    "footer": "Notes · as suas notas continuam a ser suas",
+    "footer": "OS_Planner · as suas notas continuam a ser suas",
     "f": {
-      "organise": { "title": "Organizado à sua maneira", "text": "Cadernos com categorias e páginas aninhadas. Dê nome a tudo e reordene como quiser." },
-      "editor": { "title": "Um editor a sério", "text": "Títulos, listas, tabelas, tarefas, destaques, secções recolhíveis e um menu de comandos com “/”." },
-      "math": { "title": "Matemática e código", "text": "Equações em LaTeX e blocos de código com realce de sintaxe para dezenas de linguagens." },
-      "charts": { "title": "Diagramas e gráficos", "text": "Diagramas Mermaid, gráficos de barras/linhas/circulares e gráficos de funções como sin(x)/x." },
-      "media": { "title": "Imagens e vídeo", "text": "Largue ou cole imagens e vídeos. Redimensione, alinhe e adicione legendas." },
-      "pdf": { "title": "Exportar para PDF", "text": "Transforme uma página, uma categoria ou um caderno inteiro num PDF, com índice." },
-      "offline": { "title": "Funciona sem ligação", "text": "Continue a escrever sem internet. As alterações sincronizam e os conflitos nunca perdem texto." },
-      "everywhere": { "title": "Em qualquer lado", "text": "Use no navegador, instale como aplicação ou transfira para Windows e Linux." }
+      "organise": {
+        "title": "Organizado à sua maneira",
+        "text": "Cadernos com categorias e páginas aninhadas. Dê nome a tudo e reordene como quiser."
+      },
+      "editor": {
+        "title": "Um editor a sério",
+        "text": "Títulos, listas, tabelas, tarefas, destaques, secções recolhíveis e um menu de comandos com “/”."
+      },
+      "math": {
+        "title": "Matemática e código",
+        "text": "Equações em LaTeX e blocos de código com realce de sintaxe para dezenas de linguagens."
+      },
+      "charts": {
+        "title": "Diagramas e gráficos",
+        "text": "Diagramas Mermaid, gráficos de barras/linhas/circulares e gráficos de funções como sin(x)/x."
+      },
+      "media": {
+        "title": "Imagens e vídeo",
+        "text": "Largue ou cole imagens e vídeos. Redimensione, alinhe e adicione legendas."
+      },
+      "pdf": {
+        "title": "Exportar para PDF",
+        "text": "Transforme uma página, uma categoria ou um caderno inteiro num PDF, com índice."
+      },
+      "offline": {
+        "title": "Funciona sem ligação",
+        "text": "Continue a escrever sem internet. As alterações sincronizam e os conflitos nunca perdem texto."
+      },
+      "everywhere": {
+        "title": "Em qualquer lado",
+        "text": "Use no navegador, instale como aplicação ou transfira para Windows e Linux."
+      }
     }
   },
   "apps": {
-    "intro": "O Notes funciona no navegador. Instale-o como aplicação ou transfira a versão para computador, para Windows ou Linux. As suas notas são as mesmas em todo o lado.",
+    "intro": "O OS_Planner funciona no navegador. Instale-o como aplicação ou transfira a versão para computador, para Windows ou Linux. As suas notas são as mesmas em todo o lado.",
     "browser": "Use no navegador",
     "browserText": "Nada para instalar. Inicie sessão em qualquer dispositivo.",
     "openBrowser": "Abrir no navegador",
     "pwa": "Instalar como aplicação",
-    "pwaText": "Adiciona o Notes às suas aplicações, com janela própria, e continua a funcionar sem ligação.",
+    "pwaText": "Adiciona o OS_Planner às suas aplicações, com janela própria, e continua a funcionar sem ligação.",
     "installNow": "Instalar aplicação",
     "alreadyInstalled": "Está a usar a aplicação instalada.",
-    "justInstalled": "Instalado. Procure o Notes entre as suas aplicações.",
+    "justInstalled": "Instalado. Procure o OS_Planner entre as suas aplicações.",
     "how": {
-      "windows": "No Chrome ou no Edge, abra o menu do navegador e escolha “Instalar o Notes” (ou use o ícone de instalação na barra de endereços).",
-      "linux": "No Chrome, Chromium ou Edge, abra o menu do navegador e escolha “Instalar o Notes”. O Firefox não suporta a instalação de aplicações web: use a transferência para computador abaixo.",
-      "mac": "No Safari escolha Ficheiro › Adicionar ao Dock. No Chrome ou no Edge escolha “Instalar o Notes” no menu do navegador.",
+      "windows": "No Chrome ou no Edge, abra o menu do navegador e escolha “Instalar o OS_Planner” (ou use o ícone de instalação na barra de endereços).",
+      "linux": "No Chrome, Chromium ou Edge, abra o menu do navegador e escolha “Instalar o OS_Planner”. O Firefox não suporta a instalação de aplicações web: use a transferência para computador abaixo.",
+      "mac": "No Safari escolha Ficheiro › Adicionar ao Dock. No Chrome ou no Edge escolha “Instalar o OS_Planner” no menu do navegador.",
       "android": "Abra o menu do navegador e toque em “Instalar aplicação” ou “Adicionar ao ecrã principal”.",
       "ios": "Toque no botão Partilhar e depois em “Adicionar ao ecrã principal”.",
       "other": "Abra o menu do navegador e procure “Instalar” ou “Adicionar ao ecrã principal”."
@@ -314,5 +368,451 @@
     "noRelease": "As aplicações para computador ainda não foram publicadas neste servidor.",
     "noDesktopForOs": "Não existe uma versão para computador para este dispositivo. Use o navegador ou instale-o como aplicação.",
     "smartscreen": "O Windows pode mostrar um aviso do “SmartScreen” da primeira vez, porque o instalador não está assinado. Escolha “Mais informações” › “Executar mesmo assim”."
+  },
+  "quota": {
+    "title": "Armazenamento",
+    "used": "usados",
+    "of": "de",
+    "limit": "Limite",
+    "images": "Imagens",
+    "video": "Vídeo",
+    "documents": "Notas (texto)",
+    "warning": "Está perto do limite de armazenamento. Liberte espaço ou peça mais a um administrador.",
+    "full": "O seu armazenamento está cheio. Os ficheiros novos ficam neste dispositivo e são enviados quando houver espaço; o texto que acrescentar pode não ser guardado até lá.",
+    "manage": "Armazenamento"
+  },
+  "admin": {
+    "title": "Administração",
+    "users": "Contas",
+    "stats": "Resumo",
+    "statUsers": "Contas",
+    "statVerified": "Verificadas",
+    "statStorage": "Armazenado",
+    "statTeams": "Equipas",
+    "searchUsers": "Pesquisar por nome ou email",
+    "user": "Conta",
+    "usage": "Armazenamento",
+    "override": "limite próprio",
+    "edit": "Limites",
+    "clear": "Usar o predefinido",
+    "storageMb": "Limite de armazenamento (MB)",
+    "fileMb": "Maior ficheiro (MB)",
+    "note": "Nota",
+    "defaultHint": "Vazio = predefinido ({{value}} MB)",
+    "saved": "Limites guardados.",
+    "cleared": "Voltou ao limite predefinido.",
+    "invalid": "Introduza números válidos.",
+    "noUsers": "Nenhuma conta encontrada.",
+    "loadMore": "Carregar mais",
+    "teams": {
+      "title": "Equipas",
+      "name": "Nome da equipa",
+      "owner": "Email do proprietário",
+      "ownerHint": "Se ainda não existir uma conta verificada, a equipa fica à espera dela.",
+      "public": "Pública (visível para todos)",
+      "openJoin": "Qualquer pessoa pode entrar",
+      "create": "Criar equipa",
+      "members": "membros",
+      "projects": "projetos",
+      "pending": "à espera de conta",
+      "none": "Ainda não há equipas.",
+      "created": "Equipa criada.",
+      "deleteTitle": "Apagar a equipa?",
+      "deleteMessage": "“{{name}}” e todos os seus projetos e conteúdo serão removidos. O espaço ocupado é libertado após 30 dias."
+    }
+  },
+  "rail": {
+    "home": "As minhas notas",
+    "label": "Espaços",
+    "browse": "Explorar equipas públicas"
+  },
+  "breadcrumb": {
+    "label": "Onde está"
+  },
+  "project": {
+    "new": "Novo projeto",
+    "newSub": "Novo subprojeto",
+    "name": "Nome do projeto",
+    "rename": "Mudar o nome",
+    "moveTo": "Mover para…",
+    "topLevel": "Nível principal",
+    "actions": "Ações do projeto",
+    "archive": "Arquivar",
+    "unarchive": "Restaurar do arquivo",
+    "archived": "Arquivado",
+    "subProjects": "Subprojetos",
+    "deleteTitle": "Apagar o projeto?",
+    "deleteMessage": "“{{name}}” e tudo o que está dentro será apagado. Isto não pode ser desfeito.",
+    "limitReached": "Esta equipa atingiu o limite de projetos.",
+    "invalid": "Isso não é possível aqui: um projeto não pode ser movido para dentro de si próprio ou dos seus subprojetos, e a profundidade está limitada.",
+    "permissions": "Permissões",
+    "permissionsTitle": "Permissões do projeto",
+    "overwrites": "Quem pode fazer o quê aqui",
+    "permissionsNoAccess": "Pode ver este projeto, mas não pode alterar quem pode fazer o quê nele."
+  },
+  "team": {
+    "projects": "Projetos",
+    "noProjects": "Ainda não há projetos.",
+    "notebooks": "Cadernos",
+    "noNotebooks": "Ainda não há cadernos aqui.",
+    "boards": "Quadros",
+    "channels": "Canais",
+    "members": "Membros",
+    "owner": "Proprietário",
+    "comingSoon": "Em breve.",
+    "settings": "Definições da equipa",
+    "settingsTitle": "Definições da equipa",
+    "tab": {
+      "members": "Membros",
+      "roles": "Cargos",
+      "viewAs": "Ver como",
+      "audit": "Registo de auditoria",
+      "invites": "Convites",
+      "requests": "Pedidos",
+      "bans": "Banimentos",
+      "discover": "Visibilidade"
+    }
+  },
+  "members": {
+    "nickname": "Alcunha",
+    "nicknameLabel": "Alcunha (deixe vazio para remover)",
+    "moderate": "Remover ou banir",
+    "kick": "Remover da equipa",
+    "kickTitle": "Remover da equipa",
+    "kickText": "{{name}} perde o acesso à equipa e a tudo o que lá está. Pode voltar com um novo convite.",
+    "ban": "Banir",
+    "banTitle": "Banir da equipa",
+    "banReason": "Motivo (só quem gere os membros o vê)",
+    "leaveTitle": "Sair da equipa",
+    "leaveHint": "Perde o acesso à equipa e a tudo o que lá está. Pode voltar com um novo convite.",
+    "leave": "Sair da equipa",
+    "leaveConfirm": "Sair de \"{{name}}\"?"
+  },
+  "roles": {
+    "title": "Cargos",
+    "projectTitle": "Cargos do projeto",
+    "projectHint": "Estes cargos existem apenas neste projeto e nos seus subprojetos.",
+    "new": "Novo cargo",
+    "dragHint": "Arraste para reordenar. Um cargo só pode ser movido para baixo do seu cargo mais alto.",
+    "members": "Membros",
+    "none": "Ainda não há cargos.",
+    "name": "Nome do cargo",
+    "color": "Cor",
+    "noColor": "Sem cor",
+    "hoist": "Mostrar os membros com este cargo em separado",
+    "mentionable": "Permitir que qualquer pessoa mencione este cargo com @",
+    "permissions": "Permissões",
+    "readOnly": "Não pode alterar este cargo: está no mesmo nível ou acima do seu cargo mais alto, ou não pode gerir cargos.",
+    "pick": "Escolha um cargo para o editar.",
+    "saved": "Cargo guardado.",
+    "deleteTitle": "Apagar este cargo?",
+    "deleteMessage": "“{{name}}” será retirado aos seus {{count}} membro(s) e de todas as exceções. Isto não pode ser desfeito.",
+    "removeFrom": "Retirar o cargo {{role}}",
+    "addRole": "Adicionar um cargo",
+    "err": {
+      "role_at_or_above": "Esse cargo está no mesmo nível ou acima do seu cargo mais alto.",
+      "permission_not_held": "Não pode dar nem retirar uma permissão que não tem.",
+      "missing_manage_roles": "Não pode gerir cargos.",
+      "everyone_protected": "@everyone não pode ser apagado, renomeado nem mudar de cor.",
+      "administrator_owner_only": "Só o proprietário pode dar a permissão de Administrador a @everyone.",
+      "last_administrator": "Isso deixaria a equipa sem administrador.",
+      "role_limit_reached": "Esta equipa atingiu o limite de cargos.",
+      "invalid_order": "Essa ordem não é válida. Recarregue e tente novamente."
+    }
+  },
+  "permissions": {
+    "search": "Procurar permissões",
+    "noMatch": "Nenhuma permissão corresponde.",
+    "group": {
+      "general": "Geral",
+      "chat": "Conversa",
+      "notebooks": "Cadernos",
+      "boards": "Quadros",
+      "calendar": "Calendário",
+      "voice": "Voz e vídeo"
+    },
+    "hint": {
+      "ADMINISTRATOR": "Todas as permissões, e nenhuma exceção se aplica. Atribua com muito cuidado.",
+      "MANAGE_TEAM": "Alterar o nome, o ícone e as definições da equipa.",
+      "MANAGE_ROLES": "Criar e editar cargos e atribuí-los a membros, abaixo do seu.",
+      "MANAGE_MEMBERS": "Remover membros e alterar os seus alcunhas.",
+      "CREATE_INVITES": "Convidar pessoas para a equipa.",
+      "VIEW_AUDIT_LOG": "Ver quem alterou o quê na equipa.",
+      "MANAGE_PROJECTS": "Criar, renomear, mover, arquivar e apagar projetos, e definir quem pode fazer o quê neles.",
+      "VIEW_CHANNEL": "Ver os canais e ler as suas mensagens.",
+      "SEND_MESSAGES": "Escrever nos canais.",
+      "READ_MESSAGE_HISTORY": "Ler mensagens enviadas anteriormente.",
+      "ATTACH_FILES": "Juntar ficheiros e imagens às mensagens.",
+      "ADD_REACTIONS": "Reagir às mensagens.",
+      "CREATE_THREADS": "Iniciar um tópico a partir de uma mensagem.",
+      "SEND_IN_THREADS": "Escrever em tópicos.",
+      "MENTION_EVERYONE": "Usar @everyone e @here.",
+      "MANAGE_MESSAGES": "Apagar e fixar mensagens de outras pessoas.",
+      "MANAGE_CHANNELS": "Criar, editar e apagar canais.",
+      "VIEW_NOTEBOOKS": "Ver e ler cadernos e páginas.",
+      "CREATE_NOTEBOOKS": "Adicionar cadernos e categorias.",
+      "EDIT_PAGES": "Criar páginas e escrever nelas.",
+      "DELETE_PAGES": "Mover páginas para o lixo.",
+      "MANAGE_NOTEBOOKS": "Renomear, mover e apagar cadernos.",
+      "SHARE_NOTEBOOKS": "Partilhar cadernos com pessoas ou por ligação.",
+      "VIEW_BOARDS": "Ver os quadros e as suas tarefas.",
+      "CREATE_TASKS": "Adicionar tarefas aos quadros.",
+      "EDIT_TASKS": "Alterar, mover e concluir tarefas.",
+      "ASSIGN_TASKS": "Escolher a quem uma tarefa é atribuída.",
+      "MANAGE_BOARDS": "Criar, editar e apagar quadros e colunas.",
+      "MANAGE_LABELS": "Criar, editar e apagar etiquetas.",
+      "VIEW_CALENDAR": "Ver o calendário e as suas reuniões.",
+      "CREATE_MEETINGS": "Agendar reuniões.",
+      "MANAGE_MEETINGS": "Editar e cancelar reuniões de outras pessoas.",
+      "ADD_TO_MEMBER_CALENDARS": "Pôr uma reunião diretamente nos calendários dos membros convidados.",
+      "CONNECT": "Entrar em canais de voz e vídeo.",
+      "SPEAK": "Falar em canais de voz.",
+      "VIDEO": "Ligar a câmara.",
+      "SCREEN_SHARE": "Partilhar um ecrã ou uma janela.",
+      "MUTE_MEMBERS": "Silenciar outras pessoas em canais de voz.",
+      "MOVE_MEMBERS": "Mover pessoas entre canais de voz."
+    },
+    "ADMINISTRATOR": "Administrador",
+    "MANAGE_TEAM": "Gerir a equipa",
+    "MANAGE_ROLES": "Gerir cargos",
+    "MANAGE_MEMBERS": "Gerir membros",
+    "CREATE_INVITES": "Criar convites",
+    "VIEW_AUDIT_LOG": "Ver o registo de auditoria",
+    "MANAGE_PROJECTS": "Gerir projetos",
+    "VIEW_CHANNEL": "Ver canais",
+    "SEND_MESSAGES": "Enviar mensagens",
+    "READ_MESSAGE_HISTORY": "Ler o histórico",
+    "ATTACH_FILES": "Anexar ficheiros",
+    "ADD_REACTIONS": "Adicionar reações",
+    "CREATE_THREADS": "Criar tópicos",
+    "SEND_IN_THREADS": "Enviar em tópicos",
+    "MENTION_EVERYONE": "Mencionar todos",
+    "MANAGE_MESSAGES": "Gerir mensagens",
+    "MANAGE_CHANNELS": "Gerir canais",
+    "VIEW_NOTEBOOKS": "Ver cadernos",
+    "CREATE_NOTEBOOKS": "Criar cadernos",
+    "EDIT_PAGES": "Editar páginas",
+    "DELETE_PAGES": "Apagar páginas",
+    "MANAGE_NOTEBOOKS": "Gerir cadernos",
+    "SHARE_NOTEBOOKS": "Partilhar cadernos",
+    "VIEW_BOARDS": "Ver quadros",
+    "CREATE_TASKS": "Criar tarefas",
+    "EDIT_TASKS": "Editar tarefas",
+    "ASSIGN_TASKS": "Atribuir tarefas",
+    "MANAGE_BOARDS": "Gerir quadros",
+    "MANAGE_LABELS": "Gerir etiquetas",
+    "VIEW_CALENDAR": "Ver o calendário",
+    "CREATE_MEETINGS": "Criar reuniões",
+    "MANAGE_MEETINGS": "Gerir reuniões",
+    "ADD_TO_MEMBER_CALENDARS": "Adicionar aos calendários dos membros",
+    "CONNECT": "Ligar",
+    "SPEAK": "Falar",
+    "VIDEO": "Vídeo",
+    "SCREEN_SHARE": "Partilhar o ecrã",
+    "MUTE_MEMBERS": "Silenciar membros",
+    "MOVE_MEMBERS": "Mover membros"
+  },
+  "overwrite": {
+    "allow": "Permitir",
+    "inherit": "Herdar",
+    "deny": "Negar",
+    "syncedWithParent": "Sincronizado com o nível acima: nada está definido aqui, por isso recebe o que os níveis acima lhe dão.",
+    "custom": "Definido neste nível",
+    "reset": "Repor o herdado",
+    "subjects": "Cargos e membros",
+    "addMember": "Adicionar um membro",
+    "pickMember": "Escolher…",
+    "pick": "Escolha um cargo ou um membro.",
+    "saved": "Permissões guardadas."
+  },
+  "viewAs": {
+    "title": "Ver como",
+    "pick": "Ver o que este cargo ou membro pode fazer",
+    "choose": "Escolher…",
+    "roles": "Cargos",
+    "members": "Membros",
+    "summary": "{{name}} tem {{count}} permissões aqui.",
+    "reason": {
+      "owner": "Proprietário da equipa",
+      "administratorRole": "Administrador através de {{roles}}",
+      "administratorEveryone": "Administrador através de @everyone",
+      "base": "Concedida por {{from}}",
+      "member": "este membro",
+      "allowed": "Permitida a {{who}} em {{where}}",
+      "denied": "Negada a {{who}} em {{where}}",
+      "masked": "Retirada: precisa de “{{missing}}”",
+      "none": "Não concedida"
+    }
+  },
+  "audit": {
+    "action": {
+      "role_create": "Cargo criado",
+      "role_update": "Cargo alterado",
+      "role_delete": "Cargo apagado",
+      "role_reorder": "Cargos reordenados",
+      "role_assign": "Cargo atribuído",
+      "role_unassign": "Cargo retirado a um membro",
+      "overwrite_set": "Exceção definida",
+      "overwrite_clear": "Exceção removida",
+      "member_remove": "Membro removido",
+      "member_nickname": "Alcunha alterada",
+      "project_create": "Projeto criado",
+      "project_update": "Projeto alterado",
+      "project_move": "Projeto movido",
+      "project_delete": "Projeto apagado",
+      "project_member_add": "Membro adicionado a um projeto",
+      "project_member_remove": "Membro removido de um projeto",
+      "team_create": "Equipa criada",
+      "team_update": "Equipa alterada",
+      "team_delete": "Equipa apagada",
+      "team_owner_transfer": "Propriedade alterada",
+      "quota_override": "Limite de armazenamento alterado",
+      "member_add": "Membro entrou",
+      "member_ban": "Membro banido",
+      "member_unban": "Banimento levantado",
+      "invite_create": "Convite criado",
+      "invite_resend": "Convite enviado de novo",
+      "invite_revoke": "Convite retirado",
+      "request_approve": "Pedido para entrar aprovado",
+      "request_deny": "Pedido para entrar recusado"
+    },
+    "actor": "Feito por",
+    "from": "De",
+    "to": "Até",
+    "apply": "Filtrar",
+    "any": "Qualquer",
+    "empty": "Ainda não há nada registado.",
+    "more": "Carregar mais",
+    "before": "Antes",
+    "after": "Depois",
+    "system": "O sistema",
+    "target": {
+      "team": "a equipa",
+      "project": "um projeto",
+      "user": "uma conta",
+      "invite": "um convite"
+    },
+    "actionLabel": "Ação"
+  },
+  "ownership": {
+    "transfer": {
+      "hint": "É o dono. Passe a equipa a outro membro antes de sair. Mantém os seus cargos, mas deixa de estar acima de todos.",
+      "to": "Novo dono",
+      "typeName": "Escreva o nome da equipa ({{name}}) para confirmar",
+      "password": "A sua palavra-passe",
+      "button": "Passar a propriedade",
+      "done": "Propriedade transferida.",
+      "wrongPassword": "Essa palavra-passe não está certa."
+    }
+  },
+  "invite": {
+    "invitedTo": "Foi convidado para a equipa",
+    "members": "Membros: {{count}}",
+    "createAccount": "Criar conta para entrar",
+    "signIn": "Iniciar sessão para entrar",
+    "join": "Entrar na equipa",
+    "signOut": "Terminar sessão e usar outra conta",
+    "verifyFirst": "Confirme primeiro o seu endereço de email (enviámos-lhe uma mensagem). Entra na equipa assim que o fizer.",
+    "invalidTitle": "Este convite não funciona",
+    "invalidText": "Pode ter expirado, ter sido retirado ou já ter sido usado. Peça um novo.",
+    "registerHint": "Se o convite foi enviado para um endereço de email, use esse endereço para criar a conta.",
+    "roles": "Cargos que recebem",
+    "linkTitle": "Ligação de convite",
+    "linkHint": "Qualquer pessoa com a ligação pode entrar, até ao limite que definir. Deixa de funcionar quando expira.",
+    "expires": "Expira após (dias)",
+    "days": "{{count}}",
+    "maxUses": "Máximo de pessoas que a podem usar",
+    "unlimited": "Sem limite",
+    "createLink": "Criar ligação",
+    "linkCreated": "Copie a ligação agora. Não volta a ser mostrada.",
+    "copy": "Copiar",
+    "copied": "Ligação copiada.",
+    "emailTitle": "Convidar por email",
+    "emailHint": "Cada endereço recebe o seu próprio convite, válido só para esse endereço, durante 14 dias.",
+    "emailLabel": "Endereços de email",
+    "emailPlaceholder": "ana@exemplo.com, rui@exemplo.com",
+    "sendEmails": "Enviar convites",
+    "sent": "Convites enviados: {{count}}",
+    "badAddress": "\"{{address}}\" não é um endereço de email.",
+    "list": "Convites",
+    "none": "Ainda não há convites.",
+    "kindLink": "Ligação de convite",
+    "by": "por {{name}}",
+    "usesOf": "usado {{used}} de {{max}}",
+    "uses": "usado {{used}}",
+    "expiresOn": "expira em {{date}}",
+    "status": {
+      "active": "Aberto",
+      "used": "Usado",
+      "expired": "Expirado",
+      "revoked": "Retirado"
+    },
+    "resend": "Enviar de novo",
+    "resent": "Enviado de novo para {{email}}.",
+    "revoke": "Retirar",
+    "revokeTitle": "Retirar este convite?",
+    "revokeText": "Deixa de funcionar de imediato. {{what}}",
+    "err": {
+      "invite_other_address": "Este convite foi enviado para outro endereço de email. Termine a sessão e use o endereço para onde foi enviado.",
+      "email_not_verified": "Confirme primeiro o seu endereço de email.",
+      "quota_exceeded": "Esta equipa está cheia.",
+      "invalid_role": "Um dos cargos não pode ser usado.",
+      "project_must_be_top_level": "Os convites só podem juntar pessoas a projetos de topo.",
+      "role_at_or_above": "Só pode dar cargos abaixo do seu.",
+      "permission_not_held": "Não pode dar um cargo com permissões que não tem.",
+      "missing_manage_roles": "Precisa da permissão \"Gerir cargos\" para associar cargos.",
+      "forbidden": "Não tem permissão para fazer isso.",
+      "invite_closed": "Este convite já não está aberto.",
+      "not_an_email_invite": "Só os convites para um endereço de email podem ser enviados de novo."
+    }
+  },
+  "requests": {
+    "none": "Não há pedidos à espera.",
+    "approve": "Aprovar",
+    "deny": "Recusar",
+    "approved": "{{name}} já está na equipa.",
+    "denied": "Pedido de {{name}} recusado."
+  },
+  "bans": {
+    "hint": "As pessoas desta lista não podem entrar na equipa de nenhuma forma (convite, ligação, diretório ou pedido) até levantar o banimento.",
+    "none": "Ninguém está banido.",
+    "unban": "Levantar banimento",
+    "lifted": "{{name}} já pode entrar de novo."
+  },
+  "discover": {
+    "public": "Listar esta equipa no diretório público",
+    "publicHint": "Qualquer pessoa com sessão iniciada a pode encontrar, ver o nome, a descrição e o tamanho, e entrar ou pedir para entrar.",
+    "policy": "Como se entra",
+    "policyRequest": "Pedem e alguém aprova",
+    "policyOpen": "Qualquer pessoa entra de imediato",
+    "blurb": "Uma linha sobre a equipa",
+    "tags": "Etiquetas",
+    "tagsPlaceholder": "rust, código aberto",
+    "tagsHint": "Separe com vírgulas. No máximo {{max}}.",
+    "saved": "Guardado.",
+    "invalid": "Verifique a linha e as etiquetas: são demasiado longas ou não são permitidas."
+  },
+  "directory": {
+    "title": "Equipas públicas",
+    "hint": "Equipas que recebem pessoas novas. As equipas privadas nunca aparecem aqui.",
+    "search": "Pesquisar por nome ou tema",
+    "searchButton": "Pesquisar",
+    "tag": "Etiqueta",
+    "clearTag": "Mostrar todas",
+    "verifyFirst": "Confirme o seu endereço de email para entrar numa equipa.",
+    "empty": "Nenhuma equipa pública corresponde."
+  },
+  "join": {
+    "open": "Entrar",
+    "request": "Pedir para entrar",
+    "requested": "Pedido enviado",
+    "withdraw": "Retirar",
+    "requestTitle": "Pedir para entrar",
+    "messageLabel": "Umas palavras para a equipa (opcional)",
+    "sent": "O seu pedido para entrar em {{team}} foi enviado.",
+    "err": {
+      "banned": "Não pode entrar nesta equipa.",
+      "full": "Esta equipa está cheia."
+    }
   }
 }

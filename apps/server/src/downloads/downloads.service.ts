@@ -17,7 +17,7 @@ import {
   type PublishReleaseInput,
   type ReleaseFile,
   type ReleaseManifest,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import { StorageService } from '../media/storage.service.js';
 
 /** Installers are large; this is a safety cap, not a target. */

@@ -1,6 +1,6 @@
 // The "get the app from the website" promise, end to end, with the real installers:
 // publish them to a server, see them on its download page, download one, and run the packaged app.
-// Skipped when no installers have been built (run `npm run dist:win -w @notes/desktop` first).
+// Skipped when no installers have been built (run `npm run dist:win -w @os-planner/desktop` first).
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -13,7 +13,7 @@ import { RELEASE_TOKEN, ROOT, launch, startStack } from '../../web/e2e/harness.m
 
 const releaseDir = resolve(ROOT, 'apps/desktop/release');
 const version = JSON.parse(readFileSync(resolve(ROOT, 'apps/desktop/package.json'), 'utf8')).version;
-const haveWindowsBuild = existsSync(join(releaseDir, `Notes-${version}-win-x64-setup.exe`));
+const haveWindowsBuild = existsSync(join(releaseDir, `OS_Planner-${version}-win-x64-setup.exe`));
 const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 let stack;
@@ -27,7 +27,7 @@ after(async () => stack?.stop());
 describe('desktop releases', { skip: !haveWindowsBuild && 'no installers built' }, () => {
   test('publishing lists the real builds on the download page with correct checksums, and the download is intact', { timeout: 600_000 }, async () => {
     const out = execFileSync(process.execPath, [resolve(ROOT, 'scripts/publish-desktop.mjs')], {
-      env: { ...process.env, NOTES_SERVER_URL: base, RELEASE_TOKEN, RELEASE_NOTES: 'Release from the end-to-end test' },
+      env: { ...process.env, OS_PLANNER_SERVER_URL: base, RELEASE_TOKEN, RELEASE_NOTES: 'Release from the end-to-end test' },
       encoding: 'utf8',
     });
     assert.match(out, /Published\./);
@@ -64,8 +64,8 @@ describe('desktop releases', { skip: !haveWindowsBuild && 'no installers built' 
   });
 
   test('the packaged app (not the development one) starts, shows the website and is sandboxed', { timeout: 120_000, skip: process.platform !== 'win32' && 'the unpacked build here is for Windows' }, async () => {
-    const exe = join(releaseDir, 'win-unpacked', 'Notes.exe');
-    const userData = mkdtempSync(join(tmpdir(), 'notes-packaged-'));
+    const exe = join(releaseDir, 'win-unpacked', 'OS_Planner.exe');
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-packaged-'));
     // A real install shows the server baked in at build time; here the person has chosen the test server.
     writeFileSync(join(userData, 'config.json'), JSON.stringify({ serverUrl: base }));
     const app = await electron.launch({ executablePath: exe, args: [`--user-data-dir=${userData}`] });
@@ -73,11 +73,11 @@ describe('desktop releases', { skip: !haveWindowsBuild && 'no installers built' 
       const page = await app.firstWindow();
       page.setDefaultTimeout(30_000);
       await page.waitForSelector('h1');
-      assert.match(await page.textContent('h1'), /Notes that go as far as your ideas/);
+      assert.match(await page.textContent('h1'), /Plans that go as far as your ideas/);
       assert.equal(await app.evaluate(({ app: a }) => a.isPackaged), true);
       assert.ok(readdirSync(join(releaseDir, 'win-unpacked', 'resources')).includes('app.asar'), 'the app is packed into an asar archive');
       assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
-      assert.equal(await page.evaluate(() => window.notesDesktop?.isDesktop), true);
+      assert.equal(await page.evaluate(() => window.osPlannerDesktop?.isDesktop), true);
     } finally {
       await app.close();
       rmSync(userData, { recursive: true, force: true });

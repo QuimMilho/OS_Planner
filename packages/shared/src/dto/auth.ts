@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { localeSchema, themeSchema, type Locale, type Theme } from './common';
+import type { QuotaDto } from './quota';
 
 export const emailSchema = z.string().trim().toLowerCase().max(254).pipe(z.email());
 
@@ -11,6 +12,8 @@ export const registerSchema = z.object({
   password: passwordSchema,
   displayName: z.string().trim().min(1).max(80),
   locale: localeSchema.default('en'),
+  /** The token of an invite the visitor came with; it is applied once the email address is verified. */
+  inviteToken: z.string().min(20).max(200).optional(),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
@@ -46,8 +49,15 @@ export interface UserDto {
   locale: Locale;
   theme: Theme;
   emailVerified: boolean;
+  /** Same numbers as `quota`; kept for older clients. */
   storageUsedBytes: number;
   storageQuotaBytes: number;
+  /** An instance administrator: listed in ADMIN_EMAILS with a verified address. */
+  isAdmin: boolean;
+  /** The personal storage of this account. */
+  quota: QuotaDto;
+  /** The account's own space: its notebooks, sync cursor and storage. */
+  personalSpaceId: string;
 }
 
 export interface AuthResponse {

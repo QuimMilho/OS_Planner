@@ -1,5 +1,5 @@
 {
-  "name": "@notes/web",
+  "name": "@os-planner/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -22,7 +22,7 @@
     "@angular/service-worker": "^22.3.0",
     "@floating-ui/dom": "^1.8.0",
     "@jsverse/transloco": "^8.4.0",
-    "@notes/shared": "*",
+    "@os-planner/shared": "*",
     "@tiptap/core": "^3.35.0",
     "@tiptap/extension-bubble-menu": "^3.35.0",
     "@tiptap/extension-character-count": "^3.35.0",

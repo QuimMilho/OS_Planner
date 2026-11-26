@@ -1,8 +1,10 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import argon2 from 'argon2';
-import type { SessionDto, UpdateMeInput, UserDto } from '@notes/shared';
+import type { SessionDto, UpdateMeInput, UserDto } from '@os-planner/shared';
 import { isCommonPassword } from '../auth/common-passwords.js';
 import { ENV, type Env } from '../config/env.js';
+import { QuotaService } from '../quota/quota.service.js';
+import { SpacesService } from '../spaces/spaces.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { toUserDto } from './user.mapper.js';
 
@@ -10,18 +12,20 @@ import { toUserDto } from './user.mapper.js';
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly quota: QuotaService,
+    private readonly spaces: SpacesService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
   async get(userId: string): Promise<UserDto> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException();
-    return toUserDto(user, this.env);
+    return toUserDto(user, this.env, await this.quota.userQuota(userId), await this.spaces.personalSpaceId(userId));
   }
 
   async update(userId: string, input: UpdateMeInput): Promise<UserDto> {
     const user = await this.prisma.user.update({ where: { id: userId }, data: input });
-    return toUserDto(user, this.env);
+    return toUserDto(user, this.env, await this.quota.userQuota(userId), await this.spaces.personalSpaceId(userId));
   }
 
   /** Changes the password and signs out every other session. */
