@@ -47,6 +47,10 @@ model User {
   projectMemberships ProjectMember[]
   memberRoles        MemberRole[]
   auditEntries       AuditLog[]
+  invitesSent        Invite[]        @relation("InviteInviter")
+  pendingInvites     PendingInvite[]
+  joinRequests       JoinRequest[]   @relation("JoinRequester")
+  bans               Ban[]           @relation("Banned")
 }
 
 model RefreshToken {
@@ -264,6 +268,10 @@ model Team {
   isPublic            Boolean   @default(false)
   /// "open" | "request"
   joinPolicy          String    @default("request") @db.VarChar(10)
+  /// Shown on the directory card of a public team.
+  listingBlurb        String    @default("") @db.VarChar(200)
+  /// JSON array of short lowercase tags for the directory (NULL = none).
+  listingTags         Json?
   /// The team own space. A plain pointer (Space.teamId holds the real foreign key).
   spaceId             String    @unique @db.Char(36)
   createdAt           DateTime  @default(now())
@@ -276,6 +284,9 @@ model Team {
   pendingOwners PendingOwner[]
   roles         Role[]
   auditLog      AuditLog[]
+  invites       Invite[]
+  joinRequests  JoinRequest[]
+  bans          Ban[]
 
   @@index([ownerId])
 }
@@ -423,4 +434,87 @@ model AuditLog {
   @@index([teamId, createdAt])
   @@index([teamId, id])
   @@index([actorId])
+}
+
+/// An invitation to a team: to one email address ("email", single use) or a link anyone holding it may use ("link").
+/// The token is 32 random bytes, shown once and kept only as its SHA-256 hash.
+model Invite {
+  id         String    @id @db.Char(36)
+  teamId     String    @db.Char(36)
+  /// Also add the person to this project (and give them its roles). A plain pointer: a deleted project is skipped.
+  projectId  String?   @db.Char(36)
+  /// "email" | "link"
+  kind       String    @db.VarChar(5)
+  /// Lowercased. Only for kind "email".
+  email      String?   @db.VarChar(254)
+  tokenHash  String    @unique @db.Char(64)
+  /// JSON array of role ids the person gets on joining.
+  roleIds    Json
+  invitedBy  String?   @db.Char(36)
+  /// NULL = unlimited (links). Email invites are single use whatever this says.
+  maxUses    Int?
+  uses       Int       @default(0)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  acceptedBy String?   @db.Char(36)
+  acceptedAt DateTime?
+
+  team    Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  inviter User?           @relation("InviteInviter", fields: [invitedBy], references: [id], onDelete: SetNull)
+  pending PendingInvite[]
+
+  @@index([teamId, createdAt])
+  @@index([invitedBy])
+}
+
+/// An invite a visitor registered with: it is applied once their email address is verified.
+model PendingInvite {
+  userId    String   @db.Char(36)
+  inviteId  String   @db.Char(36)
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invite Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, inviteId])
+  @@index([inviteId])
+}
+
+/// A person asking to join a team whose policy is "request".
+model JoinRequest {
+  id        String    @id @db.Char(36)
+  teamId    String    @db.Char(36)
+  userId    String    @db.Char(36)
+  message   String    @default("") @db.VarChar(500)
+  /// "pending" | "approved" | "denied" | "withdrawn"
+  status    String    @default("pending") @db.VarChar(10)
+  /// 1 while pending, NULL afterwards: the unique key below then allows one pending request per person and team
+  /// (MySQL has no partial unique indexes, and NULLs never collide).
+  pending   Int?      @default(1)
+  decidedBy String?   @db.Char(36)
+  decidedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation("JoinRequester", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId, pending])
+  @@index([teamId, status])
+  @@index([userId])
+}
+
+/// Someone a team does not let in: every way of joining refuses them until the ban is lifted.
+model Ban {
+  teamId    String   @db.Char(36)
+  userId    String   @db.Char(36)
+  reason    String   @default("") @db.VarChar(500)
+  bannedBy  String?  @db.Char(36)
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation("Banned", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@index([userId])
 }

@@ -58,6 +58,13 @@ export class TeamsController {
     return this.teams.members(u.id, id);
   }
 
+  /** Leave the team. (Declared before `:userId`, which only matches ids.) */
+  @HttpCode(204)
+  @Delete(':id/members/me')
+  async leave(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
+    await this.teams.removeMember(u.id, id, u.id);
+  }
+
   @HttpCode(204)
   @Delete(':id/members/:userId')
   async removeMember(

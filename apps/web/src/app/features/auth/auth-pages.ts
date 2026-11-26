@@ -59,7 +59,7 @@ export class Login {
     try {
       await this.auth.login(this.email.trim(), this.password);
       const target = this.returnUrl();
-      await this.router.navigateByUrl(target && target.startsWith('/app') ? target : '/app');
+      await this.router.navigateByUrl(target && (target.startsWith('/app') || target.startsWith('/invite/')) ? target : '/app');
     } catch (e) {
       this.error.set(errorKey(e));
     } finally {
@@ -78,6 +78,7 @@ export class Login {
       <div class="auth-card">
         <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.createAccount' | transloco }}</h1>
+        @if (invite()) { <p class="muted" data-register-invite>{{ 'invite.registerHint' | transloco }}</p> }
         <form (ngSubmit)="submit()" #f="ngForm">
           <mat-form-field appearance="outline"><mat-label>{{ 'auth.name' | transloco }}</mat-label><input matInput name="name" [(ngModel)]="name" autocomplete="name" maxlength="80" required /></mat-form-field>
           <mat-form-field appearance="outline"><mat-label>{{ 'auth.email' | transloco }}</mat-label><input matInput type="email" name="email" [(ngModel)]="email" autocomplete="email" required /></mat-form-field>
@@ -98,6 +99,8 @@ export class Register {
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private readonly lang = inject(Language);
+  /** `/register?invite=<token>`: the person came from an invitation, which is applied once their address is verified. */
+  readonly invite = input<string>();
   name = '';
   email = '';
   password = '';
@@ -108,8 +111,15 @@ export class Register {
     this.busy.set(true);
     this.error.set('');
     try {
-      await this.auth.register({ email: this.email.trim(), password: this.password, displayName: this.name.trim(), locale: this.lang.current });
-      await this.router.navigateByUrl('/app');
+      const invite = this.invite();
+      await this.auth.register({
+        email: this.email.trim(),
+        password: this.password,
+        displayName: this.name.trim(),
+        locale: this.lang.current,
+        ...(invite ? { inviteToken: invite } : {}),
+      });
+      await this.router.navigateByUrl(invite ? `/invite/${invite}` : '/app');
     } catch (e) {
       this.error.set(errorKey(e));
     } finally {

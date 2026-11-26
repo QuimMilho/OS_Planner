@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -12,6 +11,7 @@ import {
   Permission,
   permissionsToString,
   type AdminTeamDto,
+  type Locale,
   type CreateTeamInput,
   type JoinPolicy,
   type TeamDto,
@@ -22,10 +22,12 @@ import {
 import { newId } from '../common/crypto.js';
 import type { Team } from '../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
+import { MailService } from '../mail/mail.service.js';
+import { QuotaExceeded } from '../quota/quota.errors.js';
 import { QuotaService } from '../quota/quota.service.js';
 import { AuditService } from '../roles/audit.service.js';
 import { RoleHierarchy } from '../roles/role-hierarchy.service.js';
-import { PermissionService } from '../spaces/permission.service.js';
+import { PermissionService, type TeamAccess } from '../spaces/permission.service.js';
 
 const slugify = (name: string): string =>
   name
@@ -35,6 +37,12 @@ const slugify = (name: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 50) || 'team';
+
+/** The directory tags of a team (stored as a JSON array, NULL when it has none). */
+export const tagsOf = (team: { listingTags: unknown }): string[] =>
+  Array.isArray(team.listingTags) ? (team.listingTags as string[]) : [];
+
+const sameValue = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 @Injectable()
 export class TeamsService {
@@ -46,6 +54,7 @@ export class TeamsService {
     private readonly quota: QuotaService,
     private readonly audit: AuditService,
     private readonly hierarchy: RoleHierarchy,
+    private readonly mail: MailService,
   ) {}
 
   // ---------------------------------------------------------------- for members
@@ -60,6 +69,8 @@ export class TeamsService {
       description: team.description,
       isPublic: team.isPublic,
       joinPolicy: team.joinPolicy as JoinPolicy,
+      listingBlurb: team.listingBlurb,
+      listingTags: tagsOf(team),
       spaceId: team.spaceId,
       ownerId: team.ownerId,
       isOwner: team.ownerId === userId,
@@ -105,10 +116,21 @@ export class TeamsService {
           ...(patch.color !== undefined && { color: patch.color }),
           ...(patch.isPublic !== undefined && { isPublic: patch.isPublic }),
           ...(patch.joinPolicy !== undefined && { joinPolicy: patch.joinPolicy }),
+          ...(patch.listingBlurb !== undefined && { listingBlurb: patch.listingBlurb }),
+          ...(patch.listingTags !== undefined && { listingTags: patch.listingTags }),
         },
       });
-      const fields = ['name', 'description', 'icon', 'color', 'isPublic', 'joinPolicy'] as const;
-      const changed = fields.filter((f) => before[f] !== row[f]);
+      const fields = [
+        'name',
+        'description',
+        'icon',
+        'color',
+        'isPublic',
+        'joinPolicy',
+        'listingBlurb',
+        'listingTags',
+      ] as const;
+      const changed = fields.filter((f) => !sameValue(before[f], row[f]));
       if (changed.length)
         await this.audit.record(tx, {
           teamId,
@@ -185,13 +207,16 @@ export class TeamsService {
       isOwner: access.isOwner,
       permissions: permissionsToString(access.perms),
       projects,
+      pendingRequests: hasPermission(access.perms, Permission.MANAGE_MEMBERS)
+        ? await this.prisma.joinRequest.count({ where: { teamId, pending: 1 } })
+        : 0,
     };
   }
 
   /**
    * Removes a person from a team and, with them, from every project and sub-project of it. The
-   * owner cannot be removed (ownership is transferred first, phase 5). People may remove
-   * themselves; removing someone else needs MANAGE_MEMBERS.
+   * owner cannot be removed (ownership is transferred first). People may remove themselves (leave);
+   * removing someone else (kick) needs MANAGE_MEMBERS and a rank above theirs, unless the owner does it.
    */
   async removeMember(userId: string, teamId: string, targetId: string): Promise<void> {
     const access = await this.perms.teamAccess(userId, teamId);
@@ -200,6 +225,7 @@ export class TeamsService {
       throw new ForbiddenException('forbidden');
     if (targetId === access.team.ownerId)
       throw new UnprocessableEntityException('owner_cannot_leave');
+    if (targetId !== userId) await this.assertOutranks(access, targetId);
     await this.prisma.$transaction(async (tx) => {
       const roles = await tx.memberRole.findMany({ where: { userId: targetId, role: { teamId } }, include: { role: true } });
       if ((await tx.teamMember.count({ where: { teamId, userId: targetId } })) === 0) return;
@@ -217,6 +243,17 @@ export class TeamsService {
     });
   }
 
+  /**
+   * Whoever removes or bans somebody must rank strictly above them (the owner, who is above every role, always does).
+   * Somebody who is not in the team has no roles: there is nobody to outrank.
+   */
+  async assertOutranks(actor: TeamAccess, targetId: string): Promise<void> {
+    if (actor.isOwner) return;
+    const target = await this.perms.teamAccess(targetId, actor.team.id);
+    if (!target) return;
+    if (target.isOwner || this.perms.rankIn(target) >= this.perms.rankIn(actor)) throw new ForbiddenException('role_at_or_above');
+  }
+
   /** The membership rows, the roles they held and the overwrites that named them; callers check who may do it. */
   async dropMember(tx: Tx, teamId: string, userId: string): Promise<void> {
     await tx.projectMember.deleteMany({ where: { userId, project: { teamId } } });
@@ -226,21 +263,30 @@ export class TeamsService {
       await tx.overwrite.deleteMany({
         where: { subjectKind: 'member', subjectId: userId, targetKind: 'project', targetId: { in: projects.map((p) => p.id) } },
       });
+    // Invitations the person made stop working with them: whatever roles they carry were theirs to give.
+    await tx.invite.updateMany({
+      where: { teamId, invitedBy: userId, revokedAt: null, acceptedAt: null },
+      data: { revokedAt: new Date() },
+    });
     await tx.teamMember.deleteMany({ where: { teamId, userId } });
   }
 
-  /** Adds a person to a team, within the team's member limit. (Invites and joining arrive with phase 5.) */
-  async addMember(tx: Tx, teamId: string, userId: string, enforceLimit = true): Promise<void> {
-    if ((await tx.teamMember.count({ where: { teamId, userId } })) > 0) return;
+  /**
+   * Adds a person to a team, within the team's member limit (413 `quota_exceeded`, scope team). Every way of joining
+   * comes through here: the team row is locked first, so joins happen one at a time and the limit holds under load.
+   * Returns false when the person was already a member (they do not take a second seat).
+   */
+  async addMember(tx: Tx, teamId: string, userId: string, enforceLimit = true): Promise<boolean> {
+    await tx.$queryRaw`SELECT \`id\` FROM \`Team\` WHERE \`id\` = ${teamId} FOR UPDATE`;
+    if ((await tx.teamMember.count({ where: { teamId, userId } })) > 0) return false;
     if (enforceLimit) {
       const limits = await this.quota.limitFor('team', teamId, tx);
-      if (
-        limits.maxMembers > 0 &&
-        (await tx.teamMember.count({ where: { teamId } })) >= limits.maxMembers
-      )
-        throw new ConflictException('member_limit_reached');
+      const members = await tx.teamMember.count({ where: { teamId } });
+      if (limits.maxMembers > 0 && members >= limits.maxMembers)
+        throw new QuotaExceeded('team', limits.maxMembers, members, 1);
     }
     await tx.teamMember.create({ data: { teamId, userId } });
+    return true;
   }
 
   // ---------------------------------------------------------------- ownership promised by email
@@ -262,6 +308,7 @@ export class TeamsService {
     });
     if (!pending.length) return 0;
     let claimed = 0;
+    const named: string[] = [];
     await this.prisma.$transaction(async (tx) => {
       for (const p of pending) {
         if (p.team.deletedAt === null && p.team.ownerId === null) {
@@ -277,12 +324,17 @@ export class TeamsService {
             after: { ownerId: userId, email: p.email },
           });
           claimed++;
+          named.push(p.team.name);
         }
         await tx.pendingOwner.delete({ where: { id: p.id } });
       }
     });
-    if (claimed)
+    if (claimed) {
       this.log.log(`${userId} became the owner of ${claimed} team(s) created for their address`);
+      const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true, displayName: true, locale: true } });
+      if (me)
+        for (const team of named) await this.mail.sendOwnership(me.email, me.displayName, me.locale as Locale, team, 'assigned');
+    }
     return claimed;
   }
 
@@ -340,6 +392,11 @@ export class TeamsService {
     this.log.log(
       `team ${teamId} created by ${adminId} for ${input.ownerEmail}${ownerId ? '' : ' (pending: no verified account yet)'}`,
     );
+    if (!ownerId) {
+      // The person has no verified account yet: tell them the team is waiting (in the administrator's language).
+      const admin = await this.prisma.user.findUnique({ where: { id: adminId }, select: { locale: true } });
+      await this.mail.sendOwnership(input.ownerEmail, null, (admin?.locale ?? 'en') as Locale, input.name, 'offered');
+    }
     return this.adminOne(teamId);
   }
 

@@ -995,7 +995,7 @@ describe('storage of teams and projects', () => {
     await t.prisma.$transaction((tx) => svc.addMember(tx, team.id, member.id));
     await expect(
       t.prisma.$transaction((tx) => svc.addMember(tx, team.id, outsider.id)),
-    ).rejects.toThrow('member_limit_reached');
+    ).rejects.toMatchObject({ response: { code: 'quota_exceeded', scope: 'team', limit: 2 } });
     // adding someone who is already in is not a second seat
     await t.prisma.$transaction((tx) => svc.addMember(tx, team.id, member.id));
   });

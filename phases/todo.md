@@ -27,11 +27,12 @@ Tick a phase only when its **Definition of done** (see [overview.md](overview.md
   - [x] allow/deny overwrites (tri-state editor)
   - [x] audit log + viewer
   - [x] tests: shared +116 (hierarchy matrix, 5000-case decision trace), server +37 (incl. migration), web e2e +2
-- [ ] **Phase 5**: [Joining teams](phase-5.md)
-  - [ ] email invites (with or without an account)
-  - [ ] invite links
-  - [ ] public directory, join policy, requests
-  - [ ] leave, kick, ownership transfer
+- [x] **Phase 5**: [Joining teams](phase-5.md)
+  - [x] email invites (with or without an account)
+  - [x] invite links
+  - [x] public directory, join policy, requests
+  - [x] leave, kick, ban, ownership transfer
+  - [x] tests: server +36 (incl. migration), web e2e +4
 - [ ] **Phase 6**: [Realtime infrastructure](phase-6.md)
   - [ ] Socket.IO gateway with JWT auth and permission-checked rooms
   - [ ] presence, event bus, Redis adapter

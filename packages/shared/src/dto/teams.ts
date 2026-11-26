@@ -13,6 +13,23 @@ export const descriptionSchema = z.string().trim().max(DESCRIPTION_MAX);
 export const joinPolicySchema = z.enum(['open', 'request']);
 export type JoinPolicy = z.infer<typeof joinPolicySchema>;
 
+export const TAG_MAX = 24;
+export const MAX_TAGS = 8;
+export const BLURB_MAX = 200;
+
+export const tagSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1)
+  .max(TAG_MAX)
+  .regex(/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u);
+export const listingTagsSchema = z
+  .array(tagSchema)
+  .max(MAX_TAGS)
+  .transform((tags) => [...new Set(tags)]);
+export const listingBlurbSchema = z.string().trim().max(BLURB_MAX);
+
 // ---------------------------------------------------------------- teams
 
 export interface TeamDto {
@@ -24,6 +41,9 @@ export interface TeamDto {
   description: string;
   isPublic: boolean;
   joinPolicy: JoinPolicy;
+  /** The line shown on the directory card (public teams). */
+  listingBlurb: string;
+  listingTags: string[];
   /** The team own space (its notebooks and sync cursor). */
   spaceId: string;
   ownerId: string | null;
@@ -41,6 +61,8 @@ export const updateTeamSchema = z
     color: colorSchema,
     isPublic: z.boolean(),
     joinPolicy: joinPolicySchema,
+    listingBlurb: listingBlurbSchema,
+    listingTags: listingTagsSchema,
   })
   .partial();
 export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
@@ -63,6 +85,8 @@ export interface TeamMeDto {
   permissions: string;
   /** Resolved permissions inside every project the person can see, by project id. */
   projects: Record<string, string>;
+  /** Join requests waiting for a decision; counted only for people who may decide (`MANAGE_MEMBERS`), else 0. */
+  pendingRequests: number;
 }
 
 // ---------------------------------------------------------------- admin: teams

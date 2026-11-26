@@ -423,7 +423,8 @@
   },
   "rail": {
     "home": "My notes",
-    "label": "Spaces"
+    "label": "Spaces",
+    "browse": "Browse public teams"
   },
   "breadcrumb": {
     "label": "Where you are"
@@ -465,12 +466,27 @@
       "members": "Members",
       "roles": "Roles",
       "viewAs": "View as",
-      "audit": "Audit log"
+      "audit": "Audit log",
+      "invites": "Invitations",
+      "requests": "Requests",
+      "bans": "Bans",
+      "discover": "Discoverability"
     }
   },
   "members": {
     "nickname": "Nickname",
-    "nicknameLabel": "Nickname (leave empty to remove)"
+    "nicknameLabel": "Nickname (leave empty to remove)",
+    "moderate": "Remove or ban",
+    "kick": "Remove from team",
+    "kickTitle": "Remove from team",
+    "kickText": "{{name}} will lose access to the team and everything in it. They can come back with a new invitation.",
+    "ban": "Ban",
+    "banTitle": "Ban from team",
+    "banReason": "Reason (only the people who manage members see it)",
+    "leaveTitle": "Leave team",
+    "leaveHint": "You lose access to the team and everything in it. You can come back with a new invitation.",
+    "leave": "Leave team",
+    "leaveConfirm": "Leave \"{{name}}\"?"
   },
   "roles": {
     "title": "Roles",
@@ -650,7 +666,15 @@
       "team_update": "Team changed",
       "team_delete": "Team deleted",
       "team_owner_transfer": "Ownership changed",
-      "quota_override": "Storage limit changed"
+      "quota_override": "Storage limit changed",
+      "member_add": "Member joined",
+      "member_ban": "Member banned",
+      "member_unban": "Ban lifted",
+      "invite_create": "Invitation created",
+      "invite_resend": "Invitation sent again",
+      "invite_revoke": "Invitation withdrawn",
+      "request_approve": "Request to join approved",
+      "request_deny": "Request to join denied"
     },
     "actor": "Done by",
     "from": "From",
@@ -665,8 +689,130 @@
     "target": {
       "team": "the team",
       "project": "a project",
-      "user": "an account"
+      "user": "an account",
+      "invite": "an invitation"
     },
     "actionLabel": "Action"
+  },
+  "ownership": {
+    "transfer": {
+      "hint": "You are the owner. Hand the team to another member before you leave it. You keep your roles but are no longer above everybody.",
+      "to": "New owner",
+      "typeName": "Type the team name ({{name}}) to confirm",
+      "password": "Your password",
+      "button": "Transfer ownership",
+      "done": "Ownership transferred.",
+      "wrongPassword": "That password is not right."
+    }
+  },
+  "invite": {
+    "invitedTo": "You are invited to join",
+    "members": "Members: {{count}}",
+    "createAccount": "Create account to join",
+    "signIn": "Sign in to join",
+    "join": "Join team",
+    "signOut": "Sign out and use another account",
+    "verifyFirst": "Confirm your email address first (we sent you a message). You join the team as soon as you do.",
+    "invalidTitle": "This invitation does not work",
+    "invalidText": "It may have expired, been withdrawn or already been used. Ask for a new one.",
+    "registerHint": "If the invitation was sent to an email address, use that address to create your account.",
+    "roles": "Roles they get",
+    "linkTitle": "Invite link",
+    "linkHint": "Anyone with the link can join, up to the limit you set. It stops working when it expires.",
+    "expires": "Expires after (days)",
+    "days": "{{count}}",
+    "maxUses": "Most people who may use it",
+    "unlimited": "No limit",
+    "createLink": "Create link",
+    "linkCreated": "Copy the link now. It is not shown again.",
+    "copy": "Copy",
+    "copied": "Link copied.",
+    "emailTitle": "Invite by email",
+    "emailHint": "Each address gets its own invitation, good for that address only, for 14 days.",
+    "emailLabel": "Email addresses",
+    "emailPlaceholder": "ana@example.com, rui@example.com",
+    "sendEmails": "Send invitations",
+    "sent": "Invitations sent: {{count}}",
+    "badAddress": "\"{{address}}\" is not an email address.",
+    "list": "Invitations",
+    "none": "No invitations yet.",
+    "kindLink": "Invite link",
+    "by": "by {{name}}",
+    "usesOf": "used {{used}} of {{max}}",
+    "uses": "used {{used}}",
+    "expiresOn": "expires {{date}}",
+    "status": {
+      "active": "Open",
+      "used": "Used",
+      "expired": "Expired",
+      "revoked": "Withdrawn"
+    },
+    "resend": "Send again",
+    "resent": "Sent again to {{email}}.",
+    "revoke": "Withdraw",
+    "revokeTitle": "Withdraw this invitation?",
+    "revokeText": "It stops working at once. {{what}}",
+    "err": {
+      "invite_other_address": "This invitation was sent to another email address. Sign out and use the address it was sent to.",
+      "email_not_verified": "Confirm your email address first.",
+      "quota_exceeded": "This team is full.",
+      "invalid_role": "One of the roles cannot be used.",
+      "project_must_be_top_level": "Invitations can add people to top-level projects only.",
+      "role_at_or_above": "You can only give roles below your own.",
+      "permission_not_held": "You cannot give a role with permissions you do not have.",
+      "missing_manage_roles": "You need the \"Manage roles\" permission to attach roles.",
+      "forbidden": "You do not have permission to do that.",
+      "invite_closed": "This invitation is no longer open.",
+      "not_an_email_invite": "Only invitations to an email address can be sent again."
+    }
+  },
+  "requests": {
+    "none": "No requests waiting.",
+    "approve": "Approve",
+    "deny": "Deny",
+    "approved": "{{name}} is in the team now.",
+    "denied": "Request from {{name}} denied."
+  },
+  "bans": {
+    "hint": "People on this list cannot join the team in any way (invitation, link, directory or request) until you lift the ban.",
+    "none": "Nobody is banned.",
+    "unban": "Lift ban",
+    "lifted": "{{name}} can join again."
+  },
+  "discover": {
+    "public": "List this team in the public directory",
+    "publicHint": "Anyone signed in can find it, see its name, description and size, and join or ask to join.",
+    "policy": "How people get in",
+    "policyRequest": "They ask, and someone approves",
+    "policyOpen": "Anyone can join at once",
+    "blurb": "One line about the team",
+    "tags": "Tags",
+    "tagsPlaceholder": "rust, open source",
+    "tagsHint": "Separate with commas. Up to {{max}}.",
+    "saved": "Saved.",
+    "invalid": "Check the line and the tags: they are too long or not allowed."
+  },
+  "directory": {
+    "title": "Public teams",
+    "hint": "Teams that welcome new people. Private teams are never listed.",
+    "search": "Search by name or topic",
+    "searchButton": "Search",
+    "tag": "Tag",
+    "clearTag": "Show all",
+    "verifyFirst": "Confirm your email address to join a team.",
+    "empty": "No public teams match."
+  },
+  "join": {
+    "open": "Join",
+    "request": "Ask to join",
+    "requested": "Request sent",
+    "withdraw": "Withdraw",
+    "requestTitle": "Ask to join",
+    "messageLabel": "A few words for the team (optional)",
+    "sent": "Your request to join {{team}} was sent.",
+    "err": {
+      "banned": "You cannot join this team.",
+      "full": "This team is full."
+    }
   }
 }

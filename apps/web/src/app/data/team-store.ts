@@ -106,6 +106,11 @@ export class TeamStore {
     return set !== null && hasPermission(set, permission);
   }
 
+  /** Join requests waiting for a decision, as last read (0 unless the person may decide on them). */
+  pendingRequests(teamId: string): number {
+    return this.meByTeam().get(teamId)?.pendingRequests ?? 0;
+  }
+
   /** The permission set (decimal string) the person has in the team or one of its projects, as last read; null if unknown. */
   permissionsOf(teamId: string, projectId?: string): string | null {
     const me = this.meByTeam().get(teamId);

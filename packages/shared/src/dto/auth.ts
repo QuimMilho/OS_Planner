@@ -12,6 +12,8 @@ export const registerSchema = z.object({
   password: passwordSchema,
   displayName: z.string().trim().min(1).max(80),
   locale: localeSchema.default('en'),
+  /** The token of an invite the visitor came with; it is applied once the email address is verified. */
+  inviteToken: z.string().min(20).max(200).optional(),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
@@ -55,8 +57,6 @@ export interface UserDto {
   /** The personal storage of this account. */
   quota: QuotaDto;
   /** The account's own space: its notebooks, sync cursor and storage. */
-  personalSpaceId: string;
-  /** The account own space: its notebooks, sync cursor and storage. */
   personalSpaceId: string;
 }
 

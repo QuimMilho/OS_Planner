@@ -223,7 +223,7 @@ permissions of `@everyone` and of the person's roles are combined, then channel-
 A project is visible to its members and to anyone who can manage projects; members of a sub-project must belong to its parent.
 Deleting a team or project removes it at once; its content is purged for good after the 30-day trash period.
 
-**Roles, overwrites and the audit log.** Team settings (the gear next to the team name) has four tabs:
+**Roles, overwrites and the audit log.** Team settings (the gear next to the team name) has these tabs (the ones for joining people, described below, are *Invitations*, *Requests*, *Bans* and *Discoverability*, each shown only to people who may use it):
 
 - **Members**: who is in the team with their role chips; add or remove a role with one click, set a nickname.
 - **Roles**: create roles with a colour, "show separately" and "allow @mention", pick their permissions from a searchable grid grouped like
@@ -248,6 +248,29 @@ what you hold; deleting a role takes it off its members and out of every overwri
 its roles and overwrites. The last administrator cannot leave or lose the role (this matters once an owner's account is gone), and
 the owner cannot be removed. Every refusal answers 403 with the reason (for example `role_at_or_above`) and writes no audit entry.
 
+**Joining teams.** Teams are made by an administrator, but people get in on their own:
+
+- **Invitations** (team settings → *Invitations*, needs *Create invites*). An **email invitation** goes to one address, is good for
+  that address only and for 14 days. The mail links to `/invite/<token>`; somebody with no account registers from there with the
+  invited address, and joins the moment they verify it. A **link** can be used by anybody who has it, up to a number of people
+  you choose, for 7 days by default (1 to 90). An invitation can carry roles (you can only attach roles you could assign by hand)
+  and a top-level project to join. Only a hash of the token is stored, so a link is shown once, when it is created. Unknown,
+  expired, withdrawn and used-up tokens all answer the same `404 invalid_invite`, and the preview a visitor gets shows the team's
+  name, icon and size, never its members. Withdrawing an invitation works at once; an invitation made by someone who has since
+  left the team stops working.
+- **Public directory** (the compass at the bottom of the rail, `/app/directory`). A team with *Discoverability* switched on is
+  listed with its name, one-line blurb and up to eight tags, and either lets anybody **join** or lets them **ask**; the people who
+  *Manage members* see a badge on the team in the rail and a *Requests* tab to approve or deny, and the person is told by mail.
+  Private teams never appear, not even when their exact name is searched.
+- **Leaving, removing, banning.** Anybody can leave; the owner must first **transfer ownership** (type the team name and your
+  password; the previous owner keeps their roles but loses the owner's bypass). Removing or banning someone needs *Manage members*
+  and a rank above theirs. A **ban** removes the person and keeps them out by every way in (invitation, link, directory, request)
+  until it is lifted; the person is not told who banned them. A person who is removed or leaves loses the team from their device on
+  the next sync.
+- Joining always needs a verified email address, respects the team's member limit (`413 quota_exceeded`, scope `team`; joins are
+  serialised per team, so the limit holds under load), and is written to the audit log (`invite.*`, `member.*`, `request.*`).
+- No new settings: the limit is `MAX_MEMBERS_PER_TEAM` (or the admin's override), mail uses the existing `SMTP_*` and `APP_URL`.
+
 `GET /api/sync/changes?cursors={"<spaceId>":<seq>}` returns what changed per space plus `revokedSpaces` (spaces to forget);
 the older `?since=` form still works and means the personal space.
 
@@ -255,8 +278,8 @@ the older `?since=` form still works and means the personal space.
 
 ```bash
 npm run build                    # shared, web, server
-npm test                         # unit + integration: build scripts (23), shared (90), server (242, needs MySQL)
-npm run e2e                      # the real website in real Chrome (36 scenarios, 5 of them with the API on another origin, 8 for themes, 2 for storage limits, 2 for teams; needs MySQL + Mailpit)
+npm test                         # unit + integration: build scripts (23), shared (206), server (315, needs MySQL)
+npm run e2e                      # the real website in real Chrome (42 scenarios, 5 of them with the API on another origin, 8 for themes, 2 for storage limits, 2 for teams, 2 for roles, 4 for joining teams; needs MySQL + Mailpit)
 npm test -w @os-planner/desktop       # the Electron shell, packaged app, publish + download (needs a Windows build)
 node scripts/i18n-check.mjs      # every translation key exists in English and Portuguese
 npm run check:themes             # contrast of every colour theme (also part of `npm test`)

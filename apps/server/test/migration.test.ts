@@ -255,6 +255,38 @@ describe('migrating a database that holds data from before', () => {
       expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n)).toBe(0);
   });
 
+  it('phase 5: teams, members and owners stay as they were; the directory columns have neutral values and the new tables are empty', async () => {
+    await apply(only('joining_teams'));
+
+    const teams = await rows<{ slug: string; isPublic: number; joinPolicy: string; listingBlurb: string; listingTags: unknown; ownerId: string }>(
+      'SELECT slug, isPublic, joinPolicy, listingBlurb, listingTags, ownerId FROM `Team` ORDER BY slug',
+    );
+    expect(teams.map((t) => t.slug)).toEqual(['custom-perms', 'default-perms']);
+    for (const t of teams) {
+      expect(t.ownerId).toBe(alice.id);
+      expect(t.listingBlurb).toBe('');
+      expect(t.listingTags).toBeNull();
+      expect(Number(t.isPublic)).toBe(0); // nothing is listed until its owner says so
+      expect(t.joinPolicy).toBe('request');
+    }
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `TeamMember`'))[0]!.n)).toBe(4);
+    for (const table of ['Invite', 'PendingInvite', 'JoinRequest', 'Ban'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n)).toBe(0);
+
+    // one pending request per person and team, but any number of decided ones
+    const team = teams[0]!;
+    const teamId = (await rows<{ id: string }>('SELECT id FROM `Team` WHERE slug = ?', [team.slug]))[0]!.id;
+    const ask = (status: string, pending: number | null) =>
+      conn.query(
+        'INSERT INTO `JoinRequest` (id, teamId, userId, status, pending) VALUES (?, ?, ?, ?, ?)',
+        [randomUUID(), teamId, bob.id, status, pending],
+      );
+    await ask('pending', 1);
+    await expect(ask('pending', 1)).rejects.toThrow(/Duplicate entry/);
+    await ask('denied', null);
+    await ask('denied', null);
+  });
+
   it('sync returns identical data before and after, through the old cursor and through per-space cursors', async () => {
     const url = new URL(savedUrl!);
     url.pathname = `/${DB}`;
@@ -351,6 +383,10 @@ describe('migrating a database that holds data from before', () => {
       'MemberRole',
       'Overwrite',
       'AuditLog',
+      'Invite',
+      'PendingInvite',
+      'JoinRequest',
+      'Ban',
     ])
       expect(tables).toContain(expected);
     expect(TEST_DB).not.toBe(DB);

@@ -10,6 +10,7 @@ import { DownloadsModule } from './downloads/downloads.module.js';
 import { ExportModule } from './export/export.module.js';
 import { HealthController } from './health.controller.js';
 import { MailModule } from './mail/mail.module.js';
+import { MembershipModule } from './membership/membership.module.js';
 import { MediaModule } from './media/media.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { QuotaModule } from './quota/quota.module.js';
@@ -37,6 +38,7 @@ import { UsersModule } from './users/users.module.js';
     RolesModule,
     QuotaModule,
     TeamsModule,
+    MembershipModule,
     MailModule,
     AuthModule,
     UsersModule,

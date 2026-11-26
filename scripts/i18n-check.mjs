@@ -44,9 +44,11 @@ const DYNAMIC = {
   'permissions.group.': PERMISSION_GROUPS,
   'overwrite.': ['allow', 'inherit', 'deny'],
   'roles.err.': ['role_at_or_above', 'permission_not_held', 'missing_manage_roles', 'everyone_protected', 'administrator_owner_only', 'last_administrator', 'role_limit_reached', 'invalid_order'],
-  'team.tab.': ['members', 'roles', 'viewAs', 'audit'],
+  'team.tab.': ['members', 'invites', 'requests', 'bans', 'discover', 'roles', 'viewAs', 'audit'],
+  'invite.status.': ['active', 'used', 'expired', 'revoked'],
+  'invite.err.': ['invite_other_address', 'email_not_verified', 'quota_exceeded', 'invalid_role', 'project_must_be_top_level', 'role_at_or_above', 'permission_not_held', 'missing_manage_roles', 'forbidden', 'invite_closed', 'not_an_email_invite'],
   'audit.action.': AUDIT_ACTIONS,
-  'audit.target.': ['team', 'project', 'user'],
+  'audit.target.': ['team', 'project', 'user', 'invite'],
   'errors.': ['invalid_credentials', 'email_taken', 'password_too_common', 'offline', 'invalid_or_expired_token', 'http_429', 'generic'],
 };
 
@@ -55,6 +57,7 @@ const EXTRA = [
   'common.ok', 'editor.mathBlock', 'editor.mathInline', 'editor.removeLink', 'editor.youtubeInvalid', 'editor.linkInvalid',
   'export.failed', 'export.mdHintPage', 'export.mdHintZip', 'auth.verifyBanner', 'auth.verifyBannerUploads',
   'sync.quotaExceeded', 'sync.uploadRefused', 'sync.conflictCopy', 'sync.restoredCopy',
+  'ownership.transfer.wrongPassword', 'invite.usesOf', 'invite.uses', 'requests.approved', 'requests.denied', 'discover.invalid', 'join.open', 'join.err.banned', 'join.err.full',
   'roles.title', 'viewAs.reason.owner', 'viewAs.reason.administratorRole', 'viewAs.reason.administratorEveryone', 'viewAs.reason.base',
   'viewAs.reason.member', 'viewAs.reason.allowed', 'viewAs.reason.denied', 'viewAs.reason.masked', 'viewAs.reason.none',
 ];

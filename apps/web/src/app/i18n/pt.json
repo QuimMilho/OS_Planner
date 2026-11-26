@@ -423,7 +423,8 @@
   },
   "rail": {
     "home": "As minhas notas",
-    "label": "Espaços"
+    "label": "Espaços",
+    "browse": "Explorar equipas públicas"
   },
   "breadcrumb": {
     "label": "Onde está"
@@ -465,12 +466,27 @@
       "members": "Membros",
       "roles": "Cargos",
       "viewAs": "Ver como",
-      "audit": "Registo de auditoria"
+      "audit": "Registo de auditoria",
+      "invites": "Convites",
+      "requests": "Pedidos",
+      "bans": "Banimentos",
+      "discover": "Visibilidade"
     }
   },
   "members": {
     "nickname": "Alcunha",
-    "nicknameLabel": "Alcunha (deixe vazio para remover)"
+    "nicknameLabel": "Alcunha (deixe vazio para remover)",
+    "moderate": "Remover ou banir",
+    "kick": "Remover da equipa",
+    "kickTitle": "Remover da equipa",
+    "kickText": "{{name}} perde o acesso à equipa e a tudo o que lá está. Pode voltar com um novo convite.",
+    "ban": "Banir",
+    "banTitle": "Banir da equipa",
+    "banReason": "Motivo (só quem gere os membros o vê)",
+    "leaveTitle": "Sair da equipa",
+    "leaveHint": "Perde o acesso à equipa e a tudo o que lá está. Pode voltar com um novo convite.",
+    "leave": "Sair da equipa",
+    "leaveConfirm": "Sair de \"{{name}}\"?"
   },
   "roles": {
     "title": "Cargos",
@@ -650,7 +666,15 @@
       "team_update": "Equipa alterada",
       "team_delete": "Equipa apagada",
       "team_owner_transfer": "Propriedade alterada",
-      "quota_override": "Limite de armazenamento alterado"
+      "quota_override": "Limite de armazenamento alterado",
+      "member_add": "Membro entrou",
+      "member_ban": "Membro banido",
+      "member_unban": "Banimento levantado",
+      "invite_create": "Convite criado",
+      "invite_resend": "Convite enviado de novo",
+      "invite_revoke": "Convite retirado",
+      "request_approve": "Pedido para entrar aprovado",
+      "request_deny": "Pedido para entrar recusado"
     },
     "actor": "Feito por",
     "from": "De",
@@ -665,8 +689,130 @@
     "target": {
       "team": "a equipa",
       "project": "um projeto",
-      "user": "uma conta"
+      "user": "uma conta",
+      "invite": "um convite"
     },
     "actionLabel": "Ação"
+  },
+  "ownership": {
+    "transfer": {
+      "hint": "É o dono. Passe a equipa a outro membro antes de sair. Mantém os seus cargos, mas deixa de estar acima de todos.",
+      "to": "Novo dono",
+      "typeName": "Escreva o nome da equipa ({{name}}) para confirmar",
+      "password": "A sua palavra-passe",
+      "button": "Passar a propriedade",
+      "done": "Propriedade transferida.",
+      "wrongPassword": "Essa palavra-passe não está certa."
+    }
+  },
+  "invite": {
+    "invitedTo": "Foi convidado para a equipa",
+    "members": "Membros: {{count}}",
+    "createAccount": "Criar conta para entrar",
+    "signIn": "Iniciar sessão para entrar",
+    "join": "Entrar na equipa",
+    "signOut": "Terminar sessão e usar outra conta",
+    "verifyFirst": "Confirme primeiro o seu endereço de email (enviámos-lhe uma mensagem). Entra na equipa assim que o fizer.",
+    "invalidTitle": "Este convite não funciona",
+    "invalidText": "Pode ter expirado, ter sido retirado ou já ter sido usado. Peça um novo.",
+    "registerHint": "Se o convite foi enviado para um endereço de email, use esse endereço para criar a conta.",
+    "roles": "Cargos que recebem",
+    "linkTitle": "Ligação de convite",
+    "linkHint": "Qualquer pessoa com a ligação pode entrar, até ao limite que definir. Deixa de funcionar quando expira.",
+    "expires": "Expira após (dias)",
+    "days": "{{count}}",
+    "maxUses": "Máximo de pessoas que a podem usar",
+    "unlimited": "Sem limite",
+    "createLink": "Criar ligação",
+    "linkCreated": "Copie a ligação agora. Não volta a ser mostrada.",
+    "copy": "Copiar",
+    "copied": "Ligação copiada.",
+    "emailTitle": "Convidar por email",
+    "emailHint": "Cada endereço recebe o seu próprio convite, válido só para esse endereço, durante 14 dias.",
+    "emailLabel": "Endereços de email",
+    "emailPlaceholder": "ana@exemplo.com, rui@exemplo.com",
+    "sendEmails": "Enviar convites",
+    "sent": "Convites enviados: {{count}}",
+    "badAddress": "\"{{address}}\" não é um endereço de email.",
+    "list": "Convites",
+    "none": "Ainda não há convites.",
+    "kindLink": "Ligação de convite",
+    "by": "por {{name}}",
+    "usesOf": "usado {{used}} de {{max}}",
+    "uses": "usado {{used}}",
+    "expiresOn": "expira em {{date}}",
+    "status": {
+      "active": "Aberto",
+      "used": "Usado",
+      "expired": "Expirado",
+      "revoked": "Retirado"
+    },
+    "resend": "Enviar de novo",
+    "resent": "Enviado de novo para {{email}}.",
+    "revoke": "Retirar",
+    "revokeTitle": "Retirar este convite?",
+    "revokeText": "Deixa de funcionar de imediato. {{what}}",
+    "err": {
+      "invite_other_address": "Este convite foi enviado para outro endereço de email. Termine a sessão e use o endereço para onde foi enviado.",
+      "email_not_verified": "Confirme primeiro o seu endereço de email.",
+      "quota_exceeded": "Esta equipa está cheia.",
+      "invalid_role": "Um dos cargos não pode ser usado.",
+      "project_must_be_top_level": "Os convites só podem juntar pessoas a projetos de topo.",
+      "role_at_or_above": "Só pode dar cargos abaixo do seu.",
+      "permission_not_held": "Não pode dar um cargo com permissões que não tem.",
+      "missing_manage_roles": "Precisa da permissão \"Gerir cargos\" para associar cargos.",
+      "forbidden": "Não tem permissão para fazer isso.",
+      "invite_closed": "Este convite já não está aberto.",
+      "not_an_email_invite": "Só os convites para um endereço de email podem ser enviados de novo."
+    }
+  },
+  "requests": {
+    "none": "Não há pedidos à espera.",
+    "approve": "Aprovar",
+    "deny": "Recusar",
+    "approved": "{{name}} já está na equipa.",
+    "denied": "Pedido de {{name}} recusado."
+  },
+  "bans": {
+    "hint": "As pessoas desta lista não podem entrar na equipa de nenhuma forma (convite, ligação, diretório ou pedido) até levantar o banimento.",
+    "none": "Ninguém está banido.",
+    "unban": "Levantar banimento",
+    "lifted": "{{name}} já pode entrar de novo."
+  },
+  "discover": {
+    "public": "Listar esta equipa no diretório público",
+    "publicHint": "Qualquer pessoa com sessão iniciada a pode encontrar, ver o nome, a descrição e o tamanho, e entrar ou pedir para entrar.",
+    "policy": "Como se entra",
+    "policyRequest": "Pedem e alguém aprova",
+    "policyOpen": "Qualquer pessoa entra de imediato",
+    "blurb": "Uma linha sobre a equipa",
+    "tags": "Etiquetas",
+    "tagsPlaceholder": "rust, código aberto",
+    "tagsHint": "Separe com vírgulas. No máximo {{max}}.",
+    "saved": "Guardado.",
+    "invalid": "Verifique a linha e as etiquetas: são demasiado longas ou não são permitidas."
+  },
+  "directory": {
+    "title": "Equipas públicas",
+    "hint": "Equipas que recebem pessoas novas. As equipas privadas nunca aparecem aqui.",
+    "search": "Pesquisar por nome ou tema",
+    "searchButton": "Pesquisar",
+    "tag": "Etiqueta",
+    "clearTag": "Mostrar todas",
+    "verifyFirst": "Confirme o seu endereço de email para entrar numa equipa.",
+    "empty": "Nenhuma equipa pública corresponde."
+  },
+  "join": {
+    "open": "Entrar",
+    "request": "Pedir para entrar",
+    "requested": "Pedido enviado",
+    "withdraw": "Retirar",
+    "requestTitle": "Pedir para entrar",
+    "messageLabel": "Umas palavras para a equipa (opcional)",
+    "sent": "O seu pedido para entrar em {{team}} foi enviado.",
+    "err": {
+      "banned": "Não pode entrar nesta equipa.",
+      "full": "Esta equipa está cheia."
+    }
   }
 }

@@ -1,15 +1,19 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { Permission, checkRoleAction, permissionsFromString } from '@os-planner/shared/lite';
 import type { RoleDto, TeamMemberDto } from '@os-planner/shared';
-import { AuthStore, type ApiProblem } from '../../core/auth-store';
+import { AuthStore, toProblem, type ApiProblem } from '../../core/auth-store';
 import { Notify } from '../../core/notify';
+import { MembershipStore } from '../../data/membership-store';
 import { RolesStore } from '../../data/roles-store';
 import { TeamStore } from '../../data/team-store';
 import { Dialogs } from '../../shared/dialogs';
+import { accessErrorKey } from './access-tabs';
 import { roleErrorKey } from './roles-editor';
 
 interface Section {
@@ -21,7 +25,7 @@ interface Section {
 /** Who is in the team and which roles they hold: add or remove a role with one click, set a nickname. */
 @Component({
   selector: 'app-members-tab',
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, TranslocoPipe],
+  imports: [FormsModule, MatButtonModule, MatIconModule, MatMenuModule, TranslocoPipe],
   template: `
     <div data-members-tab>
       @for (s of sections(); track s.key) {
@@ -103,10 +107,63 @@ interface Section {
                   <mat-icon>edit</mat-icon>
                 </button>
               }
+              @if (canModerate(m)) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  [matMenuTriggerFor]="modMenu"
+                  [attr.aria-label]="'members.moderate' | transloco"
+                  data-action="member-menu"
+                >
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #modMenu="matMenu">
+                  <button mat-menu-item type="button" (click)="kick(m)" data-action="kick">
+                    <mat-icon>person_remove</mat-icon>{{ 'members.kick' | transloco }}
+                  </button>
+                  <button mat-menu-item type="button" (click)="ban(m)" data-action="ban">
+                    <mat-icon>block</mat-icon>{{ 'members.ban' | transloco }}
+                  </button>
+                </mat-menu>
+              }
             </li>
           }
         </ul>
       }
+
+      <section class="danger" data-danger-zone>
+        <h3>{{ 'members.leaveTitle' | transloco }}</h3>
+        @if (isOwner()) {
+          <p class="muted">{{ 'ownership.transfer.hint' | transloco }}</p>
+          <form class="transfer" (ngSubmit)="transfer()" data-transfer-form>
+            <label>
+              {{ 'ownership.transfer.to' | transloco }}
+              <select name="heir" [(ngModel)]="heir" data-field="heir">
+                <option value="">—</option>
+                @for (m of heirs(); track m.userId) {
+                  <option [value]="m.userId">{{ m.nickname || m.displayName }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              {{ 'ownership.transfer.typeName' | transloco: { name: teamName() } }}
+              <input name="confirmName" [(ngModel)]="confirmName" autocomplete="off" data-field="transfer-name" />
+            </label>
+            <label>
+              {{ 'ownership.transfer.password' | transloco }}
+              <input type="password" name="password" [(ngModel)]="password" autocomplete="current-password" data-field="transfer-password" />
+            </label>
+            <button mat-flat-button type="submit" [disabled]="!canTransfer() || transferring()" data-action="transfer">
+              {{ 'ownership.transfer.button' | transloco }}
+            </button>
+          </form>
+        } @else {
+          <p class="muted">{{ 'members.leaveHint' | transloco }}</p>
+          <button mat-stroked-button type="button" (click)="leave()" data-action="leave-team">
+            {{ 'members.leave' | transloco }}
+          </button>
+        }
+      </section>
     </div>
   `,
   styles: `
@@ -209,6 +266,38 @@ interface Section {
       height: 24px;
       border: 1px dashed var(--border);
     }
+    .danger {
+      margin-top: 36px;
+      padding: 14px 16px;
+      border: 1px solid color-mix(in srgb, var(--mat-sys-error) 50%, var(--border));
+      border-radius: 10px;
+    }
+    .danger h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+    .transfer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .transfer label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .transfer select,
+    .transfer input {
+      font: inherit;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text);
+    }
   `,
 })
 export class MembersTab {
@@ -219,8 +308,19 @@ export class MembersTab {
   private readonly auth = inject(AuthStore);
   private readonly notify = inject(Notify);
   private readonly dialogs = inject(Dialogs);
+  private readonly membership = inject(MembershipStore);
+  private readonly router = inject(Router);
 
+  protected heir = '';
+  protected confirmName = '';
+  protected password = '';
+  protected readonly transferring = signal(false);
   private readonly roles = signal<RoleDto[]>([]);
+  protected readonly team = computed(() => this.teams.teamById().get(this.teamId()) ?? null);
+  protected readonly teamName = computed(() => this.team()?.name ?? '');
+  protected readonly isOwner = computed(() => this.team()?.isOwner === true);
+  /** Whom the owner can hand the team to: anybody else in it. */
+  protected readonly heirs = computed(() => this.members().filter((m) => m.userId !== this.auth.userId()));
   private readonly members = computed(() => this.teams.membersOf(this.teamId()));
   private readonly actor = computed(() =>
     this.store.actor({ kind: 'team', id: this.teamId() }, this.roles()),
@@ -293,6 +393,88 @@ export class MembersTab {
     return (
       m.userId === this.auth.userId() || (this.actor().perms & Permission.MANAGE_MEMBERS) !== 0n
     );
+  }
+
+  /**
+   * Whether the person may remove or ban this member: they hold "Manage members" and rank above them (the owner outranks
+   * everybody; nobody removes the owner or themselves this way). The server checks the same rule.
+   */
+  protected canModerate(m: TeamMemberDto): boolean {
+    if (m.isOwner || m.userId === this.auth.userId()) return false;
+    const actor = this.actor();
+    if (!actor.isOwner && (actor.perms & Permission.MANAGE_MEMBERS) === 0n) return false;
+    if (actor.isOwner) return true;
+    const rank = this.rolesOf(m).reduce((top, r) => Math.max(top, r.position), 0);
+    return actor.rank > rank;
+  }
+
+  protected async kick(m: TeamMemberDto): Promise<void> {
+    const ok = await this.dialogs.confirm({
+      titleKey: 'members.kickTitle',
+      messageKey: 'members.kickText',
+      params: { name: m.nickname || m.displayName },
+      confirmKey: 'members.kick',
+      danger: true,
+    });
+    if (!ok) return;
+    await this.moderate(() => this.membership.kick(this.teamId(), m.userId));
+  }
+
+  protected async ban(m: TeamMemberDto): Promise<void> {
+    const answer = await this.dialogs.prompt({
+      titleKey: 'members.banTitle',
+      labelKey: 'members.banReason',
+      confirmKey: 'members.ban',
+    });
+    if (answer?.action !== 'ok') return;
+    await this.moderate(() => this.membership.ban(this.teamId(), m.userId, answer.value));
+  }
+
+  private async moderate(action: () => Promise<unknown>): Promise<void> {
+    try {
+      await action();
+      await this.load(this.teamId());
+    } catch (e) {
+      this.notify.error(accessErrorKey(e));
+    }
+  }
+
+  protected async leave(): Promise<void> {
+    const ok = await this.dialogs.confirm({
+      titleKey: 'members.leaveTitle',
+      messageKey: 'members.leaveConfirm',
+      params: { name: this.teamName() },
+      confirmKey: 'members.leave',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await this.membership.leave(this.teamId());
+      await this.router.navigateByUrl('/app');
+    } catch (e) {
+      this.notify.error(accessErrorKey(e));
+    }
+  }
+
+  protected canTransfer(): boolean {
+    return !!this.heir && this.confirmName.trim() === this.teamName() && !!this.password;
+  }
+
+  protected async transfer(): Promise<void> {
+    if (!this.canTransfer()) return;
+    this.transferring.set(true);
+    try {
+      await this.membership.transferOwnership(this.teamId(), this.heir, this.password);
+      this.heir = this.confirmName = this.password = '';
+      this.notify.info('ownership.transfer.done');
+      await this.load(this.teamId());
+    } catch (e) {
+      this.notify.error(
+        toProblem(e).code === 'invalid_password' ? 'ownership.transfer.wrongPassword' : accessErrorKey(e),
+      );
+    } finally {
+      this.transferring.set(false);
+    }
   }
 
   protected async add(m: TeamMemberDto, r: RoleDto): Promise<void> {

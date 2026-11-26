@@ -8,11 +8,15 @@ import { MailService } from '../src/mail/mail.service.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 
 export interface SentMail {
-  kind: 'verify' | 'reset';
+  kind: 'verify' | 'reset' | 'invite' | 'decision' | 'ownership';
   to: string;
-  name: string;
+  name: string | null;
   locale: string;
+  /** The secret in the link (verify, reset, invite); empty for the others. */
   token: string;
+  team?: string;
+  approved?: boolean;
+  ownership?: 'offered' | 'assigned';
 }
 
 /** Captures outgoing mail so tests can follow verification and reset links. */
@@ -24,6 +28,18 @@ export class FakeMail {
   }
   async sendPasswordReset(to: string, name: string, locale: string, token: string) {
     this.sent.push({ kind: 'reset', to, name, locale, token });
+    return true;
+  }
+  async sendInvite(to: string, locale: string, inviter: string, team: string, token: string) {
+    this.sent.push({ kind: 'invite', to, name: inviter, locale, token, team });
+    return true;
+  }
+  async sendRequestDecision(to: string, name: string, locale: string, team: string, approved: boolean) {
+    this.sent.push({ kind: 'decision', to, name, locale, token: '', team, approved });
+    return true;
+  }
+  async sendOwnership(to: string, name: string | null, locale: string, team: string, ownership: 'offered' | 'assigned') {
+    this.sent.push({ kind: 'ownership', to, name, locale, token: '', team, ownership });
     return true;
   }
   last(kind: SentMail['kind'], to: string): SentMail | undefined {

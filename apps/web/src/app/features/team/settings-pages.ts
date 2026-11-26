@@ -10,13 +10,23 @@ import { TeamStore } from '../../data/team-store';
 import { Notify } from '../../core/notify';
 import { NotFoundPage } from '../shell/not-found';
 import { AuditTab } from './audit-tab';
+import { BansTab, DiscoverTab, RequestsTab } from './access-tabs';
+import { InvitesTab } from './invites-tab';
 import { MembersTab } from './members-tab';
 import { OverwriteEditor } from './overwrite-editor';
 import { RolesEditor, roleErrorKey } from './roles-editor';
 import { ViewAs } from './view-as';
 
 type Check = 'loading' | 'ready' | 'missing';
-type TeamTab = 'members' | 'roles' | 'viewAs' | 'audit';
+type TeamTab =
+  | 'members'
+  | 'invites'
+  | 'requests'
+  | 'bans'
+  | 'discover'
+  | 'roles'
+  | 'viewAs'
+  | 'audit';
 
 const PAGE_STYLES = `
   .page {
@@ -62,6 +72,18 @@ const PAGE_STYLES = `
   section.block {
     margin-top: 32px;
   }
+  .badge {
+    display: inline-block;
+    min-width: 18px;
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--mat-sys-on-primary);
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+  }
   h2 {
     font-size: 14px;
     margin: 0 0 12px;
@@ -92,6 +114,10 @@ const PAGE_STYLES = `
     MembersTab,
     AuditTab,
     ViewAs,
+    InvitesTab,
+    RequestsTab,
+    BansTab,
+    DiscoverTab,
   ],
   template: `
     @switch (view()) {
@@ -115,6 +141,9 @@ const PAGE_STYLES = `
                 (click)="pick(t)"
               >
                 {{ 'team.tab.' + t | transloco }}
+                @if (t === 'requests' && pending() > 0) {
+                  <span class="badge" data-requests-badge>{{ pending() }}</span>
+                }
               </button>
             }
           </div>
@@ -122,6 +151,18 @@ const PAGE_STYLES = `
           @switch (current()) {
             @case ('members') {
               <app-members-tab [teamId]="teamId()" />
+            }
+            @case ('invites') {
+              <app-invites-tab [teamId]="teamId()" />
+            }
+            @case ('requests') {
+              <app-requests-tab [teamId]="teamId()" />
+            }
+            @case ('bans') {
+              <app-bans-tab [teamId]="teamId()" />
+            }
+            @case ('discover') {
+              <app-discover-tab [teamId]="teamId()" />
             }
             @case ('roles') {
               <app-roles-editor [scope]="{ kind: 'team', id: teamId() }" />
@@ -166,12 +207,17 @@ export class TeamSettingsPage {
   protected readonly tabs = computed<TeamTab[]>(() => {
     const id = this.teamId();
     const roles = this.teams.can(id, Permission.MANAGE_ROLES);
+    const members = this.teams.can(id, Permission.MANAGE_MEMBERS);
     return [
       'members',
+      ...(this.teams.can(id, Permission.CREATE_INVITES) ? (['invites'] as const) : []),
+      ...(members ? (['requests', 'bans'] as const) : []),
+      ...(this.teams.can(id, Permission.MANAGE_TEAM) ? (['discover'] as const) : []),
       ...(roles ? (['roles', 'viewAs'] as const) : []),
       ...(this.teams.can(id, Permission.VIEW_AUDIT_LOG) ? (['audit'] as const) : []),
     ];
   });
+  protected readonly pending = computed(() => this.teams.pendingRequests(this.teamId()));
   protected readonly current = signal<TeamTab>('members');
   /** Once the person has chosen a tab themselves, a refresh of their permissions must not move them elsewhere. */
   private picked = false;
