@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import { Router, type CanActivateFn } from '@angular/router';
+import { Router, type CanActivateFn, type CanMatchFn } from '@angular/router';
 import { AuthStore } from './auth-store';
 
 /** Pages inside the app need a signed-in user; others are sent to sign in and brought back afterwards. */
@@ -14,3 +14,10 @@ export const guestGuard: CanActivateFn = () => {
   const auth = inject(AuthStore);
   return auth.status() === 'authed' ? inject(Router).createUrlTree(['/app']) : true;
 };
+
+/**
+ * The admin area exists only for instance administrators. For everybody else the route does not
+ * match, so the "not found" page answers at the same address (no hint that it exists). The server
+ * enforces this too: its admin routes answer 404 to non-admins.
+ */
+export const adminMatch: CanMatchFn = () => inject(AuthStore).user()?.isAdmin === true;

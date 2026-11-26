@@ -24,13 +24,13 @@ export function parseOrigins(list: string): string[] | null {
 const originList = z
   .string()
   .default('')
-  .refine((v) => parseOrigins(v) !== null, 'must be a comma-separated list of http(s) origins such as https://notes.example.com (no wildcards)')
+  .refine((v) => parseOrigins(v) !== null, 'must be a comma-separated list of http(s) origins such as https://planner.example.com (no wildcards)')
   .transform((v) => parseOrigins(v) ?? []);
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  /** Public origin of the site, e.g. https://notes.example.com. Used for links in emails. */
+  /** Public origin of the site, e.g. https://planner.example.com. Used for links in emails. */
   APP_URL: z.url(),
 
   /**
@@ -40,12 +40,12 @@ const envSchema = z.object({
   CORS_ORIGINS: originList,
   /**
    * SameSite attribute of the refresh cookie. "strict" works when the website and the API are on the same site
-   * (same origin, or subdomains of one domain such as notes.example.com + api.example.com).
+   * (same origin, or subdomains of one domain such as planner.example.com + api.example.com).
    * Only unrelated domains need "none", which requires https.
    */
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('strict'),
   /** Public address of the API as the browser sees it, if different from the website. Defaults to the apiUrl in the built web app's config.json. */
-  NOTES_API_URL: z
+  OS_PLANNER_API_URL: z
     .string()
     .optional()
     .transform((v) => (v ?? '').trim())
@@ -62,12 +62,30 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional().transform((v) => v || undefined),
   SMTP_PASS: z.string().optional().transform((v) => v || undefined),
   SMTP_SECURE: bool.default(false),
-  MAIL_FROM: z.string().default('Notes <no-reply@notes.local>'),
+  MAIL_FROM: z.string().default('OS_Planner <no-reply@os-planner.local>'),
 
   DATA_DIR: z.string().default('./data'),
   MAX_IMAGE_MB: z.coerce.number().positive().default(20),
   MAX_VIDEO_MB: z.coerce.number().positive().default(500),
   USER_QUOTA_MB: z.coerce.number().positive().default(2048),
+  /** Default storage of one team (its own notebooks plus all its projects). */
+  TEAM_QUOTA_MB: z.coerce.number().positive().default(10240),
+  /** Default storage of one project; 0 means the project is limited only by its team. */
+  PROJECT_QUOTA_MB: z.coerce.number().min(0).default(0),
+  MAX_MEMBERS_PER_TEAM: z.coerce.number().int().positive().default(100),
+  MAX_PROJECTS_PER_TEAM: z.coerce.number().int().positive().default(50),
+  /** Roles of one team, team and project roles together, @everyone not counted. */
+  MAX_ROLES_PER_TEAM: z.coerce.number().int().positive().default(100),
+  /** Audit-log entries older than this many days are removed by the nightly job. */
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+
+  /** Instance administrators: comma-separated email addresses. Only a verified address counts. */
+  ADMIN_EMAILS: z
+    .string()
+    .default('')
+    .transform((v) =>
+      [...new Set(v.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean))],
+    ),
 
   /** Bearer token for POST /api/admin/releases. Empty disables the endpoint. */
   RELEASE_TOKEN: z.string().optional().transform((v) => v || undefined),
@@ -113,6 +131,9 @@ export function loadDotEnv(): void {
 }
 
 export const isHttps = (env: Env): boolean => env.APP_URL.startsWith('https://');
+
+/** True when the address is listed in ADMIN_EMAILS (case-insensitive). The caller must also check that the address is verified. */
+export const isAdminEmail = (env: Env, email: string): boolean => env.ADMIN_EMAILS.includes(email.trim().toLowerCase());
 
 /** Per-user storage quota in whole bytes (the setting is in MB and may be fractional). */
 export const quotaBytes = (env: Env): number => Math.floor(env.USER_QUOTA_MB * 1024 * 1024);

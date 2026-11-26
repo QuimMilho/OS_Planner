@@ -96,9 +96,9 @@ describe('renderPrintHtml', () => {
     for (const u of resources.filter((u) => !u.startsWith('https://export.invalid/'))) {
       expect(html, `non-local URL ${u} must only be a link`).toContain(`<a href="${u}"`);
     }
-    expect(html).toContain('https://export.invalid/static/notes-libs.js');
+    expect(html).toContain('https://export.invalid/static/planner-libs.js');
     expect(html).toContain('https://export.invalid/static/print-runtime.js');
-    expect(html.indexOf('notes-libs.js')).toBeLessThan(html.indexOf('print-runtime.js')); // libraries first
+    expect(html.indexOf('planner-libs.js')).toBeLessThan(html.indexOf('print-runtime.js')); // libraries first
     expect(html).toContain('https://export.invalid/static/katex/katex.min.css');
   });
 

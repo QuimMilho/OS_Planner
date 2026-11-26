@@ -63,7 +63,7 @@ EmailDigestState    { userId, scopeKind, scopeId, lastEmailedAt, pendingCount }
 Notifications are tiny and pruned after 90 days (nightly job); not charged.
 
 ## Implementation steps
-1. Mention tokenizer + resolver in `@notes/shared`; composer UI.
+1. Mention tokenizer + resolver in `@os-planner/shared`; composer UI.
 2. Models, settings resolution (pure function in shared, unit-tested).
 3. `NotificationService` + pipeline integration with message creation.
 4. In-app inbox and counters; realtime events.

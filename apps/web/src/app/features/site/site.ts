@@ -12,7 +12,7 @@ import { AppsPanel } from './apps-panel';
   imports: [RouterLink, MatButtonModule, TranslocoPipe],
   template: `
     <header class="bar">
-      <a routerLink="/" class="brand"><img src="favicon.svg" alt="" width="30" height="30" />Notes</a>
+      <a routerLink="/" class="brand"><img src="favicon.svg" alt="" width="30" height="30" />OS_Planner</a>
       <span class="grow"></span>
       <a mat-button routerLink="/download">{{ 'nav.getApp' | transloco }}</a>
       <button mat-button type="button" (click)="toggleLang()" [attr.aria-label]="'settings.language' | transloco">{{ lang.current === 'en' ? 'PT' : 'EN' }}</button>

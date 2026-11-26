@@ -5,16 +5,16 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { firstValueFrom } from 'rxjs';
-import type { DownloadsDto, ReleaseFile, ReleaseFormat, ReleaseManifest } from '@notes/shared';
+import type { DownloadsDto, ReleaseFile, ReleaseFormat, ReleaseManifest } from '@os-planner/shared';
 import { apiUrl } from '../../core/api-config';
 import { Language } from '../../core/i18n';
 import { InstallPrompt, Platform } from '../../core/platform';
 
 const FORMAT_LABEL: Record<ReleaseFormat, string> = { nsis: 'Installer (.exe)', portable: 'Portable (.exe)', appimage: 'AppImage', deb: 'Debian / Ubuntu (.deb)', rpm: 'Fedora / RHEL (.rpm)' };
 const FORMAT_HINT: Partial<Record<ReleaseFormat, string>> = {
-  appimage: 'chmod +x Notes-*.AppImage && ./Notes-*.AppImage',
-  deb: 'sudo apt install ./notes_*.deb',
-  rpm: 'sudo dnf install ./notes-*.rpm',
+  appimage: 'chmod +x OS_Planner-*.AppImage && ./OS_Planner-*.AppImage',
+  deb: 'sudo apt install ./OS_Planner-*.deb',
+  rpm: 'sudo dnf install ./OS_Planner-*.rpm',
 };
 
 /** Everything about getting the app: use it in the browser, install it as a PWA, or download the desktop build. */

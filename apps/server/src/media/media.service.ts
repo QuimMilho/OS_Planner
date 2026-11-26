@@ -12,15 +12,19 @@ import { fileTypeFromFile } from 'file-type';
 import sharp from 'sharp';
 import {
   IMAGE_MIMES,
+  Permission,
   VIDEO_MIMES,
   type MediaDto,
   type MediaKind,
   type MediaUploadFields,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import { newId } from '../common/crypto.js';
-import { ENV, quotaBytes, type Env } from '../config/env.js';
+import { ENV, type Env } from '../config/env.js';
 import type { Media } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { QuotaService } from '../quota/quota.service.js';
+import { PermissionService } from '../spaces/permission.service.js';
+import { SpacesService } from '../spaces/spaces.service.js';
 import { StorageService } from './storage.service.js';
 
 const MB = 1024 * 1024;
@@ -47,6 +51,9 @@ export class MediaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly quota: QuotaService,
+    private readonly perms: PermissionService,
+    private readonly spaces: SpacesService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -57,9 +64,12 @@ export class MediaService {
   async upload(userId: string, file: UploadedTempFile, fields: MediaUploadFields): Promise<MediaDto> {
     let processed: string | undefined;
     try {
+      // Files belong to the space of the page that uses them: the person's own unless another one is named.
+      const spaceId = fields.spaceId ?? (await this.spaces.personalSpaceId(userId));
+      await this.perms.requireSpace(userId, spaceId, Permission.EDIT_PAGES);
       const existing = await this.prisma.media.findUnique({ where: { id: fields.id } });
       if (existing) {
-        if (existing.userId !== userId) throw new ConflictException('id_taken');
+        if (existing.spaceId !== spaceId) throw new ConflictException('id_taken');
         return toMediaDto(existing);
       }
 
@@ -73,7 +83,10 @@ export class MediaService {
           : null;
       if (!kind || !mime) throw new UnsupportedMediaTypeException('unsupported_media_type');
 
-      const limit = (kind === 'image' ? this.env.MAX_IMAGE_MB : this.env.MAX_VIDEO_MB) * MB;
+      // An admin may lower the largest single file for one account; the instance setting is the ceiling.
+      const maxFileBytes = await this.quota.maxFileBytesForSpace(spaceId);
+      let limit = (kind === 'image' ? this.env.MAX_IMAGE_MB : this.env.MAX_VIDEO_MB) * MB;
+      if (maxFileBytes > 0) limit = Math.min(limit, maxFileBytes);
       if (file.size > limit) throw new PayloadTooLargeException(`${kind}_too_large`);
 
       let sourcePath = file.path;
@@ -92,34 +105,33 @@ export class MediaService {
         }
       }
 
-      // Quota is checked and charged atomically: the conditional UPDATE only matches if there is room.
-      const quota = BigInt(quotaBytes(this.env));
-      const charged = await this.prisma.user.updateMany({
-        where: { id: userId, storageUsedBytes: { lte: quota - BigInt(size) } },
-        data: { storageUsedBytes: { increment: size } },
-      });
-      if (charged.count === 0) throw new PayloadTooLargeException('quota_exceeded');
+      // Fail fast (before moving a large file), then let the charge inside the transaction be the real gate.
+      await this.quota.assertCanStoreInSpace(spaceId, size);
 
+      await this.storage.put(userId, fields.id, sourcePath);
+      processed = undefined; // moved
       try {
-        await this.storage.put(userId, fields.id, sourcePath);
-        processed = undefined; // moved
-        const row = await this.prisma.media.create({
-          data: {
-            id: fields.id,
-            userId,
-            kind,
-            mime,
-            size,
-            storageKey: `${userId}/${fields.id}`,
-            width,
-            height,
-            durationSec: kind === 'video' ? (fields.durationSec ?? null) : null,
-          },
+        const row = await this.prisma.$transaction(async (tx) => {
+          // Atomic: two uploads that together exceed the quota cannot both pass.
+          await this.quota.chargeSpace(tx, spaceId, size);
+          return tx.media.create({
+            data: {
+              id: fields.id,
+              spaceId,
+              userId,
+              kind,
+              mime,
+              size,
+              storageKey: `${userId}/${fields.id}`,
+              width,
+              height,
+              durationSec: kind === 'video' ? (fields.durationSec ?? null) : null,
+            },
+          });
         });
         return toMediaDto(row);
       } catch (e) {
-        // Give the quota back and drop the file if we could not finish.
-        await this.prisma.user.update({ where: { id: userId }, data: { storageUsedBytes: { decrement: size } } }).catch(() => undefined);
+        // Nothing was recorded (the transaction rolled back); drop the file.
         await this.storage.remove(userId, fields.id).catch(() => undefined);
         throw e;
       }
@@ -151,10 +163,10 @@ export class MediaService {
     }
   }
 
-  /** The row, or 404. Callers pass the already-authenticated user id. */
-  async owned(userId: string, id: string): Promise<Media> {
-    const row = await this.prisma.media.findFirst({ where: { id, userId } });
-    if (!row) throw new NotFoundException();
+  /** The row, or 404 when it does not exist or the person cannot see the space it belongs to. */
+  async accessible(userId: string, id: string): Promise<Media> {
+    const row = await this.prisma.media.findUnique({ where: { id } });
+    if (!row || !(await this.perms.spaceAccess(userId, row.spaceId))) throw new NotFoundException();
     return row;
   }
 

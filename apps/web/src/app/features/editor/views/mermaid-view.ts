@@ -2,7 +2,7 @@ import { Component, ElementRef, computed, effect, inject, signal, untracked, vie
 import { MatIconModule } from '@angular/material/icon';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { AngularNodeViewComponent } from 'ngx-tiptap';
-import { LIMITS } from '@notes/shared';
+import { LIMITS } from '@os-planner/shared';
 import { ThemeService } from '../../../core/theme';
 import { renderMermaid } from '../lazy-libs';
 

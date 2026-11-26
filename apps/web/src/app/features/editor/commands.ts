@@ -1,5 +1,5 @@
 import type { Editor, JSONContent } from '@tiptap/core';
-import { DEFAULT_CHART_DATA, DEFAULT_PLOT_SPEC } from '@notes/shared';
+import { DEFAULT_CHART_DATA, DEFAULT_PLOT_SPEC } from '@os-planner/shared';
 import type { SlashItem } from './slash';
 import './tiptap-types';
 

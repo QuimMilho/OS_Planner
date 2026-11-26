@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Subject } from 'rxjs';
-import type { SyncOp } from '@notes/shared';
+import type { SyncOp } from '@os-planner/shared';
 import { Db } from './db';
 
 /** Queue of changes made locally that the server has not seen yet, sent in order by Sync. */

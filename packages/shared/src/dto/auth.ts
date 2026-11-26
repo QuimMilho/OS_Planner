@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { localeSchema, themeSchema, type Locale, type Theme } from './common';
+import type { QuotaDto } from './quota';
 
 export const emailSchema = z.string().trim().toLowerCase().max(254).pipe(z.email());
 
@@ -46,8 +47,17 @@ export interface UserDto {
   locale: Locale;
   theme: Theme;
   emailVerified: boolean;
+  /** Same numbers as `quota`; kept for older clients. */
   storageUsedBytes: number;
   storageQuotaBytes: number;
+  /** An instance administrator: listed in ADMIN_EMAILS with a verified address. */
+  isAdmin: boolean;
+  /** The personal storage of this account. */
+  quota: QuotaDto;
+  /** The account's own space: its notebooks, sync cursor and storage. */
+  personalSpaceId: string;
+  /** The account own space: its notebooks, sync cursor and storage. */
+  personalSpaceId: string;
 }
 
 export interface AuthResponse {

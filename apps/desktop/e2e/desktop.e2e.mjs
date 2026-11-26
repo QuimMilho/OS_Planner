@@ -1,6 +1,6 @@
 // Tests the Electron shell: it must show the real website, keep the session, save files through the
 // native dialog, stay on the site, and cope with an unreachable server.
-//   npm run test -w @notes/desktop      (needs `docker compose up -d mysql mailpit` and a build of web + server)
+//   npm run test -w @os-planner/desktop      (needs `docker compose up -d mysql mailpit` and a build of web + server)
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,16 +32,16 @@ async function launchApp(userData, serverUrl) {
 
 describe('desktop shell', () => {
   test('shows the real website, exposes only the small bridge, and keeps the page sandboxed', T, async () => {
-    const userData = mkdtempSync(join(tmpdir(), 'notes-desktop-'));
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
     const { app, page } = await launchApp(userData, base);
     try {
       await page.waitForSelector('h1');
-      assert.match(await page.textContent('h1'), /Notes that go as far as your ideas/);
-      assert.equal(await page.title(), 'Notes');
+      assert.match(await page.textContent('h1'), /Plans that go as far as your ideas/);
+      assert.equal(await page.title(), 'OS_Planner');
 
       const probe = await page.evaluate(() => ({
-        bridge: window.notesDesktop && { isDesktop: window.notesDesktop.isDesktop, keys: Object.keys(window.notesDesktop).sort() },
-        config: typeof window.notesConfig, // only the bundled local pages get this
+        bridge: window.osPlannerDesktop && { isDesktop: window.osPlannerDesktop.isDesktop, keys: Object.keys(window.osPlannerDesktop).sort() },
+        config: typeof window.osPlannerConfig, // only the bundled local pages get this
         require: typeof window.require,
         process: typeof window.process,
         fs: typeof window.fs,
@@ -57,7 +57,7 @@ describe('desktop shell', () => {
   });
 
   test('signing in works, and the session and notes survive quitting and relaunching', T, async () => {
-    const userData = mkdtempSync(join(tmpdir(), 'notes-desktop-'));
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
     let first = await launchApp(userData, base);
     try {
       await first.page.goto(`${base}/register`);
@@ -82,7 +82,7 @@ describe('desktop shell', () => {
   });
 
   test('"Save as" goes through the native dialog and writes the real file', T, async () => {
-    const userData = mkdtempSync(join(tmpdir(), 'notes-desktop-'));
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
     const out = join(userData, 'exported.pdf');
     const { app, page } = await launchApp(userData, base);
     try {
@@ -111,8 +111,8 @@ describe('desktop shell', () => {
     }
   });
 
-  test('links to other sites open outside the app, and the window never leaves the Notes site', T, async () => {
-    const userData = mkdtempSync(join(tmpdir(), 'notes-desktop-'));
+  test('links to other sites open outside the app, and the window never leaves the OS_Planner site', T, async () => {
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
     const { app, page } = await launchApp(userData, base);
     try {
       await page.waitForSelector('h1');
@@ -138,7 +138,7 @@ describe('desktop shell', () => {
       external.push(...opened);
       assert.ok(external.includes('https://example.org/somewhere'));
       assert.ok(external.includes('https://example.org/same-tab'));
-      assert.match(page.url(), new RegExp(`^${base}`), 'the window stayed on the Notes site');
+      assert.match(page.url(), new RegExp(`^${base}`), 'the window stayed on the OS_Planner site');
     } finally {
       await app.close();
       rmSync(userData, { recursive: true, force: true });
@@ -146,13 +146,13 @@ describe('desktop shell', () => {
   });
 
   test('an unreachable server shows a friendly page instead of a blank window', T, async () => {
-    const userData = mkdtempSync(join(tmpdir(), 'notes-desktop-'));
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
     const { app, page } = await launchApp(userData, 'http://127.0.0.1:9');
     try {
-      await page.waitForSelector('text=Can’t reach Notes');
+      await page.waitForSelector('text=Can’t reach OS_Planner');
       assert.match(await page.textContent('#server'), /127\.0\.0\.1:9/);
-      assert.equal(await page.evaluate(() => typeof window.notesConfig), 'object'); // the local page can change the server
-      assert.equal(await page.evaluate(() => typeof window.notesConfig.openSettings), 'function');
+      assert.equal(await page.evaluate(() => typeof window.osPlannerConfig), 'object'); // the local page can change the server
+      assert.equal(await page.evaluate(() => typeof window.osPlannerConfig.openSettings), 'function');
     } finally {
       await app.close();
       rmSync(userData, { recursive: true, force: true });

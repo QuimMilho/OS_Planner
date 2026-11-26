@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -8,10 +8,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { firstValueFrom } from 'rxjs';
-import { THEMES, type Locale, type SessionDto, type Theme } from '@notes/shared';
+import { THEMES, type Locale, type SessionDto, type Theme } from '@os-planner/shared';
 import { AuthStore, toProblem } from '../../core/auth-store';
 import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';
+import { QuotaStore } from '../../core/quota';
 import { ThemeService } from '../../core/theme';
 import { AppsPanel } from '../site/apps-panel';
 
@@ -67,10 +68,26 @@ import { AppsPanel } from '../site/apps-panel';
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="storage">
         <h2>{{ 'settings.storage' | transloco }}</h2>
-        <div class="bar"><div class="fill" [style.width.%]="usedPct()"></div></div>
-        <p class="muted">{{ mb(auth.user()?.storageUsedBytes ?? 0) }} / {{ mb(auth.user()?.storageQuotaBytes ?? 0) }} MB</p>
+        @if (quota.usage(); as u) {
+          <div class="bar" [class.warn]="quota.level() === 'warn'" [class.full]="quota.level() === 'full'" role="meter" [attr.aria-valuenow]="u.used" aria-valuemin="0" [attr.aria-valuemax]="u.limit" [attr.aria-label]="'quota.title' | transloco">
+            <div class="fill" [style.width.%]="quota.fraction() * 100"></div>
+          </div>
+          <p class="usage" data-usage>
+            <strong data-used>{{ mb(u.used) }}</strong> {{ 'quota.of' | transloco }} <span data-limit>{{ mb(u.limit) }}</span> MB {{ 'quota.used' | transloco }}
+          </p>
+          <ul class="kinds">
+            <li data-kind="images"><span class="dot images"></span>{{ 'quota.images' | transloco }}<span class="muted">{{ mb(u.images) }} MB</span></li>
+            <li data-kind="video"><span class="dot video"></span>{{ 'quota.video' | transloco }}<span class="muted">{{ mb(u.video) }} MB</span></li>
+            <li data-kind="documents"><span class="dot docs"></span>{{ 'quota.documents' | transloco }}<span class="muted">{{ mb(u.documents) }} MB</span></li>
+          </ul>
+          @if (quota.level() === 'full') {
+            <p class="msg full" role="alert" data-quota-full><mat-icon>block</mat-icon>{{ 'quota.full' | transloco }}</p>
+          } @else if (quota.level() === 'warn') {
+            <p class="msg warn" role="status" data-quota-warning><mat-icon>warning</mat-icon>{{ 'quota.warning' | transloco }}</p>
+          }
+        }
       </section>
 
       <section class="card">
@@ -107,6 +124,11 @@ import { AppsPanel } from '../site/apps-panel';
     .row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; } form { display: flex; flex-direction: column; gap: 4px; } form.row { flex-direction: row; } mat-form-field { min-width: 220px; }
     .ok, .warn { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; } .ok { color: #2f9e44; } .warn { color: #e8590c; } mat-icon { font-size: 18px; width: 18px; height: 18px; }
     .bar { height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; } .fill { height: 100%; background: var(--accent); }
+    .bar.warn .fill { background: #e8590c; } .bar.full .fill { background: var(--mat-sys-error); }
+    .usage { margin: 8px 0 4px; } .kinds { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 4px; }
+    .kinds li { display: flex; align-items: center; gap: 8px; } .kinds .muted { margin-left: auto; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); } .dot.video { background: #e8590c; } .dot.docs { background: var(--text-dim); }
+    .msg { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; } .msg.warn { color: #e8590c; } .msg.full { color: var(--mat-sys-error); }
     .err { color: var(--mat-sys-error); margin: 0; } .sessions { list-style: none; padding: 0; margin: 0; } .sessions li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
     .info { flex: 1; display: flex; flex-direction: column; min-width: 0; } .info span { font-size: 13px; }
     .hint { margin: -4px 0 12px; font-size: 14px; }
@@ -129,6 +151,7 @@ export class SettingsPage implements OnInit {
   readonly auth = inject(AuthStore);
   readonly lang = inject(Language);
   readonly theme = inject(ThemeService);
+  readonly quota = inject(QuotaStore);
   readonly themes = THEMES;
   private readonly http = inject(HttpClient);
   private readonly notify = inject(Notify);
@@ -138,17 +161,15 @@ export class SettingsPage implements OnInit {
   next = '';
   readonly pwError = signal('');
   readonly sessions = signal<SessionDto[]>([]);
-  readonly usedPct = computed(() => {
-    const u = this.auth.user();
-    return u && u.storageQuotaBytes ? Math.min(100, (u.storageUsedBytes / u.storageQuotaBytes) * 100) : 0;
-  });
 
   ngOnInit(): void {
     void this.loadSessions();
+    void this.quota.refresh();
   }
 
   mb(bytes: number): string {
-    return (bytes / 1024 / 1024).toFixed(1);
+    const mb = bytes / 1024 / 1024;
+    return mb < 10 ? mb.toFixed(2) : mb.toFixed(1); // small amounts need the extra digit to show movement
   }
 
   /** "Chrome on Windows" from a user-agent string; good enough to tell devices apart. */

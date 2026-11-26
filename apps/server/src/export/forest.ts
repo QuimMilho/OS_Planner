@@ -58,7 +58,7 @@ export function safeName(raw: string, fallback: string): string {
   return RESERVED.test(name) ? `${name}_` : name;
 }
 
-/** Keeps names unique within one folder: "Notes", "Notes (2)", ... (case-insensitive, like the strictest file system). */
+/** Keeps names unique within one folder: "OS_Planner", "OS_Planner (2)", ... (case-insensitive, like the strictest file system). */
 export class NameSet {
   private readonly used = new Set<string>();
   take(name: string): string {

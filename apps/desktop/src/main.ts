@@ -5,12 +5,12 @@ import { basename, join } from 'node:path';
 import { getServerUrl, getWindowState, normaliseServerUrl, saveWindowState, setServerUrl } from './config';
 
 /**
- * The desktop app is a native window around the Notes website. It adds only what a browser tab cannot
+ * The desktop app is a native window around the OS_Planner website. It adds only what a browser tab cannot
  * do (a real window, menus, a native "Save as" dialog, updates from the site). Every feature of the
  * app itself lives on the website and works the same in a browser.
  */
 
-const PARTITION = 'persist:notes'; // cookies, IndexedDB and the service worker survive restarts
+const PARTITION = 'persist:os_planner'; // cookies, IndexedDB and the service worker survive restarts
 const RESOURCES = join(__dirname, '..', 'resources');
 
 let mainWindow: BrowserWindow | null = null;
@@ -66,7 +66,7 @@ function createMainWindow(): void {
     minHeight: 520,
     show: false,
     backgroundColor: '#f8f9fc',
-    title: 'Notes',
+    title: 'OS_Planner',
     icon: join(RESOURCES, 'icon.png'),
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
@@ -91,7 +91,7 @@ function createMainWindow(): void {
   win.on('moved', remember);
   win.on('closed', () => (mainWindow = null));
 
-  // Links to other sites open in the real browser; the window never leaves the Notes site.
+  // Links to other sites open in the real browser; the window never leaves the OS_Planner site.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isHttp(url)) void shell.openExternal(url);
     return { action: 'deny' };
@@ -151,7 +151,7 @@ function buildMenu(): Menu {
         { label: 'Open the website in your browser', click: () => void shell.openExternal(getServerUrl()) },
         { label: 'Download page', click: () => void shell.openExternal(`${getServerUrl()}/download`) },
         { type: 'separator' },
-        { label: `Notes desktop ${app.getVersion()}`, enabled: false },
+        { label: `OS_Planner desktop ${app.getVersion()}`, enabled: false },
       ],
     },
   ];
@@ -179,11 +179,11 @@ function openSettings(): void {
 }
 
 function registerIpc(): void {
-  // Native "Save as": only the Notes site itself may ask for it.
+  // Native "Save as": only the OS_Planner site itself may ask for it.
   ipcMain.handle('save-file', async (event, data: ArrayBuffer, suggestedName: string) => {
     if (origin(event.senderFrame?.url ?? '') !== serverOrigin()) throw new Error('not allowed');
     const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-    const name = basename(String(suggestedName)).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_') || 'notes';
+    const name = basename(String(suggestedName)).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_') || 'os-planner';
     const { canceled, filePath } = await dialog.showSaveDialog(win!, { defaultPath: name });
     if (canceled || !filePath) return false;
     await writeFile(filePath, Buffer.from(data));

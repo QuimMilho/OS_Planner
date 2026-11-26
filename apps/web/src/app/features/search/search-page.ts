@@ -6,8 +6,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { firstValueFrom } from 'rxjs';
 import type { JSONContent } from '@tiptap/core';
-import { extractText } from '@notes/shared/lite';
-import type { SearchResultDto } from '@notes/shared';
+import { extractText } from '@os-planner/shared/lite';
+import type { SearchResultDto } from '@os-planner/shared';
 import { Db } from '../../data/db';
 import { TreeStore } from '../../data/tree-store';
 
@@ -123,6 +123,7 @@ export class SearchPage {
       const at = Math.max(0, fold(text).indexOf(words[0]!) - 60);
       out.push({
         pageId: meta.id,
+        spaceId: meta.spaceId,
         title: meta.title,
         notebookId: meta.notebookId,
         notebookName: this.store.notebookById().get(meta.notebookId)?.name ?? '',

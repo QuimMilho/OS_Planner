@@ -48,12 +48,14 @@ export type SyncBatchInput = z.infer<typeof syncBatchSchema>;
 
 /**
  * Why an operation was not applied.
- *  - not_found:      the target does not exist (or was purged); the client should drop the op and pull
+ *  - not_found:      the target does not exist, was purged, or the person may not see it; the client should drop the op and pull
+ *  - forbidden:      the person may see it but is not allowed to do this
  *  - parent_deleted: the parent notebook/category is in the trash
  *  - invalid:        the payload is structurally valid but not allowed (cycle, too deep, ...)
  *  - id_taken:       a create used an id that belongs to someone else
+ *  - quota_exceeded: the change would store more than the storage limit allows; keep it and retry once space is freed
  */
-export type SyncErrorCode = 'not_found' | 'parent_deleted' | 'invalid' | 'id_taken' | 'internal';
+export type SyncErrorCode = 'not_found' | 'forbidden' | 'parent_deleted' | 'invalid' | 'id_taken' | 'quota_exceeded' | 'internal';
 
 export type SyncOpResult =
   | { opId: string; ok: true }
@@ -63,12 +65,31 @@ export interface SyncBatchResponse {
   results: SyncOpResult[];
 }
 
-export const syncChangesQuerySchema = z.object({
-  since: z.coerce.number().int().min(0).default(0),
-});
+/** `cursors` arrives as JSON in the query string: { "<spaceId>": <seq>, ... }. */
+const cursorsSchema = z
+  .string()
+  .max(20_000)
+  .transform((raw, ctx) => {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'cursors must be JSON' });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.record(idSchema, z.number().int().min(0)));
 
-export interface SyncChangesDto {
-  /** Pass this as `since` next time. Everything up to and including it has been delivered. */
+export const syncChangesQuerySchema = z.object({
+  /** Old clients: one cursor for the personal space. Still accepted for one release. */
+  since: z.coerce.number().int().min(0).optional(),
+  /** One cursor per space the client holds. */
+  cursors: cursorsSchema.optional(),
+});
+export type SyncChangesQuery = z.infer<typeof syncChangesQuerySchema>;
+
+/** What changed in one space after the cursor the client sent for it. */
+export interface SpaceChangesDto {
+  /** Pass this for the space next time. Everything up to and including it has been delivered. */
   cursor: number;
   /** True when more changes remain: call again immediately with the new cursor. */
   hasMore: boolean;
@@ -76,4 +97,11 @@ export interface SyncChangesDto {
   categories: CategoryDto[];
   /** Page metadata only; content is fetched per page. Tombstones have a non-null deletedAt. */
   pages: PageMetaDto[];
+}
+
+export interface SyncChangesDto extends SpaceChangesDto {
+  /** With `cursors`: the changes of each requested space the person may see. */
+  spaces: Record<string, SpaceChangesDto>;
+  /** Requested spaces the person can no longer see (left or removed from a team, deleted team or project): purge them locally. */
+  revokedSpaces: string[];
 }

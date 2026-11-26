@@ -1,4 +1,4 @@
-import type { Locale } from '@notes/shared';
+import type { Locale } from '@os-planner/shared';
 
 export interface MailContent {
   subject: string;
@@ -27,7 +27,7 @@ const COPY: Record<Locale, Copy> = {
   en: {
     hello: (n) => `Hi ${n},`,
     verifySubject: 'Confirm your email address',
-    verifyBody: 'Welcome to Notes! Please confirm your email address to unlock uploads and PDF export.',
+    verifyBody: 'Welcome to OS_Planner! Please confirm your email address to unlock uploads and PDF export.',
     verifyButton: 'Confirm email',
     verifyIgnore: "If you didn't create an account, you can ignore this message.",
     resetSubject: 'Reset your password',
@@ -41,7 +41,7 @@ const COPY: Record<Locale, Copy> = {
     hello: (n) => `Olá ${n},`,
     verifySubject: 'Confirme o seu endereço de email',
     verifyBody:
-      'Bem-vindo ao Notes! Confirme o seu endereço de email para ativar os carregamentos e a exportação para PDF.',
+      'Bem-vindo ao OS_Planner! Confirme o seu endereço de email para ativar os carregamentos e a exportação para PDF.',
     verifyButton: 'Confirmar email',
     verifyIgnore: 'Se não criou uma conta, pode ignorar esta mensagem.',
     resetSubject: 'Redefinir a sua palavra-passe',

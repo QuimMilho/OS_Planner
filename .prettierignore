@@ -9,3 +9,6 @@ coverage
 package-lock.json
 apps/server/src/generated
 apps/server/prisma/migrations
+.codegraph
+/deploy/certs
+/deploy/acme

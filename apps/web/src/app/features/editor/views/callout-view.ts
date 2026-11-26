@@ -2,7 +2,7 @@ import { Component, computed } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { AngularNodeViewComponent, TiptapNodeViewContentDirective } from 'ngx-tiptap';
-import { CALLOUT_VARIANTS } from '@notes/shared';
+import { CALLOUT_VARIANTS } from '@os-planner/shared';
 
 const ICONS: Record<string, string> = { info: 'info', tip: 'lightbulb', warning: 'warning', danger: 'error' };
 

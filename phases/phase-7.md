@@ -38,7 +38,7 @@ ChannelRead  { userId, channelId, lastReadMessageId, updatedAt }                
 - Channel view: virtual-scrolled message list (grouped by author/day), composer (Markdown toolbar, emoji picker, attach by button/drag/paste, reply preview, Esc cancels, ↑ edits last), reactions bar, hover actions (reply, react, thread, pin, edit, delete, copy link), pinned drawer, thread side panel, channel search, "jump to unread".
 - Image attachments render inline with lightbox; other files as download chips.
 - Offline: last 200 messages per opened channel cached in Dexie (`messages`, read-only); the composer queues sends in the outbox with a "sending…" state and retries in order; failed sends can be retried or removed.
-- Markdown rendering shared with exports (`@notes/shared`), code blocks highlighted, `Ctrl+Enter` setting.
+- Markdown rendering shared with exports (`@os-planner/shared`), code blocks highlighted, `Ctrl+Enter` setting.
 
 ## i18n keys
 `chat.*` (composer, actions, empty states, unread), `channel.*` (create, category, topic, slowmode, archive), `thread.*`, `reaction.*`, `pins.*`, `attachment.*`, `errors.messageTooLong`, `errors.slowmode`.

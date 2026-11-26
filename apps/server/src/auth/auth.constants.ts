@@ -1,4 +1,4 @@
-export const REFRESH_COOKIE = 'notes_rt';
+export const REFRESH_COOKIE = 'os_planner_rt';
 export const REFRESH_COOKIE_PATH = '/api/auth';
 export const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /**
@@ -12,7 +12,7 @@ export const MEDIA_TTL_SECONDS = 60 * 60;
 
 /** Required on cookie-authenticated endpoints: a cross-site form cannot set custom headers. */
 export const CSRF_HEADER = 'x-requested-with';
-export const CSRF_VALUE = 'notes';
+export const CSRF_VALUE = 'os_planner';
 
 export const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;

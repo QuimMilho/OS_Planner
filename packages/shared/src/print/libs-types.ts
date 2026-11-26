@@ -2,11 +2,11 @@ import type { ChartData, ChartOptions, ChartType } from '../schema/specs';
 
 /**
  * The drawing libraries (Mermaid, Chart.js, KaTeX, highlight.js), bundled once as
- * `notes-libs.js` and exposed as `window.NotesLibs`. The PDF renderer and the web editor both load
+ * `planner-libs.js` and exposed as `window.PlannerLibs`. The PDF renderer and the web editor both load
  * that one script, so a diagram looks the same on screen and on paper, and the app's own bundle
  * stays small. (Angular's bundler also mis-bundled d3, which Mermaid and function-plot depend on.)
  */
-export interface NotesLibs {
+export interface PlannerLibs {
   /** Returns the diagram as an SVG string. Rejects with Mermaid's own message if the code is invalid. */
   mermaid(id: string, code: string, dark: boolean): Promise<string>;
   /** Draws a chart. Call `destroy()` before drawing again on the same canvas. */
@@ -24,6 +24,6 @@ export interface NotesLibs {
 
 declare global {
   interface Window {
-    NotesLibs?: NotesLibs;
+    PlannerLibs?: PlannerLibs;
   }
 }

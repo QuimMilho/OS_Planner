@@ -110,7 +110,7 @@ export function renderPrintHtml(input: PrintInput): string {
   const assets = input.assetsBase
     ? {
         css: `<link rel="stylesheet" href="${esc(input.assetsBase)}katex/katex.min.css">`,
-        js: `<script src="${esc(input.assetsBase)}notes-libs.js"></script>\n<script src="${esc(input.assetsBase)}print-runtime.js"></script>`,
+        js: `<script src="${esc(input.assetsBase)}planner-libs.js"></script>\n<script src="${esc(input.assetsBase)}print-runtime.js"></script>`,
       }
     : { css: '', js: '' };
 

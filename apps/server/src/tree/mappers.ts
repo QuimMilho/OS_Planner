@@ -1,11 +1,12 @@
 import type { JSONContent } from '@tiptap/core';
-import type { CategoryDto, NotebookDto, PageDto, PageMetaDto } from '@notes/shared';
+import type { CategoryDto, NotebookDto, PageDto, PageMetaDto } from '@os-planner/shared';
 import type { Category, Notebook, Page } from '../generated/prisma/client.js';
 
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
 
 export const toNotebookDto = (n: Notebook): NotebookDto => ({
   id: n.id,
+  spaceId: n.spaceId,
   name: n.name,
   icon: n.icon,
   color: n.color,
@@ -18,6 +19,7 @@ export const toNotebookDto = (n: Notebook): NotebookDto => ({
 
 export const toCategoryDto = (c: Category): CategoryDto => ({
   id: c.id,
+  spaceId: c.spaceId,
   notebookId: c.notebookId,
   parentId: c.parentId,
   name: c.name,
@@ -28,10 +30,11 @@ export const toCategoryDto = (c: Category): CategoryDto => ({
   updatedAt: c.updatedAt.toISOString(),
 });
 
-type PageMetaRow = Omit<Page, 'content' | 'contentText'> & Partial<Pick<Page, 'content' | 'contentText'>>;
+type PageMetaRow = Omit<Page, 'content' | 'contentText' | 'sizeBytes'> & Partial<Pick<Page, 'content' | 'contentText' | 'sizeBytes'>>;
 
 export const toPageMetaDto = (p: PageMetaRow): PageMetaDto => ({
   id: p.id,
+  spaceId: p.spaceId,
   notebookId: p.notebookId,
   categoryId: p.categoryId,
   title: p.title,
@@ -52,6 +55,7 @@ export const toPageDto = (p: Page): PageDto => ({
 /** Columns for page listings: everything except the (potentially large) document. */
 export const PAGE_META_SELECT = {
   id: true,
+  spaceId: true,
   userId: true,
   notebookId: true,
   categoryId: true,

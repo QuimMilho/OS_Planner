@@ -11,7 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { firstValueFrom } from 'rxjs';
 import type { JSONContent } from '@tiptap/core';
-import { collectMediaIds, docToMarkdown, EMPTY_DOC, renderPrintHtml, type ExportScope, type PrintEntry, type PrintPageSize } from '@notes/shared';
+import { collectMediaIds, docToMarkdown, EMPTY_DOC, renderPrintHtml, type ExportScope, type PrintEntry, type PrintPageSize } from '@os-planner/shared';
 import { isUnreachable } from '../../core/auth-store';
 import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';

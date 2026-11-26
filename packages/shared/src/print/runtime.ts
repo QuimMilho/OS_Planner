@@ -1,11 +1,11 @@
 /**
  * Runs inside the print page (headless Chromium on the server, or the user's own browser for the
- * offline fallback), after `notes-libs.js`. It draws everything the server-side HTML only marks
+ * offline fallback), after `planner-libs.js`. It draws everything the server-side HTML only marks
  * with placeholders, then sets `window.__PRINT_READY` so the caller knows when to make the PDF.
  */
 import { renderPlotSvg } from '../schema/plot';
 import type { ChartData, ChartOptions, ChartType, PlotSpec } from '../schema/specs';
-import type { NotesLibs } from './libs-types';
+import type { PlannerLibs } from './libs-types';
 
 declare global {
   interface Window {
@@ -27,7 +27,7 @@ function showError(el: Element, e: unknown) {
 const readJson = <T>(el: Element, attr: string): T => JSON.parse(el.getAttribute(attr) ?? '{}') as T;
 const each = <T extends HTMLElement>(selector: string, fn: (el: T) => void) => document.querySelectorAll<T>(selector).forEach(fn);
 
-async function run(libs: NotesLibs) {
+async function run(libs: PlannerLibs) {
   document.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
 
   each('[data-type="inline-math"], [data-type="block-math"]', (el) => {
@@ -89,8 +89,8 @@ async function run(libs: NotesLibs) {
   await document.fonts?.ready;
 }
 
-const libs = window.NotesLibs;
-(libs ? run(libs) : Promise.reject(new Error('notes-libs.js did not load')))
+const libs = window.PlannerLibs;
+(libs ? run(libs) : Promise.reject(new Error('planner-libs.js did not load')))
   .catch((e) => fail('runtime', e))
   .finally(() => {
     window.__PRINT_ERRORS = errors;

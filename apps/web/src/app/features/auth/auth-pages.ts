@@ -29,7 +29,7 @@ const SHARED = [FormsModule, RouterLink, MatButtonModule, MatFormFieldModule, Ma
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.signIn' | transloco }}</h1>
         <form (ngSubmit)="submit()" #f="ngForm">
           <mat-form-field appearance="outline"><mat-label>{{ 'auth.email' | transloco }}</mat-label><input matInput type="email" name="email" [(ngModel)]="email" autocomplete="username" required /></mat-form-field>
@@ -76,7 +76,7 @@ export class Login {
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.createAccount' | transloco }}</h1>
         <form (ngSubmit)="submit()" #f="ngForm">
           <mat-form-field appearance="outline"><mat-label>{{ 'auth.name' | transloco }}</mat-label><input matInput name="name" [(ngModel)]="name" autocomplete="name" maxlength="80" required /></mat-form-field>
@@ -126,7 +126,7 @@ export class Register {
   template: `
     <main class="auth-page">
       <div class="auth-card center">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         @switch (state()) {
           @case ('working') { <mat-spinner diameter="36" /><p>{{ 'auth.verifying' | transloco }}</p> }
           @case ('ok') { <mat-icon class="big ok">check_circle</mat-icon><h1>{{ 'auth.verified' | transloco }}</h1><a mat-flat-button routerLink="/app">{{ 'auth.continue' | transloco }}</a> }
@@ -164,7 +164,7 @@ export class VerifyEmail implements OnInit {
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.forgotTitle' | transloco }}</h1>
         @if (sent()) {
           <p>{{ 'auth.forgotSent' | transloco }}</p>
@@ -208,7 +208,7 @@ export class ForgotPassword {
   template: `
     <main class="auth-page">
       <div class="auth-card">
-        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />Notes</a>
+        <a class="brand" routerLink="/"><img src="favicon.svg" alt="" />OS_Planner</a>
         <h1>{{ 'auth.resetTitle' | transloco }}</h1>
         @if (done()) {
           <p>{{ 'auth.resetDone' | transloco }}</p>

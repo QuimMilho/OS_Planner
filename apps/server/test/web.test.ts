@@ -8,9 +8,9 @@ let t: TestApp;
 let dir: string;
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'notes-web-'));
+  dir = await mkdtemp(join(tmpdir(), 'os-planner-web-'));
   await mkdir(join(dir, 'assets'));
-  await writeFile(join(dir, 'index.html'), '<!doctype html><title>Notes</title><app-root></app-root>');
+  await writeFile(join(dir, 'index.html'), '<!doctype html><title>OS_Planner</title><app-root></app-root>');
   await writeFile(join(dir, 'ngsw.json'), '{"configVersion":1}');
   await writeFile(join(dir, 'main-ABCD1234.js'), 'console.log("app")');
   await writeFile(join(dir, 'assets', 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');

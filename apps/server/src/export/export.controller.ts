@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Post, Query, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { exportMarkdownQuerySchema, exportPdfSchema, type ExportPdfInput } from '@notes/shared';
+import { exportMarkdownQuerySchema, exportPdfSchema, type ExportPdfInput } from '@os-planner/shared';
 import type { z } from 'zod';
 import { CurrentUser, RequireVerified, type AuthUser } from '../common/auth.decorators.js';
 import { ExportService } from './export.service.js';

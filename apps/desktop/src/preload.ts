@@ -16,11 +16,11 @@ const bridge = {
   },
 };
 
-contextBridge.exposeInMainWorld('notesDesktop', bridge);
+contextBridge.exposeInMainWorld('osPlannerDesktop', bridge);
 
 // The bundled settings/offline pages (file://) may read and change the server address; web pages may not.
 if (location.protocol === 'file:') {
-  contextBridge.exposeInMainWorld('notesConfig', {
+  contextBridge.exposeInMainWorld('osPlannerConfig', {
     get: (): Promise<string> => ipcRenderer.invoke('config:get'),
     set: (value: string): Promise<{ ok: boolean; url?: string }> => ipcRenderer.invoke('config:set', value),
     validate: (value: string): Promise<boolean> => ipcRenderer.invoke('config:validate', value),

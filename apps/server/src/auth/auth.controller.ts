@@ -11,7 +11,7 @@ import {
   type LoginInput,
   type MediaTokenResponse,
   type RegisterInput,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import type { z } from 'zod';
 import { CurrentUser, Public, type AuthUser } from '../common/auth.decorators.js';
 import { ENV, isHttps, type Env } from '../config/env.js';

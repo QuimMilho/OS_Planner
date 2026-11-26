@@ -15,10 +15,10 @@ beforeEach(async () => {
   t.mail.sent = [];
 });
 
-const CSRF = { 'X-Requested-With': 'notes' };
+const CSRF = { 'X-Requested-With': 'os_planner' };
 
 const cookieHeader = (res: Response): string => {
-  const raw = (res.headers['set-cookie'] as unknown as string[] | undefined)?.find((c) => c.startsWith('notes_rt='));
+  const raw = (res.headers['set-cookie'] as unknown as string[] | undefined)?.find((c) => c.startsWith('os_planner_rt='));
   if (!raw) throw new Error('no refresh cookie in response');
   return raw.split(';')[0]!;
 };
@@ -40,7 +40,7 @@ describe('registration', () => {
     expect(res.body.user).toMatchObject({ email, displayName: 'Ana', emailVerified: false, locale: 'en' });
     expect(res.body.user.passwordHash).toBeUndefined();
 
-    const raw = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('notes_rt='))!;
+    const raw = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('os_planner_rt='))!;
     expect(raw).toMatch(/HttpOnly/i);
     expect(raw).toMatch(/SameSite=Strict/i);
     expect(raw).toMatch(/Path=\/api\/auth/);
@@ -193,7 +193,7 @@ describe('refresh token rotation', () => {
     const cookie = cookieHeader(res);
     const out = await t.http.post('/api/auth/logout').set(CSRF).set('Cookie', cookie);
     expect(out.status).toBe(204);
-    expect((out.headers['set-cookie'] as unknown as string[]).join(';')).toMatch(/notes_rt=;/);
+    expect((out.headers['set-cookie'] as unknown as string[]).join(';')).toMatch(/os_planner_rt=;/);
     expect((await t.http.post('/api/auth/refresh').set(CSRF).set('Cookie', cookie)).status).toBe(401);
   });
 });

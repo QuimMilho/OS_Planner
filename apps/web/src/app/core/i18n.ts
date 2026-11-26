@@ -1,11 +1,11 @@
 import { Injectable, inject, isDevMode } from '@angular/core';
 import { provideTransloco, TranslocoService, type Translation, type TranslocoLoader } from '@jsverse/transloco';
 import { of } from 'rxjs';
-import type { Locale } from '@notes/shared';
+import type { Locale } from '@os-planner/shared';
 import en from '../i18n/en.json';
 import pt from '../i18n/pt.json';
 
-const LANG_KEY = 'notes.lang';
+const LANG_KEY = 'os_planner.lang';
 const TABLES: Record<Locale, Translation> = { en: en as Translation, pt: pt as Translation };
 
 /** Translations are bundled, not fetched: the UI is translated instantly, online or offline. */

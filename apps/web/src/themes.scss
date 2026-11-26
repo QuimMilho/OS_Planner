@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------------------------
 // Themes. `system` (no data-theme attribute) follows the operating system; the others are chosen
 // in Settings → Appearance and set <html data-theme="…">. The ids are the `Theme` values in
-// @notes/shared. scripts/check-theme-contrast.mjs compiles this file and checks the contrast of
+// @os-planner/shared. scripts/check-theme-contrast.mjs compiles this file and checks the contrast of
 // every theme, so a new palette cannot ship unreadable.
 //
 // Material 3 does the heavy lifting: `mat.theme` turns a primary and a tertiary palette into the

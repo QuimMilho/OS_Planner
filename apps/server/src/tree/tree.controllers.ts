@@ -25,7 +25,7 @@ import {
   type UpdateCategoryInput,
   type UpdateNotebookInput,
   type UpdatePageInput,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../common/auth.decorators.js';
 import { CategoriesService } from './categories.service.js';
@@ -39,9 +39,10 @@ const Id = () => Param('id', { schema: idSchema });
 export class NotebooksController {
   constructor(private readonly notebooks: NotebooksService) {}
 
+  /** The person's own notebooks (or those of another space they can see, with ?spaceId=). */
   @Get()
-  list(@CurrentUser() u: AuthUser): Promise<NotebookDto[]> {
-    return this.notebooks.list(u.id);
+  list(@CurrentUser() u: AuthUser, @Query({ schema: z.object({ spaceId: idSchema.optional() }) }) q: { spaceId?: string }): Promise<NotebookDto[]> {
+    return this.notebooks.list(u.id, q.spaceId);
   }
 
   @Get(':id/tree')
@@ -172,12 +173,23 @@ export class SyncController {
     @CurrentUser() u: AuthUser,
     @Query({ schema: syncChangesQuerySchema }) q: z.infer<typeof syncChangesQuerySchema>,
   ): Promise<SyncChangesDto> {
-    return this.sync.changes(u.id, q.since);
+    return this.sync.changes(u.id, q);
   }
 
   @HttpCode(200)
   @Post('batch')
   batch(@CurrentUser() u: AuthUser, @Body({ schema: syncBatchSchema }) body: SyncBatchInput): Promise<SyncBatchResponse> {
     return this.sync.batch(u.id, body.ops);
+  }
+}
+
+@Controller('spaces')
+export class SpacesController {
+  constructor(private readonly notebooks: NotebooksService) {}
+
+  /** Notebooks of a personal, team or project space the person can see (404 for anything else). */
+  @Get(':id/notebooks')
+  list(@CurrentUser() u: AuthUser, @Id() id: string): Promise<NotebookDto[]> {
+    return this.notebooks.list(u.id, id);
   }
 }

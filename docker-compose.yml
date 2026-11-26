@@ -43,15 +43,17 @@ services:
     build:
       context: .
       args:
-        NOTES_API_URL: ${NOTES_API_URL:-}
+        OS_PLANNER_API_URL: ${OS_PLANNER_API_URL:-}
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
     ports:
-      - '${PORT:-3000}:3000'
+      # This machine only by default, so nothing is served over plain http to the network: put the proxy below (or your
+      # own TLS proxy) in front. Set SERVER_BIND=0.0.0.0 to publish the port directly.
+      - '${SERVER_BIND:-127.0.0.1}:${PORT:-3000}:3000'
     environment:
-      APP_URL: ${APP_URL:?set APP_URL in .env to the public address, e.g. https://notes.example.com}
+      APP_URL: ${APP_URL:?set APP_URL in .env to the public address, e.g. https://planner.example.com}
       DATABASE_URL: mysql://notes:${MYSQL_PASSWORD:-notes}@mysql:3306/notes
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env (at least 32 characters)}
       JWT_MEDIA_SECRET: ${JWT_MEDIA_SECRET:?set JWT_MEDIA_SECRET in .env (at least 32 characters)}
@@ -60,17 +62,45 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      MAIL_FROM: ${MAIL_FROM:-Notes <no-reply@notes.local>}
+      MAIL_FROM: ${MAIL_FROM:-OS_Planner <no-reply@os-planner.local>}
       RELEASE_TOKEN: ${RELEASE_TOKEN:-}
       TRUST_PROXY: ${TRUST_PROXY:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-strict}
-      NOTES_API_URL: ${NOTES_API_URL:-}
+      OS_PLANNER_API_URL: ${OS_PLANNER_API_URL:-}
       MAX_IMAGE_MB: ${MAX_IMAGE_MB:-20}
       MAX_VIDEO_MB: ${MAX_VIDEO_MB:-500}
       USER_QUOTA_MB: ${USER_QUOTA_MB:-2048}
+      TEAM_QUOTA_MB: ${TEAM_QUOTA_MB:-10240}
+      PROJECT_QUOTA_MB: ${PROJECT_QUOTA_MB:-0}
+      MAX_MEMBERS_PER_TEAM: ${MAX_MEMBERS_PER_TEAM:-100}
+      MAX_PROJECTS_PER_TEAM: ${MAX_PROJECTS_PER_TEAM:-50}
+      MAX_ROLES_PER_TEAM: ${MAX_ROLES_PER_TEAM:-100}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
     volumes:
       - notes-data:/data
+
+  # HTTPS reverse proxy (nginx) in front of `server`.   docker compose --profile prod --profile proxy up -d --build
+  # Needs OS_PLANNER_DOMAIN and a certificate (fullchain.pem + privkey.pem) in TLS_CERT_DIR; see the README, "HTTPS reverse proxy".
+  # Keep deploy/nginx/os-planner.conf.template in step with the app's routes, WebSockets and upload limits.
+  proxy:
+    profiles: ['proxy']
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+    environment:
+      OS_PLANNER_DOMAIN: ${OS_PLANNER_DOMAIN:?set OS_PLANNER_DOMAIN in .env to the host name people use, e.g. planner.example.com}
+      OS_PLANNER_UPSTREAM: server:3000
+      NGINX_ENVSUBST_FILTER: ^OS_PLANNER_
+    volumes:
+      - ./deploy/nginx/os-planner.conf.template:/etc/nginx/templates/os-planner.conf.template:ro
+      - ${TLS_CERT_DIR:-./deploy/certs}:/etc/nginx/certs:ro
+      - ${ACME_DIR:-./deploy/acme}:/var/www/certbot:ro
 
 volumes:
   mysql-data:

@@ -12,7 +12,7 @@ export interface DesktopBridge {
 
 declare global {
   interface Window {
-    notesDesktop?: DesktopBridge;
+    osPlannerDesktop?: DesktopBridge;
   }
   interface BeforeInstallPromptEvent extends Event {
     prompt(): Promise<void>;
@@ -28,7 +28,7 @@ export type RunMode = 'browser' | 'pwa' | 'desktop';
  */
 @Injectable({ providedIn: 'root' })
 export class Platform {
-  readonly desktop = typeof window !== 'undefined' ? (window.notesDesktop ?? null) : null;
+  readonly desktop = typeof window !== 'undefined' ? (window.osPlannerDesktop ?? null) : null;
   readonly mode: RunMode = this.desktop
     ? 'desktop'
     : typeof matchMedia !== 'undefined' && (matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone)

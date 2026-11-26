@@ -68,7 +68,7 @@ How it differs from the plan above:
 - **Contrast script**: `scripts/check-theme-contrast.mjs` (+ `scripts/lib/theme-contrast.mjs`) compiles the real SCSS with `sass` and measures the resolved colours. Besides the plan's checks it requires a readable dim text and button label, dark surfaces (≤ 14 % lightness) for the coloured themes, a different accent per theme, and that the shared `THEMES` list, `theme-boot.js` and the stylesheet name the same ids (`npm run check:themes`).
 - **Theme attribute on any element**: tokens apply to any `[data-theme]`, which is how each picker card previews its own theme live.
 - **Picker**: eight cards, the seven themes plus "Same as device". Language moved to its own card. `settings.appearance` became an object (`title`, `hint`); the `theme.*` strings are a top-level group.
-- **Offline choice**: `notes.theme.pending` marks a choice not yet on the account; it is sent on the `online` event and at the next start, and wins over the account's value until delivered.
+- **Offline choice**: `os_planner.theme.pending` marks a choice not yet on the account; it is sent on the `online` event and at the next start, and wins over the account's value until delivered.
 - **Charts and diagrams**: Chart.js gets the page's text and grid colours and Mermaid its light/dark look; both redraw when the theme changes (`ThemeService.palette`/`scheme`). Code colours became `--hl-*` variables.
 - **Bundle budget**: the seven palettes add ~7 kB of CSS, so the initial-bundle error budget in `angular.json` went from 2 MB to 2.1 MB.
 - Bug found on the way (phase 0's open item): see [phase-0.md](phase-0.md#result).

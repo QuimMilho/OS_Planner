@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from './app.js';
-import { builders, para, signup, uuid, type Account } from './helpers.js';
+import { builders, para, signup, uuid, type Account, personalSpaceId } from './helpers.js';
 
 let t: TestApp;
 let me: Account;
@@ -320,7 +320,7 @@ describe('page content and optimistic concurrency', () => {
   it('links owned media to the page and unlinks it when the content stops using it', async () => {
     const mediaId = uuid();
     await t.prisma.media.create({
-      data: { id: mediaId, userId: me.id, kind: 'image', mime: 'image/png', size: 10, storageKey: 'x' },
+      data: { id: mediaId, spaceId: await personalSpaceId(t, me.id), userId: me.id, kind: 'image', mime: 'image/png', size: 10, storageKey: 'x' },
     });
     const withImage = { type: 'doc', content: [{ type: 'imageFigure', attrs: { mediaId, alt: 'a', caption: '', width: 50, align: 'left' } }] };
     expect((await put(withImage, 0)).status).toBe(200);
@@ -332,7 +332,7 @@ describe('page content and optimistic concurrency', () => {
   it("cannot reference another user's media even if the id is known", async () => {
     const eve = await signup(t);
     const mediaId = uuid();
-    await t.prisma.media.create({ data: { id: mediaId, userId: eve.id, kind: 'image', mime: 'image/png', size: 10, storageKey: 'x' } });
+    await t.prisma.media.create({ data: { id: mediaId, spaceId: await personalSpaceId(t, eve.id), userId: eve.id, kind: 'image', mime: 'image/png', size: 10, storageKey: 'x' } });
     const doc = { type: 'doc', content: [{ type: 'imageFigure', attrs: { mediaId, alt: '', caption: '', width: null, align: 'center' } }] };
     expect((await put(doc, 0)).status).toBe(422);
   });

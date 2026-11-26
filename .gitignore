@@ -16,6 +16,13 @@ test-results/
 /data/
 /apps/server/data/
 
+# TLS certificates and ACME challenge files for the nginx proxy (deploy/nginx)
+/deploy/certs/
+/deploy/acme/
+
+# code-graph index (local tooling)
+.codegraph/
+
 # generated
 apps/server/src/generated/
 apps/web/public/print/

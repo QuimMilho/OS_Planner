@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { CategoryDto, CreateCategoryInput, UpdateCategoryInput } from '@notes/shared';
+import { Permission, type CategoryDto, type CreateCategoryInput, type UpdateCategoryInput } from '@os-planner/shared';
 import { ChangeSeqService } from '../prisma/change-seq.service.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
+import { PermissionService } from '../spaces/permission.service.js';
 import { toCategoryDto } from './mappers.js';
 import { idTaken, invalid, notFound, parentDeleted } from './tree.error.js';
 
@@ -68,31 +69,45 @@ export class CategoriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly seq: ChangeSeqService,
+    private readonly perms: PermissionService,
   ) {}
 
-  private async forest(tx: Tx, userId: string, notebookId: string): Promise<Forest> {
+  private async forest(tx: Tx, notebookId: string): Promise<Forest> {
     const rows = await tx.category.findMany({
-      where: { userId, notebookId },
+      where: { notebookId },
       select: { id: true, parentId: true, deletedAt: true },
     });
     return new Forest(rows);
   }
 
-  create(userId: string, input: CreateCategoryInput): Promise<CategoryDto> {
+  /** The space of an existing category after checking that the person may do `needed` there; null if it does not exist. */
+  private async spaceOf(userId: string, id: string, needed: bigint): Promise<string | null> {
+    const cat = await this.prisma.category.findUnique({ where: { id }, select: { spaceId: true } });
+    if (!cat) return null;
+    await this.perms.requireSpace(userId, cat.spaceId, needed);
+    return cat.spaceId;
+  }
+
+  async create(userId: string, input: CreateCategoryInput): Promise<CategoryDto> {
+    const inNotebook = await this.prisma.notebook.findUnique({ where: { id: input.notebookId }, select: { spaceId: true } });
+    if (!inNotebook) throw notFound('notebook');
+    const spaceId = inNotebook.spaceId;
+    await this.perms.requireSpace(userId, spaceId, Permission.EDIT_PAGES);
+
     return this.prisma.$transaction(async (tx) => {
-      const seq = await this.seq.next(tx, userId);
+      const seq = await this.seq.next(tx, spaceId);
       const existing = await tx.category.findUnique({ where: { id: input.id } });
       if (existing) {
-        if (existing.userId !== userId) throw idTaken();
+        if (existing.spaceId !== spaceId) throw idTaken();
         return toCategoryDto(existing);
       }
 
-      const notebook = await tx.notebook.findFirst({ where: { id: input.notebookId, userId } });
+      const notebook = await tx.notebook.findFirst({ where: { id: input.notebookId, spaceId } });
       if (!notebook) throw notFound('notebook');
       if (notebook.deletedAt) throw parentDeleted();
 
       if (input.parentId) {
-        const forest = await this.forest(tx, userId, notebook.id);
+        const forest = await this.forest(tx, notebook.id);
         const parent = forest.get(input.parentId);
         if (!parent) throw notFound('parent category');
         if (parent.deletedAt) throw parentDeleted();
@@ -102,6 +117,7 @@ export class CategoriesService {
       const row = await tx.category.create({
         data: {
           id: input.id,
+          spaceId,
           userId,
           notebookId: notebook.id,
           parentId: input.parentId ?? null,
@@ -114,14 +130,16 @@ export class CategoriesService {
     });
   }
 
-  update(userId: string, id: string, patch: UpdateCategoryInput): Promise<CategoryDto> {
+  async update(userId: string, id: string, patch: UpdateCategoryInput): Promise<CategoryDto> {
+    const spaceId = await this.spaceOf(userId, id, Permission.EDIT_PAGES);
+    if (!spaceId) throw notFound();
     return this.prisma.$transaction(async (tx) => {
-      const seq = await this.seq.next(tx, userId);
-      const current = await tx.category.findFirst({ where: { id, userId, deletedAt: null } });
+      const seq = await this.seq.next(tx, spaceId);
+      const current = await tx.category.findFirst({ where: { id, spaceId, deletedAt: null } });
       if (!current) throw notFound();
 
       if (patch.parentId !== undefined && patch.parentId !== current.parentId) {
-        const forest = await this.forest(tx, userId, current.notebookId);
+        const forest = await this.forest(tx, current.notebookId);
         if (patch.parentId !== null) {
           const parent = forest.get(patch.parentId);
           if (!parent) throw notFound('parent category');
@@ -147,34 +165,38 @@ export class CategoriesService {
   }
 
   /** Trashes the category, its subcategories and all their pages under one timestamp. */
-  remove(userId: string, id: string): Promise<void> {
+  async remove(userId: string, id: string): Promise<void> {
+    const spaceId = await this.spaceOf(userId, id, Permission.DELETE_PAGES);
+    if (!spaceId) return; // gone already: deleting twice is fine
     return this.prisma.$transaction(async (tx) => {
-      const seq = await this.seq.next(tx, userId);
-      const cat = await tx.category.findFirst({ where: { id, userId } });
+      const seq = await this.seq.next(tx, spaceId);
+      const cat = await tx.category.findFirst({ where: { id, spaceId } });
       if (!cat || cat.deletedAt) return;
-      const ids = (await this.forest(tx, userId, cat.notebookId)).subtree(id);
+      const ids = (await this.forest(tx, cat.notebookId)).subtree(id);
       const deletedAt = new Date();
-      await tx.category.updateMany({ where: { id: { in: ids }, userId, deletedAt: null }, data: { deletedAt, seq } });
-      await tx.page.updateMany({ where: { categoryId: { in: ids }, userId, deletedAt: null }, data: { deletedAt, seq } });
+      await tx.category.updateMany({ where: { id: { in: ids }, deletedAt: null }, data: { deletedAt, seq } });
+      await tx.page.updateMany({ where: { categoryId: { in: ids }, deletedAt: null }, data: { deletedAt, seq } });
     });
   }
 
-  restore(userId: string, id: string): Promise<CategoryDto> {
+  async restore(userId: string, id: string): Promise<CategoryDto> {
+    const spaceId = await this.spaceOf(userId, id, Permission.DELETE_PAGES);
+    if (!spaceId) throw notFound();
     return this.prisma.$transaction(async (tx) => {
-      const seq = await this.seq.next(tx, userId);
-      const cat = await tx.category.findFirst({ where: { id, userId } });
+      const seq = await this.seq.next(tx, spaceId);
+      const cat = await tx.category.findFirst({ where: { id, spaceId } });
       if (!cat) throw notFound();
       if (!cat.deletedAt) return toCategoryDto(cat);
 
-      const notebook = await tx.notebook.findFirst({ where: { id: cat.notebookId, userId } });
+      const notebook = await tx.notebook.findFirst({ where: { id: cat.notebookId } });
       if (!notebook || notebook.deletedAt) throw parentDeleted();
-      const forest = await this.forest(tx, userId, cat.notebookId);
+      const forest = await this.forest(tx, cat.notebookId);
       if (cat.parentId && forest.get(cat.parentId)?.deletedAt) throw parentDeleted();
 
       const stamp = cat.deletedAt;
       const ids = forest.subtree(id);
-      await tx.category.updateMany({ where: { id: { in: ids }, userId, deletedAt: stamp }, data: { deletedAt: null, seq } });
-      await tx.page.updateMany({ where: { categoryId: { in: ids }, userId, deletedAt: stamp }, data: { deletedAt: null, seq } });
+      await tx.category.updateMany({ where: { id: { in: ids }, deletedAt: stamp }, data: { deletedAt: null, seq } });
+      await tx.page.updateMany({ where: { categoryId: { in: ids }, deletedAt: stamp }, data: { deletedAt: null, seq } });
       return toCategoryDto(await tx.category.findUniqueOrThrow({ where: { id } }));
     });
   }

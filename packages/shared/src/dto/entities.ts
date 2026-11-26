@@ -6,6 +6,8 @@ import { colorSchema, iconSchema, idSchema, nameSchema, positionSchema, titleSch
 
 export interface NotebookDto {
   id: string;
+  /** The space that owns it: the person own space, a team or a project. */
+  spaceId: string;
   name: string;
   icon: string | null;
   color: string | null;
@@ -18,6 +20,7 @@ export interface NotebookDto {
 
 export interface CategoryDto {
   id: string;
+  spaceId: string;
   notebookId: string;
   parentId: string | null;
   name: string;
@@ -31,6 +34,7 @@ export interface CategoryDto {
 /** Page without its content: what the sidebar and sync pull need. */
 export interface PageMetaDto {
   id: string;
+  spaceId: string;
   notebookId: string;
   categoryId: string;
   title: string;
@@ -52,6 +56,8 @@ export interface PageDto extends PageMetaDto {
 
 export const createNotebookSchema = z.object({
   id: idSchema,
+  /** Where to create it; the person own space when left out. */
+  spaceId: idSchema.optional(),
   name: nameSchema,
   icon: iconSchema.optional(),
   color: colorSchema.optional(),
@@ -117,6 +123,7 @@ export const searchQuerySchema = z.object({
 
 export interface SearchResultDto {
   pageId: string;
+  spaceId: string;
   title: string;
   notebookId: string;
   notebookName: string;

@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { StorageService } from '../src/media/storage.service.js';
 import { createTestApp, type TestApp } from './app.js';
 import { brokenPng, exe, fakeMp4, html, jpegWithExif, png, svg, truncatedJpegWithExif } from './fixtures.js';
-import { signup, uuid, type Account } from './helpers.js';
+import { signup, uuid, type Account, usedBytes } from './helpers.js';
 
 let t: TestApp;
 let me: Account;
@@ -49,8 +49,8 @@ describe('uploading', () => {
     const res = await upload(me, buf, 'photo.png');
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ kind: 'image', mime: 'image/png', width: 40, height: 30, size: buf.length });
-    const user = await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    expect(Number(user.storageUsedBytes)).toBe(buf.length);
+    const used = await usedBytes(t, me.id);
+    expect(used).toBe(buf.length);
     const onDisk = await readFile(storage.mediaPath(me.id, res.body.id));
     expect(onDisk.equals(buf)).toBe(true);
   });
@@ -76,8 +76,8 @@ describe('uploading', () => {
     expect(retry.status).toBe(201);
     expect(retry.body.id).toBe(first.body.id);
     expect(await t.prisma.media.count({ where: { userId: me.id } })).toBe(1);
-    const user = await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    expect(Number(user.storageUsedBytes)).toBe(buf.length);
+    const used = await usedBytes(t, me.id);
+    expect(used).toBe(buf.length);
   });
 
   it("refuses an id that belongs to another user and leaves their file alone", async () => {
@@ -98,7 +98,7 @@ describe('uploading', () => {
     const res = await upload(me, buf, name);
     expect(res.status).toBe(415);
     expect(await t.prisma.media.count()).toBe(0);
-    expect(Number((await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } })).storageUsedBytes)).toBe(0);
+    expect(await usedBytes(t, me.id)).toBe(0);
   });
 
   it('rejects a PNG signature followed by garbage as an unsupported type', async () => {
@@ -112,7 +112,7 @@ describe('uploading', () => {
     expect(res.status).toBe(422);
     expect(res.body.message).toBe('invalid_image');
     expect(await t.prisma.media.count()).toBe(0);
-    expect(Number((await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } })).storageUsedBytes)).toBe(0);
+    expect(await usedBytes(t, me.id)).toBe(0);
   });
 
   it('leaves no temporary files behind after rejected uploads', async () => {

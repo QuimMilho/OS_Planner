@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
@@ -42,12 +42,12 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function createTestApp(): Promise<TestApp> {
+/** `customize` may replace providers (for example the QuotaPolicy) before the module compiles. */
+export async function createTestApp(customize?: (builder: TestingModuleBuilder) => TestingModuleBuilder): Promise<TestApp> {
   const mail = new FakeMail();
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(MailService)
-    .useValue(mail)
-    .compile();
+  let builder = Test.createTestingModule({ imports: [AppModule] }).overrideProvider(MailService).useValue(mail);
+  if (customize) builder = customize(builder);
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false });
   configureApp(app, parseEnv());

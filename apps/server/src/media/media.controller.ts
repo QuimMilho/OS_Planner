@@ -19,7 +19,7 @@ import { FileInterceptor, MulterModule } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { diskStorage } from 'multer';
-import { idSchema, mediaUploadFieldsSchema, type MediaDto, type MediaUploadFields } from '@notes/shared';
+import { idSchema, mediaUploadFieldsSchema, type MediaDto, type MediaUploadFields } from '@os-planner/shared';
 import { z } from 'zod';
 import { CurrentUser, Public, RequireVerified, type AuthUser } from '../common/auth.decorators.js';
 import { TokenService } from '../auth/token.service.js';
@@ -78,7 +78,7 @@ export class MediaController {
     @Res() res: Response,
   ): Promise<void> {
     const userId = await this.resolveUser(req, query.t);
-    const row = await this.media.owned(userId, id);
+    const row = await this.media.accessible(userId, id);
 
     res.type(row.mime);
     res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');

@@ -8,9 +8,10 @@ import {
   type ExportPdfInput,
   type ExportScope,
   type PrintEntry,
-} from '@notes/shared';
+} from '@os-planner/shared';
 import { StorageService } from '../media/storage.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PermissionService } from '../spaces/permission.service.js';
 import { asDoc, buildForest, extensionFor, NameSet, safeName, type CatNode, type PageRow } from './forest.js';
 import { PdfService, PRINT_ASSETS_BASE, printMediaUrl } from './pdf.service.js';
 import { ZipWriter } from './zip.js';
@@ -18,6 +19,8 @@ import { ZipWriter } from './zip.js';
 /** What was asked for, loaded and arranged for rendering. */
 interface Selection {
   scope: ExportScope;
+  /** The space everything exported belongs to. */
+  spaceId: string;
   name: string;
   /** Notebook name for categories and pages (shown under the title). */
   context?: string;
@@ -37,6 +40,7 @@ export class ExportService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly pdf: PdfService,
+    private readonly perms: PermissionService,
   ) {}
 
   // ---------------------------------------------------------------- selection
@@ -44,17 +48,18 @@ export class ExportService {
   private async select(userId: string, scope: ExportScope, id: string): Promise<Selection> {
     if (scope === 'page') {
       const page = await this.prisma.page.findFirst({
-        where: { id, userId, deletedAt: null },
-        select: { id: true, title: true, categoryId: true, position: true, content: true, notebook: { select: { name: true } } },
+        where: { id, deletedAt: null },
+        select: { id: true, spaceId: true, title: true, categoryId: true, position: true, content: true, notebook: { select: { name: true } } },
       });
       if (!page) throw new NotFoundException();
-      return { scope, name: page.title, context: page.notebook.name, roots: [], page };
+      await this.mayRead(userId, page.spaceId);
+      return { scope, spaceId: page.spaceId, name: page.title, context: page.notebook.name, roots: [], page };
     }
 
     let notebookId: string;
     let categoryId: string | undefined;
     if (scope === 'category') {
-      const cat = await this.prisma.category.findFirst({ where: { id, userId, deletedAt: null }, select: { notebookId: true } });
+      const cat = await this.prisma.category.findFirst({ where: { id, deletedAt: null }, select: { notebookId: true } });
       if (!cat) throw new NotFoundException();
       notebookId = cat.notebookId;
       categoryId = id;
@@ -62,15 +67,16 @@ export class ExportService {
       notebookId = id;
     }
 
-    const notebook = await this.prisma.notebook.findFirst({ where: { id: notebookId, userId, deletedAt: null } });
+    const notebook = await this.prisma.notebook.findFirst({ where: { id: notebookId, deletedAt: null } });
     if (!notebook) throw new NotFoundException();
+    await this.mayRead(userId, notebook.spaceId);
     const [cats, pages] = await Promise.all([
       this.prisma.category.findMany({
-        where: { notebookId, userId, deletedAt: null },
+        where: { notebookId, deletedAt: null },
         select: { id: true, name: true, parentId: true, position: true },
       }),
       this.prisma.page.findMany({
-        where: { notebookId, userId, deletedAt: null },
+        where: { notebookId, deletedAt: null },
         select: { id: true, title: true, categoryId: true, position: true, content: true },
       }),
     ]);
@@ -78,9 +84,18 @@ export class ExportService {
 
     if (categoryId) {
       const node = byId.get(categoryId)!;
-      return { scope, name: node.name, context: notebook.name, roots: [node] };
+      return { scope, spaceId: notebook.spaceId, name: node.name, context: notebook.name, roots: [node] };
     }
-    return { scope, name: notebook.name, roots };
+    return { scope, spaceId: notebook.spaceId, name: notebook.name, roots };
+  }
+
+  /** Exporting reads, so seeing the notebooks of the space is enough; anything else is a plain 404. */
+  private async mayRead(userId: string, spaceId: string): Promise<void> {
+    try {
+      await this.perms.requireSpace(userId, spaceId);
+    } catch {
+      throw new NotFoundException();
+    }
   }
 
   // ---------------------------------------------------------------- PDF
@@ -121,7 +136,7 @@ export class ExportService {
 
   async markdownFor(userId: string, scope: ExportScope, id: string): Promise<MarkdownExport> {
     const sel = await this.select(userId, scope, id);
-    const rootName = safeName(sel.name, 'Notes');
+    const rootName = safeName(sel.name, 'OS_Planner');
 
     // Lay the pages out as files first, so every page knows how deep it sits (for relative media links).
     interface FileEntry { path: string; depth: number; page: PageRow }
@@ -146,7 +161,7 @@ export class ExportService {
 
     // Which uploads do these pages use? They go into media/ next to the pages.
     const wanted = [...new Set(files.flatMap((f) => collectMediaIds(asDoc(f.page.content))))];
-    const media = wanted.length ? await this.prisma.media.findMany({ where: { id: { in: wanted }, userId } }) : [];
+    const media = wanted.length ? await this.prisma.media.findMany({ where: { id: { in: wanted }, spaceId: sel.spaceId } }) : [];
     const fileName = new Map(media.map((m) => [m.id, `${m.id}${extensionFor(m.mime)}`]));
 
     const markdownOf = (f: FileEntry) =>
@@ -163,7 +178,7 @@ export class ExportService {
       write: async (out) => {
         const zip = new ZipWriter(out);
         for (const f of files) await zip.addText(`${rootName}/${f.path}`, markdownOf(f));
-        for (const m of media) await zip.addFile(`${rootName}/media/${fileName.get(m.id)}`, this.storage.mediaPath(userId, m.id));
+        for (const m of media) await zip.addFile(`${rootName}/media/${fileName.get(m.id)}`, this.storage.mediaPath(m.userId, m.id));
         zip.end();
       },
     };

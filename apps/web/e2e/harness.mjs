@@ -81,6 +81,17 @@ export async function startStack({ port = PORT, serveWeb = true, env: extraEnv =
   throw new Error(`server did not become healthy:\n${log}`);
 }
 
+/** Runs one statement against the e2e database: for setting up what the app has no screen for yet (adding a member to a team). */
+export async function sql(statement, params = []) {
+  const mariadb = requireFromServer('mariadb');
+  const conn = await mariadb.createConnection({ host: 'localhost', port: 3306, user: 'notes', password: 'notes', database: DB, allowPublicKeyRetrieval: true });
+  try {
+    return await conn.query(statement, params);
+  } finally {
+    await conn.end();
+  }
+}
+
 export const launch = () => chromium.launch({ channel: 'chrome', headless: true });
 
 let counter = 0;
@@ -116,6 +127,15 @@ export async function register(page, baseUrl, { name = 'E2E User', email = uniqu
 /** A real PNG (solid colour) for upload tests. */
 export function makePng(width = 64, height = 48, color = '#2f9e44') {
   return requireFromServer('sharp')({ create: { width, height, channels: 3, background: color } }).png().toBuffer();
+}
+
+/** A PNG of random noise: it does not compress, so its size is predictable (about 3 bytes per pixel). */
+export function makeNoisePng(side = 100) {
+  return requireFromServer('sharp')({
+    create: { width: side, height: side, channels: 3, background: '#000', noise: { type: 'gaussian', mean: 128, sigma: 60 } },
+  })
+    .png()
+    .toBuffer();
 }
 
 /** Opens the verification link from the mail, then waits for the app to notice. */
@@ -178,7 +198,7 @@ export const waitSaved = (page, timeout = 20_000) =>
 /** Reads a page's content from the API as the signed-in user (from inside the page, so cookies apply). */
 export async function apiGet(page, path) {
   return page.evaluate(async (p) => {
-    const refresh = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'notes' } });
+    const refresh = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'os_planner' } });
     const { accessToken } = await refresh.json();
     const res = await fetch(p, { headers: { Authorization: `Bearer ${accessToken}` } });
     return { status: res.status, body: await res.json().catch(() => null) };
@@ -197,7 +217,7 @@ const MIME = {
  * `apiUrl` goes into the copy's config.json; `setApiUrl` edits it afterwards, like a deployer would.
  */
 export async function startSite({ port, apiUrl }) {
-  const dir = mkdtempSync(join(tmpdir(), 'notes-site-'));
+  const dir = mkdtempSync(join(tmpdir(), 'os-planner-site-'));
   cpSync(resolve(root, 'apps/web/dist/web/browser'), dir, { recursive: true });
   let current = apiUrl;
   const setApiUrl = (value) => {

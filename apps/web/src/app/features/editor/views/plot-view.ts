@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { AngularNodeViewComponent } from 'ngx-tiptap';
-import { LIMITS, plotSpecSchema, renderPlotSvg, SERIES_PALETTE, type PlotExpression, type PlotSpec } from '@notes/shared';
+import { LIMITS, plotSpecSchema, renderPlotSvg, SERIES_PALETTE, type PlotExpression, type PlotSpec } from '@os-planner/shared';
 
 const num = (v: string, fallback: number): number => (v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : fallback);
 

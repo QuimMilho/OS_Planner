@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { createTestApp, type TestApp } from './app.js';
 import { png } from './fixtures.js';
-import { signup, uuid, type Account } from './helpers.js';
+import { signup, uuid, type Account, usedBytes } from './helpers.js';
 
 // Tiny limits so the tests need only a few kilobytes. Set before the app reads its config.
 const MAX_IMAGE_BYTES = 5_000;
@@ -50,8 +50,8 @@ describe('size limits and quota', () => {
     expect(statuses.at(-1)).toBe(413);
     const accepted = statuses.filter((s) => s === 201).length;
     expect(accepted).toBe(Math.floor(QUOTA_BYTES / small.length));
-    const user = await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    expect(Number(user.storageUsedBytes)).toBe(accepted * small.length);
+    const used = await usedBytes(t, me.id);
+    expect(used).toBe(accepted * small.length);
   });
 
   it('cannot be raced past the quota by parallel uploads', async () => {
@@ -60,9 +60,9 @@ describe('size limits and quota', () => {
     const accepted = results.filter((r) => r.status === 201).length;
     expect(accepted).toBeLessThanOrEqual(Math.floor(QUOTA_BYTES / small.length));
     expect(accepted).toBeGreaterThan(0);
-    const user = await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    expect(Number(user.storageUsedBytes)).toBeLessThanOrEqual(QUOTA_BYTES);
-    expect(Number(user.storageUsedBytes)).toBe(accepted * small.length);
+    const used = await usedBytes(t, me.id);
+    expect(used).toBeLessThanOrEqual(QUOTA_BYTES);
+    expect(used).toBe(accepted * small.length);
     expect(await t.prisma.media.count({ where: { userId: me.id } })).toBe(accepted);
   });
 

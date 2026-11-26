@@ -3,8 +3,9 @@
 //
 // Rules this schema relies on:
 //  * ids are UUID strings. Entities the client can create offline use client-generated UUIDv7.
-//  * `seq` is a per-user, strictly increasing change counter (see ChangeSeqService). Clients
-//    sync with "everything with seq > cursor", tombstones (deletedAt) included.
+//  * `seq` is a per-space, strictly increasing change counter (see ChangeSeqService). Clients
+//    sync with "everything with seq > cursor" for each space they can see, tombstones (deletedAt) included.
+//  * Everything that holds content belongs to a Space: one per user (personal), one per team, one per project.
 //  * `position` is a fractional-index key. Its alphabet is case-sensitive but this database's
 //    collation is not, so NEVER `ORDER BY position` in SQL: sort in application code.
 
@@ -20,19 +21,18 @@ datasource db {
 }
 
 model User {
-  id               String    @id @db.Char(36)
+  id              String    @id @db.Char(36)
   /// Stored lowercased.
-  email            String    @unique @db.VarChar(254)
-  passwordHash     String    @db.VarChar(255)
-  displayName      String    @db.VarChar(80)
-  locale           String    @default("en") @db.VarChar(5)
-  theme            String    @default("system") @db.VarChar(16)
-  emailVerifiedAt  DateTime?
-  storageUsedBytes BigInt    @default(0)
-  /// Last change sequence handed out to this user's rows.
-  changeSeq        BigInt    @default(0)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  email           String    @unique @db.VarChar(254)
+  passwordHash    String    @db.VarChar(255)
+  displayName     String    @db.VarChar(80)
+  locale          String    @default("en") @db.VarChar(5)
+  theme           String    @default("system") @db.VarChar(16)
+  emailVerifiedAt DateTime?
+  /// Mirror of the personal space changeSeq, kept for clients that still sync with `since` (removed in phase 17).
+  changeSeq       BigInt    @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   refreshTokens RefreshToken[]
   emailTokens   EmailToken[]
@@ -40,6 +40,13 @@ model User {
   categories    Category[]
   pages         Page[]
   media         Media[]
+
+  space              Space?
+  ownedTeams         Team[]          @relation("TeamOwner")
+  teamMemberships    TeamMember[]
+  projectMemberships ProjectMember[]
+  memberRoles        MemberRole[]
+  auditEntries       AuditLog[]
 }
 
 model RefreshToken {
@@ -80,6 +87,8 @@ model EmailToken {
 
 model Notebook {
   id        String    @id @db.Char(36)
+  /// The space that owns it. `userId` is only who created it.
+  spaceId   String    @db.Char(36)
   userId    String    @db.Char(36)
   name      String    @db.VarChar(120)
   icon      String?   @db.VarChar(40)
@@ -90,15 +99,18 @@ model Notebook {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  space      Space      @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   categories Category[]
   pages      Page[]
 
   @@index([userId, seq])
+  @@index([spaceId, seq])
 }
 
 model Category {
   id         String    @id @db.Char(36)
+  spaceId    String    @db.Char(36)
   userId     String    @db.Char(36)
   notebookId String    @db.Char(36)
   parentId   String?   @db.Char(36)
@@ -109,6 +121,7 @@ model Category {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  space    Space      @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   notebook Notebook   @relation(fields: [notebookId], references: [id], onDelete: Cascade)
   // Cascade: hard-deleting a category (trash purge, account deletion) removes its subtree too.
@@ -118,36 +131,42 @@ model Category {
   pages    Page[]
 
   @@index([userId, seq])
+  @@index([spaceId, seq])
   @@index([notebookId])
   @@index([parentId])
 }
 
 model Page {
   id            String    @id @db.Char(36)
+  spaceId       String    @db.Char(36)
   userId        String    @db.Char(36)
   /// Denormalised from the category so notebook-wide queries need no join.
   notebookId    String    @db.Char(36)
   categoryId    String    @db.Char(36)
   title         String    @db.VarChar(200)
-  /// ProseMirror document (see @notes/shared getSchemaExtensions).
+  /// ProseMirror document (see @os-planner/shared getSchemaExtensions).
   content       Json
   /// Plain text derived from `content` for full-text search.
   contentText   String    @db.MediumText
   schemaVersion Int       @default(1)
   /// Incremented on every content write; used for optimistic concurrency.
   version       Int       @default(0)
+  /// UTF-8 size of the JSON document; counts toward the storage quota (media counts through Media.size).
+  sizeBytes     Int       @default(0)
   position      String    @db.VarChar(64)
   seq           BigInt
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  space      Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   notebook   Notebook    @relation(fields: [notebookId], references: [id], onDelete: Cascade)
   category   Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   mediaLinks PageMedia[]
 
   @@index([userId, seq])
+  @@index([spaceId, seq])
   @@index([categoryId])
   @@index([notebookId])
   @@fulltext([title, contentText])
@@ -155,6 +174,8 @@ model Page {
 
 model Media {
   id          String   @id @db.Char(36)
+  spaceId     String   @db.Char(36)
+  /// Who uploaded it (the file lives under this user folder on disk).
   userId      String   @db.Char(36)
   /// "image" | "video"
   kind        String   @db.VarChar(10)
@@ -166,10 +187,12 @@ model Media {
   durationSec Float?
   createdAt   DateTime @default(now())
 
+  space Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   pages PageMedia[]
 
   @@index([userId])
+  @@index([spaceId])
   @@index([createdAt])
 }
 
@@ -184,4 +207,220 @@ model PageMedia {
 
   @@id([pageId, mediaId])
   @@index([mediaId])
+}
+
+/// An instance admin's change to the default limits of one user, team or project.
+/// NULL columns mean "use the default" (see QuotaService.limitFor).
+model QuotaOverride {
+  id           String   @id @db.Char(36)
+  /// "user" | "team" | "project"
+  scope        String   @db.VarChar(10)
+  scopeId      String   @db.Char(36)
+  storageBytes BigInt?
+  maxMembers   Int?
+  maxProjects  Int?
+  maxFileBytes BigInt?
+  note         String   @default("") @db.VarChar(500)
+  updatedBy    String   @db.Char(36)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([scope, scopeId])
+}
+
+/// Owns content and the sync cursor. Personal (one per user), team (one per team) or project (one per project).
+/// A team space storage counter includes everything its projects store.
+model Space {
+  id               String   @id @db.Char(36)
+  /// "personal" | "team" | "project"
+  kind             String   @db.VarChar(10)
+  userId           String?  @unique @db.Char(36)
+  teamId           String?  @unique @db.Char(36)
+  projectId        String?  @unique @db.Char(36)
+  /// Last change sequence handed out to this space rows (see ChangeSeqService).
+  changeSeq        BigInt   @default(0)
+  storageUsedBytes BigInt   @default(0)
+  createdAt        DateTime @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team    Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  notebooks  Notebook[]
+  categories Category[]
+  pages      Page[]
+  media      Media[]
+}
+
+/// A "guild": members, projects and a space of its own. Created by an instance admin.
+model Team {
+  id                  String    @id @db.Char(36)
+  name                String    @db.VarChar(80)
+  slug                String    @unique @db.VarChar(60)
+  icon                String?   @db.VarChar(40)
+  color               String?   @db.VarChar(7)
+  description         String    @default("") @db.VarChar(500)
+  /// NULL while the person named by the admin has no verified account yet; see PendingOwner.
+  ownerId             String?   @db.Char(36)
+  isPublic            Boolean   @default(false)
+  /// "open" | "request"
+  joinPolicy          String    @default("request") @db.VarChar(10)
+  /// The team own space. A plain pointer (Space.teamId holds the real foreign key).
+  spaceId             String    @unique @db.Char(36)
+  createdAt           DateTime  @default(now())
+  deletedAt           DateTime?
+
+  owner         User?          @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  space         Space?
+  members       TeamMember[]
+  projects      Project[]
+  pendingOwners PendingOwner[]
+  roles         Role[]
+  auditLog      AuditLog[]
+
+  @@index([ownerId])
+}
+
+model TeamMember {
+  teamId   String   @db.Char(36)
+  userId   String   @db.Char(36)
+  nickname String?  @db.VarChar(80)
+  joinedAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@index([userId])
+}
+
+/// A project or sub-project (any depth). Adjacency list plus a materialised path for subtree queries.
+model Project {
+  id          String    @id @db.Char(36)
+  teamId      String    @db.Char(36)
+  parentId    String?   @db.Char(36)
+  name        String    @db.VarChar(80)
+  description String    @default("") @db.VarChar(500)
+  icon        String?   @db.VarChar(40)
+  color       String?   @db.VarChar(7)
+  /// Fractional-index key among siblings (sort in application code, never ORDER BY).
+  position    String    @db.VarChar(64)
+  spaceId     String    @unique @db.Char(36)
+  /// "/<teamId>/<ancestor>/.../<id>/": every ancestor, root first, then this project.
+  path        String    @db.VarChar(1024)
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  team     Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  parent   Project?        @relation("ProjectTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Project[]       @relation("ProjectTree")
+  space    Space?
+  members  ProjectMember[]
+  roles    Role[]
+
+  @@index([teamId])
+  @@index([parentId])
+  @@index([path(length: 191)])
+}
+
+/// Explicit membership. A sub-project member must also be a member of the parent.
+model ProjectMember {
+  projectId String   @db.Char(36)
+  userId    String   @db.Char(36)
+  joinedAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+/// Ownership promised to an email address that had no verified account when the team was created.
+model PendingOwner {
+  id        String   @id @db.Char(36)
+  teamId    String   @db.Char(36)
+  email     String   @db.VarChar(254)
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, email])
+  @@index([email])
+}
+
+/// A team role (projectId NULL) or a project role (applies in that project and below). Every team has exactly one
+/// "@everyone" row (isEveryone, position 0) that holds the permissions all members get.
+/// Positions: higher is more powerful; team roles and project roles share one scale (see shared/permissions/hierarchy.ts).
+model Role {
+  id          String   @id @db.Char(36)
+  teamId      String   @db.Char(36)
+  projectId   String?  @db.Char(36)
+  name        String   @db.VarChar(40)
+  color       String?  @db.VarChar(7)
+  position    Int      @default(0)
+  /// BIGINT UNSIGNED bit field, see shared/permissions/bits.ts.
+  permissions BigInt   @default(0) @db.UnsignedBigInt
+  hoist       Boolean  @default(false)
+  mentionable Boolean  @default(false)
+  isEveryone  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  team    Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  project Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members MemberRole[]
+
+  @@index([teamId, projectId])
+  @@index([projectId])
+}
+
+/// Who holds which role. @everyone is implicit and has no rows here.
+model MemberRole {
+  userId String @db.Char(36)
+  roleId String @db.Char(36)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+/// Allow/deny pair for a role or a member on a project (later channels, notebooks, boards). The target is polymorphic,
+/// so its rows are deleted by the code that deletes the target. allow and deny never overlap.
+model Overwrite {
+  id          String @id @db.Char(36)
+  /// "project" | "channel" | "notebook" | "board"
+  targetKind  String @db.VarChar(10)
+  targetId    String @db.Char(36)
+  /// "role" | "member"
+  subjectKind String @db.VarChar(10)
+  subjectId   String @db.Char(36)
+  allow       BigInt @default(0) @db.UnsignedBigInt
+  deny        BigInt @default(0) @db.UnsignedBigInt
+
+  @@unique([targetKind, targetId, subjectKind, subjectId])
+  @@index([targetKind, targetId])
+  @@index([subjectKind, subjectId])
+}
+
+/// Append-only record of every sensitive change in a team. Written in the same transaction as the change.
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  teamId     String   @db.Char(36)
+  actorId    String?  @db.Char(36)
+  action     String   @db.VarChar(40)
+  targetKind String   @db.VarChar(20)
+  targetId   String   @db.VarChar(36)
+  before     Json?
+  after      Json?
+  reason     String?  @db.VarChar(500)
+  createdAt  DateTime @default(now())
+
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([teamId, createdAt])
+  @@index([teamId, id])
+  @@index([actorId])
 }

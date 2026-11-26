@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { searchQuerySchema, type SearchResultDto } from '@notes/shared';
+import { searchQuerySchema, type SearchResultDto } from '@os-planner/shared';
 import type { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../common/auth.decorators.js';
 import { SearchService } from './search.service.js';

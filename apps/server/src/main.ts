@@ -15,7 +15,7 @@ async function bootstrap(): Promise<void> {
   configureApp(app, env);
 
   await app.listen(env.PORT);
-  new Logger('Bootstrap').log(`Notes API listening on ${env.APP_URL.startsWith('https') ? 'port' : 'http://localhost:'}${env.PORT}`);
+  new Logger('Bootstrap').log(`OS_Planner API listening on ${env.APP_URL.startsWith('https') ? 'port' : 'http://localhost:'}${env.PORT}`);
 }
 
 void bootstrap();

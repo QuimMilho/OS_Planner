@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type { JSONContent } from '@tiptap/core';
-import type { PageDto } from '@notes/shared';
+import type { PageDto } from '@os-planner/shared';
 import { Db, type PageContentRow } from './db';
 import { Outbox } from './outbox';
 

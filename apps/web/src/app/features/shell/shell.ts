@@ -15,14 +15,19 @@ import { AuthStore } from '../../core/auth-store';
 import { Notify } from '../../core/notify';
 import { Online } from '../../core/online';
 import { Platform } from '../../core/platform';
+import { QuotaStore } from '../../core/quota';
 import { Session } from '../../core/session';
 import { Sync } from '../../data/sync';
 import { Dialogs } from '../../shared/dialogs';
+import { NavContext } from '../../core/nav-context';
+import { TeamSidebar } from '../team/team-sidebar';
+import { Breadcrumb } from './breadcrumb';
+import { Rail } from './rail';
 import { Tree } from './tree';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, MatSidenavModule, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, Tree, TranslocoPipe],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, MatSidenavModule, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, Tree, TeamSidebar, Breadcrumb, Rail, TranslocoPipe],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
 })
@@ -31,6 +36,8 @@ export class Shell {
   readonly sync = inject(Sync);
   readonly online = inject(Online);
   readonly platform = inject(Platform);
+  readonly quota = inject(QuotaStore);
+  readonly nav = inject(NavContext);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
   private readonly notify = inject(Notify);
@@ -42,6 +49,10 @@ export class Shell {
   /** Open on wide screens, closed on phones, until the person toggles it. */
   readonly sidenavOpen = computed(() => this.manualOpen() ?? !this.isMobile());
   query = '';
+
+  constructor() {
+    void this.quota.refresh();
+  }
 
   readonly lastIssue = computed(() => this.sync.issues().at(-1) ?? null);
   readonly initial = computed(() => (this.auth.user()?.displayName ?? '?').trim().charAt(0).toUpperCase());

@@ -1,9 +1,9 @@
 {
-  "name": "@notes/desktop",
+  "name": "@os-planner/desktop",
   "version": "1.0.0",
   "private": true,
-  "description": "Notes desktop app: a native window around the Notes website",
-  "author": "Notes",
+  "description": "OS_Planner desktop app: a native window around the OS_Planner website",
+  "author": "OS_Planner",
   "homepage": "https://github.com/",
   "license": "UNLICENSED",
   "main": "dist/main.js",

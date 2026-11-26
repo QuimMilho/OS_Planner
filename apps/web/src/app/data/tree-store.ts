@@ -1,9 +1,10 @@
 import { Injectable, computed, inject } from '@angular/core';
-import { EMPTY_DOC, positionBetween } from '@notes/shared/lite';
-import type { CategoryDto, NotebookDto, PageMetaDto } from '@notes/shared';
+import { EMPTY_DOC, positionBetween } from '@os-planner/shared/lite';
+import type { CategoryDto, NotebookDto, PageMetaDto } from '@os-planner/shared';
+import { AuthStore } from '../core/auth-store';
 import { Language } from '../core/i18n';
 import { uuidv7 } from '../core/ids';
-import { Db, type NotesDb } from './db';
+import { Db, type PlannerDb } from './db';
 import { liveSignal } from './live';
 import { Outbox } from './outbox';
 
@@ -38,6 +39,13 @@ export class TreeStore {
   private readonly dbs = inject(Db);
   private readonly outbox = inject(Outbox);
   private readonly lang = inject(Language);
+  private readonly auth = inject(AuthStore);
+
+  /** The account's own space. Rows stored before spaces existed carry none and are personal. */
+  readonly personalSpaceId = computed(() => this.auth.user()?.personalSpaceId ?? '');
+  isPersonal(row: { spaceId?: string }): boolean {
+    return !row.spaceId || row.spaceId === this.personalSpaceId();
+  }
 
   readonly notebooks = liveSignal(this.dbs, (d) => d.notebooks.toArray(), [] as NotebookDto[]);
   readonly categories = liveSignal(this.dbs, (d) => d.categories.toArray(), [] as CategoryDto[]);
@@ -49,8 +57,8 @@ export class TreeStore {
 
   /** Live (not trashed) notebooks with their nested categories and pages, in position order. */
   readonly tree = computed<NotebookNode[]>(() => {
-    const cats = this.categories().filter((c) => !c.deletedAt);
-    const pages = this.pages().filter((p) => !p.deletedAt);
+    const cats = this.categories().filter((c) => !c.deletedAt && this.isPersonal(c));
+    const pages = this.pages().filter((p) => !p.deletedAt && this.isPersonal(p));
     const nodes = new Map<string, CategoryNode>(cats.map((c) => [c.id, { category: c, pages: [], children: [] }]));
     for (const p of [...pages].sort(byPosition)) nodes.get(p.categoryId)?.pages.push(p);
 
@@ -62,7 +70,7 @@ export class TreeStore {
       else (rootsByNotebook.get(c.notebookId) ?? rootsByNotebook.set(c.notebookId, []).get(c.notebookId)!).push(node);
     }
     return this.notebooks()
-      .filter((n) => !n.deletedAt)
+      .filter((n) => !n.deletedAt && this.isPersonal(n))
       .sort(byPosition)
       .map((n) => ({
         notebook: n,
@@ -76,16 +84,16 @@ export class TreeStore {
     const nbs = this.notebookById();
     const cats = this.categoryById();
     const out: TrashItem[] = [];
-    for (const n of this.notebooks()) if (n.deletedAt) out.push({ kind: 'notebook', item: n });
+    for (const n of this.notebooks()) if (n.deletedAt && this.isPersonal(n)) out.push({ kind: 'notebook', item: n });
     for (const c of this.categories()) {
-      if (!c.deletedAt) continue;
+      if (!c.deletedAt || !this.isPersonal(c)) continue;
       const parent = c.parentId ? cats.get(c.parentId) : undefined;
       const nb = nbs.get(c.notebookId);
       if (nb?.deletedAt === c.deletedAt || parent?.deletedAt === c.deletedAt) continue;
       out.push({ kind: 'category', item: c });
     }
     for (const p of this.pages()) {
-      if (!p.deletedAt) continue;
+      if (!p.deletedAt || !this.isPersonal(p)) continue;
       const cat = cats.get(p.categoryId);
       if (cat?.deletedAt === p.deletedAt || nbs.get(p.notebookId)?.deletedAt === p.deletedAt) continue;
       out.push({ kind: 'page', item: p });
@@ -117,9 +125,11 @@ export class TreeStore {
     const categoryId = uuidv7();
     const stamp = now();
     const position = await this.lastPosition(await db.notebooks.filter((n) => !n.deletedAt).toArray());
-    const notebook: NotebookDto = { id, name, icon: null, color: null, position, seq: 0, deletedAt: null, createdAt: stamp, updatedAt: stamp };
+    const spaceId = this.personalSpaceId();
+    const notebook: NotebookDto = { id, spaceId, name, icon: null, color: null, position, seq: 0, deletedAt: null, createdAt: stamp, updatedAt: stamp };
     const category: CategoryDto = {
       id: categoryId,
+      spaceId,
       notebookId: id,
       parentId: null,
       name: this.lang.t('tree.defaultCategory'),
@@ -175,7 +185,8 @@ export class TreeStore {
     const stamp = now();
     const siblings = await db.categories.where('notebookId').equals(notebookId).filter((c) => !c.deletedAt && c.parentId === parentId).toArray();
     const position = await this.lastPosition(siblings);
-    const category: CategoryDto = { id, notebookId, parentId, name, position, seq: 0, deletedAt: null, createdAt: stamp, updatedAt: stamp };
+    const spaceId = (await db.notebooks.get(notebookId))?.spaceId ?? this.personalSpaceId();
+    const category: CategoryDto = { id, spaceId, notebookId, parentId, name, position, seq: 0, deletedAt: null, createdAt: stamp, updatedAt: stamp };
     await db.categories.add(category);
     await this.outbox.enqueue({ opId: uuidv7(), type: 'category.create', id, notebookId, parentId, name, position });
     return category;
@@ -241,7 +252,7 @@ export class TreeStore {
     const stamp = now();
     const siblings = await db.pages.where('categoryId').equals(categoryId).filter((p) => !p.deletedAt).toArray();
     const position = await this.lastPosition(siblings);
-    const page: PageMetaDto = { id, notebookId: category.notebookId, categoryId, title, position, version: 0, seq: 0, deletedAt: null, createdAt: stamp, updatedAt: stamp };
+    const page: PageMetaDto = { id, spaceId: category.spaceId ?? this.personalSpaceId(), notebookId: category.notebookId, categoryId, title, position, version: 0, seq: 0, deletedAt: null, createdAt: stamp, updatedAt: stamp };
     await db.transaction('rw', db.pages, db.contents, async () => {
       await db.pages.add(page);
       await db.contents.add({ id, content: structuredClone(EMPTY_DOC) as never, baseVersion: 0, dirty: 0, rev: 0 });
@@ -278,7 +289,7 @@ export class TreeStore {
 
   /** Swaps the position of two siblings (used by "move up / move down"). */
   async swapPositions(kind: 'category' | 'page' | 'notebook', a: { id: string; position: string }, b: { id: string; position: string }): Promise<void> {
-    const db: NotesDb = this.dbs.db;
+    const db: PlannerDb = this.dbs.db;
     const table = kind === 'notebook' ? db.notebooks : kind === 'category' ? db.categories : db.pages;
     await table.update(a.id, { position: b.position } as never);
     await table.update(b.id, { position: a.position } as never);

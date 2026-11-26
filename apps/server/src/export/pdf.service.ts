@@ -10,7 +10,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import puppeteer, { type Browser, type HTTPRequest } from 'puppeteer-core';
-import type { PrintPageSize } from '@notes/shared';
+import type { PrintPageSize } from '@os-planner/shared';
 import { ENV, type Env } from '../config/env.js';
 import { StorageService } from '../media/storage.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -53,8 +53,8 @@ export class PdfService implements OnModuleDestroy {
   private launching: Promise<Browser> | null = null;
   private running = 0;
   private readonly waiting: Array<() => void> = [];
-  /** dist/print of @notes/shared: print-runtime.js plus KaTeX's CSS and fonts. */
-  private readonly assetsDir = join(dirname(createRequire(import.meta.url).resolve('@notes/shared')), 'print');
+  /** dist/print of @os-planner/shared: print-runtime.js plus KaTeX's CSS and fonts. */
+  private readonly assetsDir = join(dirname(createRequire(import.meta.url).resolve('@os-planner/shared')), 'print');
 
   constructor(
     @Inject(ENV) private readonly env: Env,

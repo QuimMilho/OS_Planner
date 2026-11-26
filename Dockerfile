@@ -1,5 +1,5 @@
-# Notes server + website in one image: the API, the built Angular app and /downloads, plus Chromium for PDF export.
-#   docker build -t notes .
+# OS_Planner server + website in one image: the API, the built Angular app and /downloads, plus Chromium for PDF export.
+#   docker build -t os-planner .
 #   docker compose --profile prod up -d        (see README: needs a .env with secrets)
 
 # ---------------------------------------------------------------- build
@@ -18,15 +18,15 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 
 COPY . .
 # Where the website sends its API calls. Empty (the default) = the same origin that serves the site. The build is not
-# interactive, so this is the only way to set it here:  docker build --build-arg NOTES_API_URL=https://api.example.com .
+# interactive, so this is the only way to set it here:  docker build --build-arg OS_PLANNER_API_URL=https://api.example.com .
 # It lands in the site's config.json, which can also be edited later in the running image.
-ARG NOTES_API_URL=""
-ENV NOTES_API_URL=$NOTES_API_URL
+ARG OS_PLANNER_API_URL=""
+ENV OS_PLANNER_API_URL=$OS_PLANNER_API_URL
 # `prisma generate` never connects, but prisma.config.ts insists on a DATABASE_URL, so give it a placeholder.
-RUN npm run build -w @notes/shared \
- && DATABASE_URL=mysql://build:build@localhost:3306/build npm run prisma:generate -w @notes/server \
- && npm run build -w @notes/web \
- && npm run build -w @notes/server
+RUN npm run build -w @os-planner/shared \
+ && DATABASE_URL=mysql://build:build@localhost:3306/build npm run prisma:generate -w @os-planner/server \
+ && npm run build -w @os-planner/web \
+ && npm run build -w @os-planner/server
 
 # Keep only what the server needs at run time: no Angular, Electron or test tooling.
 RUN npm prune --omit=dev --no-audit --no-fund \

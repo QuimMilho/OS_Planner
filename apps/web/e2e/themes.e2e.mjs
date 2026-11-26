@@ -135,7 +135,7 @@ describe('themes', () => {
         assert.equal(await page.getAttribute('.theme.on', 'aria-checked'), 'true');
         // saved on the account, and on this device for the next start
         await page.waitForFunction(
-          async () => localStorage.getItem('notes.theme.pending') === null,
+          async () => localStorage.getItem('os_planner.theme.pending') === null,
           null,
           { timeout: 10_000 },
         );
@@ -189,7 +189,7 @@ describe('themes', () => {
       const { email } = await register(a.page, base);
       await openSettings(a.page);
       await pick(a.page, 'purple');
-      await a.page.waitForFunction(() => localStorage.getItem('notes.theme.pending') === null);
+      await a.page.waitForFunction(() => localStorage.getItem('os_planner.theme.pending') === null);
       await a.close();
 
       const b = await device({ colorScheme: 'light' });
@@ -267,11 +267,11 @@ describe('themes', () => {
       await ctx.setOffline(true);
       await pick(page, 'red');
       assert.equal((await look(page)).attr, 'red', 'applied at once, even offline');
-      assert.equal(await page.evaluate(() => localStorage.getItem('notes.theme')), 'red');
-      await page.waitForFunction(() => localStorage.getItem('notes.theme.pending') === '1');
+      assert.equal(await page.evaluate(() => localStorage.getItem('os_planner.theme')), 'red');
+      await page.waitForFunction(() => localStorage.getItem('os_planner.theme.pending') === '1');
 
       await ctx.setOffline(false);
-      await page.waitForFunction(() => localStorage.getItem('notes.theme.pending') === null, null, {
+      await page.waitForFunction(() => localStorage.getItem('os_planner.theme.pending') === null, null, {
         timeout: 30_000,
       });
       assert.equal(await accountTheme(page), 'red', 'the account has the choice now');
@@ -293,7 +293,7 @@ describe('themes', () => {
       await page.goto('about:blank');
       await page.goto(`${base}/app`);
       await page.waitForSelector('app-shell');
-      await page.waitForFunction(() => localStorage.getItem('notes.theme.pending') === null, null, {
+      await page.waitForFunction(() => localStorage.getItem('os_planner.theme.pending') === null, null, {
         timeout: 30_000,
       });
       assert.equal(await accountTheme(page), 'blue');
@@ -311,14 +311,14 @@ describe('themes', () => {
       const { email } = await register(a.page, base);
       await openSettings(a.page);
       await pick(a.page, 'dark');
-      await a.page.waitForFunction(() => localStorage.getItem('notes.theme.pending') === null);
+      await a.page.waitForFunction(() => localStorage.getItem('os_planner.theme.pending') === null);
 
       // another device changes it
       const b = await device({ colorScheme: 'light' });
       await login(b.page, base, email);
       await openSettings(b.page);
       await pick(b.page, 'green');
-      await b.page.waitForFunction(() => localStorage.getItem('notes.theme.pending') === null);
+      await b.page.waitForFunction(() => localStorage.getItem('os_planner.theme.pending') === null);
       await b.close();
 
       // the first device signs in again (a new session read): it takes the account's value

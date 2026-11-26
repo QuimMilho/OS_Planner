@@ -4,7 +4,7 @@
  *   { "apiUrl": "https://api.example.com" }
  * Whoever deploys the site can edit that file without rebuilding. It is read once, before the app starts.
  */
-const CACHE_KEY = 'notes.apiUrl';
+const CACHE_KEY = 'os_planner.apiUrl';
 
 let base = '';
 

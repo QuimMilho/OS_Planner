@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import nodemailer, { type Transporter } from 'nodemailer';
-import type { Locale } from '@notes/shared';
+import type { Locale } from '@os-planner/shared';
 import { ENV, type Env } from '../config/env.js';
 import { resetPasswordMail, verifyEmailMail, type MailContent } from './templates.js';
 

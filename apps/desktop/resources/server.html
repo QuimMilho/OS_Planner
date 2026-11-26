@@ -18,8 +18,8 @@
   </head>
   <body>
     <form id="form">
-      <h1>Notes server</h1>
-      <p>The address of the Notes website this app shows, for example <code>https://notes.example.com</code>.</p>
+      <h1>OS_Planner server</h1>
+      <p>The address of the OS_Planner website this app shows, for example <code>https://planner.example.com</code>.</p>
       <input id="url" type="text" autocomplete="off" spellcheck="false" autofocus />
       <div class="err" id="err" role="alert"></div>
       <div class="row">
@@ -30,13 +30,13 @@
     <script>
       const input = document.getElementById('url');
       const err = document.getElementById('err');
-      window.notesConfig.get().then((v) => { input.value = v; input.select(); });
+      window.osPlannerConfig.get().then((v) => { input.value = v; input.select(); });
       document.getElementById('cancel').addEventListener('click', () => window.close());
       document.getElementById('form').addEventListener('submit', async (e) => {
         e.preventDefault();
         err.textContent = '';
-        if (!(await window.notesConfig.validate(input.value))) { err.textContent = 'Enter a web address starting with http:// or https://'; return; }
-        const result = await window.notesConfig.set(input.value);
+        if (!(await window.osPlannerConfig.validate(input.value))) { err.textContent = 'Enter a web address starting with http:// or https://'; return; }
+        const result = await window.osPlannerConfig.set(input.value);
         if (!result.ok) err.textContent = 'That address could not be used.';
       });
     </script>
