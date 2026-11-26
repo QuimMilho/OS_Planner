@@ -4,6 +4,7 @@ import {
   createNotebookSchema,
   createPageSchema,
   idSchema,
+  moveNotebookSchema,
   putContentSchema,
   syncBatchSchema,
   syncChangesQuerySchema,
@@ -14,6 +15,7 @@ import {
   type CreateCategoryInput,
   type CreateNotebookInput,
   type CreatePageInput,
+  type MoveNotebookInput,
   type NotebookDto,
   type PageDto,
   type PageMetaDto,
@@ -75,6 +77,13 @@ export class NotebooksController {
   @Post(':id/restore')
   restore(@CurrentUser() u: AuthUser, @Id() id: string): Promise<NotebookDto> {
     return this.notebooks.restore(u.id, id);
+  }
+
+  /** To another space (personal, team or project): see NotebooksService.move. */
+  @HttpCode(200)
+  @Post(':id/move')
+  move(@CurrentUser() u: AuthUser, @Id() id: string, @Body({ schema: moveNotebookSchema }) body: MoveNotebookInput): Promise<NotebookDto> {
+    return this.notebooks.move(u.id, id, body.spaceId);
   }
 }
 

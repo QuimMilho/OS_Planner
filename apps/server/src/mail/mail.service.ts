@@ -3,11 +3,14 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import type { Locale } from '@os-planner/shared';
 import { ENV, type Env } from '../config/env.js';
 import {
+  digestMail,
   inviteMail,
   ownershipMail,
   requestDecisionMail,
   resetPasswordMail,
+  shareMail,
   verifyEmailMail,
+  type DigestMail,
   type MailContent,
 } from './templates.js';
 
@@ -48,6 +51,11 @@ export class MailService {
     return this.send(to, inviteMail(locale, inviter, team, this.appUrl(`/invite/${encodeURIComponent(token)}`), expiresInDays));
   }
 
+  /** `hasAccount` false = an address nobody registered yet: the same text either way, only the button differs. */
+  sendShare(to: string, locale: Locale, sharer: string, notebook: string, access: 'read' | 'edit', hasAccount: boolean): Promise<boolean> {
+    return this.send(to, shareMail(locale, sharer, notebook, access, this.appUrl(hasAccount ? '/app' : '/register'), hasAccount));
+  }
+
   sendRequestDecision(to: string, name: string, locale: Locale, team: string, approved: boolean): Promise<boolean> {
     return this.send(to, requestDecisionMail(locale, name, team, approved, this.appUrl('/app')));
   }
@@ -55,6 +63,11 @@ export class MailService {
   /** `offered`: the team waits for an account with this address; `assigned`: ownership was just handed over. */
   sendOwnership(to: string, name: string | null, locale: Locale, team: string, kind: 'offered' | 'assigned'): Promise<boolean> {
     return this.send(to, ownershipMail(locale, name, team, kind, this.appUrl(kind === 'offered' ? '/register' : '/app')));
+  }
+
+  /** The mail about one chat (phase 9): a count, the latest messages, and links to open it, mute it or stop the mails. */
+  sendNotificationDigest(to: string, name: string, locale: Locale, digest: DigestMail): Promise<boolean> {
+    return this.send(to, digestMail(locale, name, digest));
   }
 
   /** Never throws: a broken mail server must not break registration or leak account existence. */

@@ -10,6 +10,7 @@ import {
 import { ENV, type Env } from '../config/env.js';
 import type { InputJsonValue } from '../generated/prisma/internal/prismaNamespace.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
+import { EventBus } from '../events/event-bus.js';
 import { PermissionService } from '../spaces/permission.service.js';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -47,6 +48,7 @@ export class AuditService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly perms: PermissionService,
+    private readonly bus: EventBus,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -63,6 +65,15 @@ export class AuditService {
         after: jsonSafe(entry.after),
         reason: entry.reason?.slice(0, 500),
       },
+    });
+    // The same entry tells the realtime layer, once it is committed, that someone's access may have changed.
+    this.bus.publishAfterCommit(tx, 'team.audited', {
+      teamId: entry.teamId,
+      action: entry.action,
+      targetKind: entry.targetKind,
+      targetId: entry.targetId,
+      actorId: entry.actorId,
+      after: entry.after ?? null,
     });
   }
 

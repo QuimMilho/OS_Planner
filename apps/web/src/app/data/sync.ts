@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom, Subject, debounceTime } from 'rxjs';
 import type { JSONContent } from '@tiptap/core';
-import { collectMediaIds, EMPTY_DOC, positionBetween } from '@os-planner/shared/lite';
+import { collectMediaIds, EMPTY_DOC, isSharedCursorKey, notebookOfSharedKey, positionBetween } from '@os-planner/shared/lite';
 import type { SpaceChangesDto, SyncBatchResponse, SyncChangesDto, SyncOp } from '@os-planner/shared';
 import { AuthStore, isUnreachable } from '../core/auth-store';
 import { Language } from '../core/i18n';
@@ -10,6 +10,7 @@ import { uuidv7 } from '../core/ids';
 import { Online } from '../core/online';
 import { Platform } from '../core/platform';
 import { QuotaStore } from '../core/quota';
+import { AccessStore } from './access-store';
 import { Db, type MediaRow, type PageContentRow } from './db';
 import { liveSignal } from './live';
 import { Outbox } from './outbox';
@@ -70,6 +71,7 @@ export class Sync {
   private readonly platform = inject(Platform);
   private readonly quota = inject(QuotaStore);
   private readonly teamStore = inject(TeamStore);
+  private readonly access = inject(AccessStore);
 
   readonly state = signal<SyncState>('idle');
   readonly lastSyncAt = signal<Date | null>(null);
@@ -178,6 +180,7 @@ export class Sync {
     await this.uploadMedia();
     await this.pushContents();
     await this.teamStore.refreshAll(); // teams, projects, members: also tells which spaces to ask for
+    await this.access.refresh(); // what the person may do in each team, project and shared notebook
     await this.pull();
     await this.prefetch();
     if (!this.refusedThisCycle) {
@@ -244,6 +247,7 @@ export class Sync {
     if (row.width) form.append('width', String(row.width));
     if (row.height) form.append('height', String(row.height));
     if (row.durationSec != null) form.append('durationSec', String(row.durationSec));
+    if (row.notebookId) form.append('notebookId', row.notebookId); // a notebook that is not the person's own names the space the file belongs to
     form.append('file', row.blob, row.id);
     try {
       await firstValueFrom(this.http.post('/api/media', form));
@@ -408,23 +412,67 @@ export class Sync {
     // Read the tables themselves: the live signals may not have caught up with what refreshAll just wrote.
     const spaces = [personal, ...(await db.teams.toArray()).map((t) => t.spaceId), ...(await db.projects.toArray()).map((p) => p.spaceId)];
     for (const id of spaces) cursors[id] ??= 0;
+    // Notebooks of a space the person may not see (a notebook overwrite hides them), as of the last answer.
+    const hiddenBefore = ((await db.meta.get('hidden'))?.value as Record<string, string[]> | undefined) ?? {};
 
     for (;;) {
       const res = await firstValueFrom(this.http.get<SyncChangesDto>('/api/sync/changes', { params: { cursors: JSON.stringify(cursors) } }));
       let more = false;
-      for (const [spaceId, changes] of Object.entries(res.spaces)) {
+      for (const [key, changes] of Object.entries(res.spaces)) {
         await this.apply(changes);
-        cursors[spaceId] = changes.cursor;
+        cursors[key] = changes.cursor;
         more ||= changes.hasMore;
+        if (isSharedCursorKey(key)) continue;
+        // Notebooks that became hidden or moved away are dropped from this device...
+        const hidden = changes.hiddenNotebooks ?? [];
+        await this.dropNotebooks([...hidden, ...(changes.movedOut ?? [])], key);
+        // ...and when one that was hidden is visible again, nothing else says so: read the space from the start.
+        if ((hiddenBefore[key] ?? []).some((id) => !hidden.includes(id))) {
+          cursors[key] = 0;
+          more = true;
+        }
+        if (hidden.length) hiddenBefore[key] = hidden;
+        else delete hiddenBefore[key];
       }
-      if (res.revokedSpaces.length) {
-        await this.teamStore.purgeSpaces(res.revokedSpaces);
-        for (const id of res.revokedSpaces) delete cursors[id];
+      if (res.sharedNotebooks) {
+        await db.transaction('rw', db.shared, async () => {
+          await db.shared.clear();
+          await db.shared.bulkPut(res.sharedNotebooks!);
+        });
+      }
+      const revoked = res.revokedSpaces.filter((id) => !isSharedCursorKey(id));
+      if (revoked.length) await this.teamStore.purgeSpaces(revoked);
+      for (const key of res.revokedSpaces) {
+        delete cursors[key];
+        if (isSharedCursorKey(key)) await this.dropNotebooks([notebookOfSharedKey(key)], null);
       }
       // purgeSpaces rewrites the stored cursors; keep the ones we hold now
-      await db.meta.put({ key: 'cursors', value: cursors });
+      await db.transaction('rw', db.meta, async () => {
+        await db.meta.put({ key: 'cursors', value: cursors });
+        await db.meta.put({ key: 'hidden', value: hiddenBefore });
+      });
       if (!more) return;
     }
+  }
+
+  /**
+   * Removes notebooks (with their categories, pages and documents) from this device: they were hidden by an overwrite, moved to
+   * another space, or are no longer shared. With `space`, only those still filed under it (one that already arrived under its new
+   * space is kept).
+   */
+  private async dropNotebooks(ids: string[], space: string | null): Promise<void> {
+    if (!ids.length) return;
+    const db = this.dbs.db;
+    await db.transaction('rw', [db.notebooks, db.categories, db.pages, db.contents, db.shared], async () => {
+      const doomed = (await db.notebooks.bulkGet(ids)).filter((n): n is NonNullable<typeof n> => !!n && (space === null || n.spaceId === space)).map((n) => n.id);
+      if (!doomed.length) return;
+      const pageIds = (await db.pages.where('notebookId').anyOf(doomed).primaryKeys()) as string[];
+      await db.contents.bulkDelete(pageIds);
+      await db.pages.where('notebookId').anyOf(doomed).delete();
+      await db.categories.where('notebookId').anyOf(doomed).delete();
+      await db.notebooks.bulkDelete(doomed);
+      if (space === null) await db.shared.bulkDelete(doomed);
+    });
   }
 
   private async pullLegacy(): Promise<void> {

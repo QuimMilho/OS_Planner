@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  isSharedCursorKey,
+  sharedCursorKey,
   syncOpSchema,
   type SpaceChangesDto,
   type SyncBatchResponse,
@@ -11,6 +13,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { QuotaExceeded } from '../quota/quota.errors.js';
 import { PermissionService } from '../spaces/permission.service.js';
+import { SharesService } from '../sharing/shares.service.js';
 import { SpacesService } from '../spaces/spaces.service.js';
 import { CategoriesService } from './categories.service.js';
 import { PAGE_META_SELECT, toCategoryDto, toNotebookDto, toPageMetaDto } from './mappers.js';
@@ -37,6 +40,7 @@ export class SyncService {
     private readonly pages: PagesService,
     private readonly perms: PermissionService,
     private readonly spaces: SpacesService,
+    private readonly shares: SharesService,
   ) {}
 
   /**
@@ -45,6 +49,9 @@ export class SyncService {
    *  - `cursors` (one per space the client holds): every space the person may still see answers
    *    under `spaces`; the ones they may not (left or removed from a team, deleted team or
    *    project, no such space) are listed in `revokedSpaces` so the client can purge them.
+   *  - Notebooks shared with the person are listed in `sharedNotebooks` and each answers under its own key
+   *    (`shared:<notebookId>`, cursor = the owner's space sequence, rows = that notebook only). A key the client holds
+   *    for a share that ended is revoked like a space.
    *  - `since` (older clients): one cursor for the personal space, answered at the top level.
    */
   async changes(userId: string, query: SyncChangesQuery): Promise<SyncChangesDto> {
@@ -52,18 +59,31 @@ export class SyncService {
       const visible = await this.perms.notebookSpaces(userId);
       const spaces: Record<string, SpaceChangesDto> = {};
       const revokedSpaces: string[] = [];
-      for (const [spaceId, since] of Object.entries(query.cursors)) {
-        if (!visible.has(spaceId)) revokedSpaces.push(spaceId);
-        else spaces[spaceId] = await this.spaceChanges(spaceId, since);
+      const shared = await this.shares.sharedWithMe(userId);
+      const sharedKeys = new Set(shared.map((s) => sharedCursorKey(s.notebookId)));
+      for (const [key, since] of Object.entries(query.cursors)) {
+        if (isSharedCursorKey(key)) {
+          if (!sharedKeys.has(key)) revokedSpaces.push(key);
+          continue;
+        }
+        if (!visible.has(key)) revokedSpaces.push(key);
+        else spaces[key] = await this.spaceChanges(key, since, await this.perms.hiddenNotebooks(userId, key));
       }
-      return { ...NOTHING, spaces, revokedSpaces };
+      for (const s of shared) {
+        const key = sharedCursorKey(s.notebookId);
+        spaces[key] = await this.spaceChanges(s.spaceId, query.cursors[key] ?? 0, undefined, s.notebookId);
+      }
+      return { ...NOTHING, spaces, revokedSpaces, sharedNotebooks: shared };
     }
     const personal = await this.spaces.personalSpaceId(userId);
-    return { ...(await this.spaceChanges(personal, query.since ?? 0)), spaces: {}, revokedSpaces: [] };
+    return { ...(await this.spaceChanges(personal, query.since ?? 0)), spaces: {}, revokedSpaces: [], sharedNotebooks: [] };
   }
 
   /**
    * Everything in one space that changed after `since`, tombstones included.
+   *
+   * `hidden`: notebooks of the space the person may not see (their rows are left out and listed, so the client drops what it holds).
+   * `only`: just this notebook (a notebook shared with the person).
    *
    * Consistency: the space's `changeSeq` counter is read first as the ceiling, inside one
    * snapshot. Writers bump it under a row lock, so nothing at or below the ceiling can still
@@ -73,28 +93,34 @@ export class SyncService {
    * notebook delete touches every page in it), so a boundary may never split a seq group; if a
    * single group is larger than the limit it is returned whole.
    */
-  private spaceChanges(spaceId: string, since: number): Promise<SpaceChangesDto> {
+  private spaceChanges(spaceId: string, since: number, hidden?: ReadonlySet<string>, only?: string): Promise<SpaceChangesDto> {
+    const hiddenIds = hidden ? [...hidden] : [];
     return this.prisma.$transaction(async (tx) => {
       const { changeSeq: head } = await tx.space.findUniqueOrThrow({ where: { id: spaceId }, select: { changeSeq: true } });
       const after = BigInt(since);
+      const hiddenNotebooks = hiddenIds.length ? { hiddenNotebooks: hiddenIds } : {};
       if (after >= head) {
-        return { cursor: Number(head), hasMore: false, notebooks: [], categories: [], pages: [] };
+        return { cursor: Number(head), hasMore: false, notebooks: [], categories: [], pages: [], ...hiddenNotebooks };
       }
 
       const fetch = (upTo: bigint, take?: number) => {
         const where = { spaceId, seq: { gt: after, lte: upTo } };
         const orderBy = { seq: 'asc' } as const;
+        const rows = { ...where, ...(only ? { notebookId: only } : hiddenIds.length ? { notebookId: { notIn: hiddenIds } } : {}) };
+        const nbWhere = { ...where, ...(only ? { id: only } : hiddenIds.length ? { id: { notIn: hiddenIds } } : {}) };
         return Promise.all([
-          tx.notebook.findMany({ where, orderBy, take }),
-          tx.category.findMany({ where, orderBy, take }),
-          tx.page.findMany({ where, orderBy, take, select: PAGE_META_SELECT }),
+          tx.notebook.findMany({ where: nbWhere, orderBy, take }),
+          tx.category.findMany({ where: rows, orderBy, take }),
+          tx.page.findMany({ where: rows, orderBy, take, select: PAGE_META_SELECT }),
+          // A notebook that left the space: only the space it left hears about it (not a shared view of it).
+          only ? Promise.resolve([]) : tx.notebookMove.findMany({ where, orderBy, take }),
         ] as const);
       };
 
       const limit = SYNC_PAGE.limit;
       let upTo = head;
-      let [nb, cat, pg] = await fetch(upTo, limit + 1);
-      const overflow = [nb, cat, pg].filter((rows) => rows.length > limit).map((rows) => rows[limit]!.seq);
+      let [nb, cat, pg, mv] = await fetch(upTo, limit + 1);
+      const overflow = [nb, cat, pg, mv].filter((rows) => rows.length > limit).map((rows) => rows[limit]!.seq);
 
       if (overflow.length) {
         const firstOverflow = overflow.reduce((a, b) => (a < b ? a : b));
@@ -102,7 +128,7 @@ export class SyncService {
         upTo = firstOverflow - 1n;
         // ...unless that leaves nothing, i.e. one seq group alone exceeds the limit: take it whole.
         if (upTo <= after) upTo = firstOverflow;
-        [nb, cat, pg] = await fetch(upTo);
+        [nb, cat, pg, mv] = await fetch(upTo);
       }
 
       return {
@@ -111,6 +137,8 @@ export class SyncService {
         notebooks: nb.map(toNotebookDto),
         categories: cat.map(toCategoryDto),
         pages: pg.map(toPageMetaDto),
+        ...hiddenNotebooks,
+        ...(mv.length ? { movedOut: mv.map((m) => m.notebookId) } : {}),
       };
     });
   }

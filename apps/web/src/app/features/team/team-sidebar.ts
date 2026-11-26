@@ -1,5 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+import { openNotifyDialog } from '../notifications/notify-dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -7,6 +9,8 @@ import { TranslocoPipe } from '@jsverse/transloco';
 import type { ProjectDto } from '@os-planner/shared';
 import { NavContext } from '../../core/nav-context';
 import { TeamStore, type ProjectNode } from '../../data/team-store';
+import { ChannelList } from '../chat/channel-list';
+import { Tree } from '../shell/tree';
 import { TeamUi } from './team-ui';
 
 /** One level of the project tree; it renders itself for the children. */
@@ -218,12 +222,15 @@ export class ProjectRows {
 /** The left column while inside a team: the team's name and its project tree, with the other kinds of things to come. */
 @Component({
   selector: 'app-team-sidebar',
-  imports: [RouterLink, MatIconModule, MatButtonModule, TranslocoPipe, ProjectRows],
+  imports: [RouterLink, MatIconModule, MatButtonModule, TranslocoPipe, ProjectRows, ChannelList, Tree],
   template: `
     @if (team(); as t) {
       <section class="team" data-team-sidebar>
         <header>
           <a class="title" [routerLink]="['/app/t', t.id]" [title]="t.name">{{ t.name }}</a>
+          <button mat-icon-button type="button" (click)="notifySettings(t)" [attr.aria-label]="'notif.open' | transloco" data-action="team-notifications">
+            <mat-icon>notifications</mat-icon>
+          </button>
           <a mat-icon-button [routerLink]="['/app/t', t.id, 'settings']" [attr.aria-label]="'team.settings' | transloco" data-action="team-settings-link">
             <mat-icon>settings</mat-icon>
           </a>
@@ -255,9 +262,14 @@ export class ProjectRows {
           }
         </div>
 
-        <h3 class="soon">{{ 'team.notebooks' | transloco }}</h3>
+        <h3 data-section="team-notebooks">{{ 'team.notebooks' | transloco }}</h3>
+        <app-tree [spaceId]="t.spaceId" />
+        @if (project(); as p) {
+          <h3 class="project" data-section="project-notebooks">{{ p.name }}</h3>
+          <app-tree [spaceId]="p.spaceId" />
+        }
         <h3 class="soon">{{ 'team.boards' | transloco }}</h3>
-        <h3 class="soon">{{ 'team.channels' | transloco }}</h3>
+        <app-channel-list [teamId]="t.id" />
       </section>
     }
   `,
@@ -293,6 +305,11 @@ export class ProjectRows {
     h3.soon {
       opacity: 0.55;
     }
+    h3.project {
+      text-transform: none;
+      letter-spacing: 0;
+      margin-top: 8px;
+    }
     .tree {
       min-height: 40px;
       padding-bottom: 8px;
@@ -313,6 +330,11 @@ export class TeamSidebar {
   readonly nav = inject(NavContext);
   readonly ui = inject(TeamUi);
   private readonly teams = inject(TeamStore);
+  private readonly dialog = inject(MatDialog);
+
+  notifySettings(t: { id: string; name: string }): void {
+    openNotifyDialog(this.dialog, { scope: { scopeKind: 'team', scopeId: t.id }, title: t.name });
+  }
 
   onTopOver(event: DragEvent): void {
     if (!this.ui.canDropOn(null)) return;
@@ -324,6 +346,8 @@ export class TeamSidebar {
     const id = this.nav.teamId();
     return id ? (this.teams.teamById().get(id) ?? null) : null;
   });
+  /** The project (or sub-project) the person is looking at: its notebooks are listed below the team's. */
+  readonly project = computed(() => this.nav.place()?.projects.at(-1) ?? null);
   readonly nodes = computed(() => {
     const id = this.nav.teamId();
     this.teams.projects(); // re-run when projects change

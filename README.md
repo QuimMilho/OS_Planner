@@ -2,7 +2,7 @@
 
 OS_Planner is an open source, self-hosted planner: a website with notebooks, categories and pages, a rich editor (math,
 diagrams, charts, function plots, code, images, video), PDF export, offline editing with sync, accounts, and teams with
-projects. It runs in the browser, installs as a PWA, and is downloadable as a desktop app for Windows and Linux, **all from the website**.
+projects, live updates and team chat. It runs in the browser, installs as a PWA, and is downloadable as a desktop app for Windows and Linux, **all from the website**.
 
 ```
 notebook ─ category ─ nested category ─ page        every level has its own name; reorder, move, trash, restore
@@ -12,7 +12,7 @@ notebook ─ category ─ nested category ─ page        every level has its ow
 
 | Part | What it is |
 | --- | --- |
-| `apps/server` | NestJS 12 + Prisma 7 + **MySQL 8.4**. Auth, notebooks/categories/pages, sync, media, search, PDF/Markdown export, release downloads. Also serves the website. |
+| `apps/server` | NestJS 12 + Prisma 7 + **MySQL 8.4**. Auth, notebooks/categories/pages, sync, media, search, PDF/Markdown export, release downloads, the live connection (Socket.IO) and chat. Also serves the website. |
 | `apps/web` | Angular 22 PWA (zoneless, signals, Material 3). Local-first: everything reads from IndexedDB and syncs in the background. English + Portuguese. |
 | `apps/desktop` | Electron shell: a native window around the website (always up to date). Windows installer/portable, Linux AppImage/deb/rpm. |
 | `packages/shared` | The document schema, validation, Markdown import/export, print renderer, plot engine and DTOs used by all of the above. |
@@ -64,6 +64,7 @@ starts only when you ask for that profile with `--profile <name>` (repeat the fl
 | *(none)* | `mysql`, `mailpit` | **Development.** Just the database and the mail catcher; you run the server and the website yourself with `npm run start:dev` / `npm start`. | `docker compose up -d mysql mailpit` |
 | `prod` | adds `server` | **Production.** Builds and runs the one image with the API, the website and PDF export, next to MySQL. It is reachable on `127.0.0.1:3000` only (see `SERVER_BIND`). Requires `APP_URL`, `JWT_ACCESS_SECRET` and `JWT_MEDIA_SECRET`. | `docker compose --profile prod up -d --build` |
 | `proxy` | adds `proxy` (nginx) | **HTTPS in front of the server.** Terminates TLS on ports 80/443 and forwards to `server`. It needs the `server` service, so always combine it with `prod`; it also needs `OS_PLANNER_DOMAIN` and a certificate. | `docker compose --profile prod --profile proxy up -d --build` |
+| `scale` | adds `redis` | **Several server instances.** A Redis the instances share so live events reach people connected to any of them; set `REDIS_URL=redis://redis:6379` on each. One instance needs none. | `docker compose --profile scale up -d redis` |
 
 Notes: `mailpit` has no profile, so it also runs in production unless you stop it (`docker compose stop mailpit`) and set
 real `SMTP_*` values. Use the same `--profile` flags for every later command on the stack, for example
@@ -73,8 +74,8 @@ real `SMTP_*` values. Use the same `--profile` flags for every later command on 
 
 `deploy/nginx/os-planner.conf.template` redirects http to https, terminates TLS (1.2/1.3, HTTP/2), forwards the real client address,
 streams large uploads (`client_max_body_size 1g`, above `MAX_VIDEO_MB` and the biggest installer), compresses text, waits up to
-3 minutes for PDF export, and already passes WebSocket upgrades for the real-time paths planned for later (`/api/realtime`, `/api/collab`).
-It does not repeat the headers the server sets itself (HSTS, CSP). A request for any other host name is dropped.
+3 minutes for PDF export, and passes WebSocket upgrades for the live connection (`/api/realtime`, Socket.IO; `/api/collab` is reserved for co-editing).
+It does not repeat the headers the server sets itself (HSTS, CSP). A request for any other host name is dropped. Share links need nothing extra: `/s/<token>` is a page of the app and `/api/links/…` an API route, both already forwarded; keep `TRUST_PROXY=true` so the wrong-password limit counts real client addresses, not the proxy's.
 
 **With Docker** (nginx runs next to the server):
 
@@ -129,6 +130,9 @@ Behind this proxy: `APP_URL` is the https address, `TRUST_PROXY=true` (rate limi
 | `MAX_ROLES_PER_TEAM` | 100 | Roles of one team, team and project roles together (`@everyone` not counted). |
 | `AUDIT_RETENTION_DAYS` | 365 | Audit-log entries older than this are removed by the nightly job. |
 | `ADMIN_EMAILS` | empty | Instance administrators (comma-separated). Only an address that has been **verified** counts. They see **Administration** in the app: accounts, per-account limits, teams. Everyone else gets a 404 for `/api/admin/*`. |
+| `REDIS_URL` | empty | Only for **several server instances**: they then share live events (chat, presence, permission changes) through this Redis (`redis://host:6379`). Empty = one instance, events stay in memory. `docker compose --profile scale up -d redis` starts one for development. `GET /api/health` reports `realtime: "degraded"` while the configured Redis cannot be reached. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | empty | **Web Push.** Make a pair with `npx web-push generate-vapid-keys` and give a contact address (`mailto:you@example.com`). Without all three, push is off and **Settings → Notifications** hides it. The server only sends to the push services of the big browsers (Google, Mozilla, Apple, Microsoft); `PUSH_EXTRA_ENDPOINTS` adds origins. |
+| `NOTIFY_AWAY_SECONDS`, `NOTIFY_EMAIL_INTERVAL_MINUTES`, `NOTIFY_PUSH_COALESCE_SECONDS`, `NOTIFY_SWEEP_SECONDS` | 600 / 15 / 10 / 30 | Notification timing: how long without activity counts as "away" (for email "only when I am away"), the least time between two emails about one chat and between two pushes about one channel, and how often waiting emails are looked at (`0` = send none). |
 | `RELEASE_TOKEN` | empty | Enables the release-publishing endpoints. Empty = they do not exist. |
 | `CHROME_PATH` | auto-detected | Browser used for PDF export. Without one the web app prints locally instead. |
 | `TRUST_PROXY` | false | Set behind a reverse proxy. |
@@ -160,6 +164,9 @@ CORS_ORIGINS=https://planner.example.com      # exact origins, never "*"; the re
 COOKIE_SAMESITE=strict                       # fine when site and API share a registrable domain (planner.example.com + api.example.com)
 # COOKIE_SAMESITE=none                       # only for unrelated domains; requires an https APP_URL
 ```
+
+The live connection (`/api/realtime`, Socket.IO) goes to the API's origin as well. If the website is served by a static host with its own
+Content-Security-Policy, `connect-src` must list the API's `ws://`/`wss://` address next to its `http(s)://` one (the `http:` form does not cover WebSockets).
 
 Same-site subdomains (`strict`) are the setup to prefer: browsers are phasing out cross-site cookies, so `none` may stop working.
 Images and videos from `/api/media` may be embedded by the websites named in `APP_URL` and `CORS_ORIGINS` (judged by the `Origin`/`Referer` the browser sends, which by default is the site's origin); nothing else is made embeddable.
@@ -274,12 +281,89 @@ the owner cannot be removed. Every refusal answers 403 with the reason (for exam
 `GET /api/sync/changes?cursors={"<spaceId>":<seq>}` returns what changed per space plus `revokedSpaces` (spaces to forget);
 the older `?since=` form still works and means the personal space.
 
+## Live updates, presence and chat
+
+**One live connection.** Once you are signed in the page opens a Socket.IO connection to `/api/realtime` (websocket, with long polling as a fallback
+for strict proxies), authenticated with the access token, which it renews while the page is open. A connection is only ever in rooms the server
+decided it may be in: `room:join` asks the same permission code as the REST API, and a room that is refused looks exactly like one that does not
+exist. When roles, overwrites or membership change (the same audit entries the team's log shows), people concerned are told to refresh and any room
+they may no longer be in is taken away **before the request that changed it answers**. Signing out, changing the password or ending a session in
+Settings closes that login's connections. Per person: 5 connections, 100 rooms per connection, 1 MB per message, floods dropped (counts for
+administrators at `GET /api/admin/realtime`; `GET /api/health` also says `realtime: "ok"` or `"degraded"`).
+
+**What it drives.** A change in a space makes the other devices sync at once instead of waiting for the 60 s timer; a role change shows up in the
+other person's open app; member lists show who is online or idle (nothing is stored: it follows live connections, announced to the teams you share,
+at most every 5 s; **Settings → Privacy → Appear offline** hides you). The top bar shows the connection (live, reconnecting, none). After a lost
+connection the app asks each feature for what it missed (nothing is replayed by the socket itself).
+
+**Several server instances.** One instance needs nothing. To run more, point every instance at one Redis with `REDIS_URL` (`docker compose --profile
+scale up -d redis` starts one for development); events then reach people connected to any instance. Behind a proxy, WebSocket clients need no stickiness;
+clients that fall back to long polling do (`ip_hash` in the nginx upstream, or one instance).
+
+**Chat.** Text channels (and categories that group them) live in a team or in a project, listed in the sidebar under their team or project. Messages are
+Markdown (bold, italic, strike, code and fenced code, quotes, lists, links; no HTML ever), with edit/delete, reactions, replies, pins, threads, files
+(pictures show inline with a lightbox; the type is checked by its bytes), unread counts, "jump to first unread", search inside a channel (accents and
+case ignored), slowmode, archiving and per-channel permissions. Who may do what follows the team's roles and the project's overwrites, with a category's
+and the channel's own overwrites on top (**Channel settings → Who can see and use it**); a channel someone cannot see answers 404 everywhere.
+Messages and files count toward the team's or project's storage (text as documents). Offline you can still read the last 200 messages of each
+channel you opened, and what you write is queued and sent in order when the connection is back (each message is sent under its own id, so a retry never
+duplicates it). Without `READ_MESSAGE_HISTORY` a person only sees what was said after they first opened the channel.
+
+**Direct messages.** A private conversation between two people who share a team (**Direct messages** in the rail, or **Message** on a member).
+It is the same chat as in a channel (Markdown, files, reactions, replies, pins, edit and delete, unread, offline reading and queued sending), but nobody
+else can read it: moderators, owners and instance administrators get a 404 like everybody else, and nothing about it is in a team's audit log.
+Whether you may write to somebody is decided again on **every message**: both accounts must exist, neither may have blocked the other, the person must
+accept messages (**Settings → Privacy → Who can message me**) and at least one team you share must allow them (**Team settings → Discover → Allow
+direct messages between members**). Every refusal looks the same (`403 dm_not_allowed`), so nobody can tell whether they were blocked. History stays
+readable after the last shared team is gone or somebody is blocked (blocks are listed and removed in Settings → Privacy). Files and text in a
+conversation count toward the **sender's** storage, never a team's. Closing a conversation only hides it in your list until something new arrives.
+
+**Mentions, notifications and mute.** Type `@` in a channel for people, roles (the ones set as mentionable, or any with *Mention everyone*), `@everyone`
+and `@here` (only with *Mention everyone*). The text stores ids, so a mention follows a rename; the server decides which mentions count (the person must
+exist and be able to see the channel) and the author is warned about those that did not. The **bell** shows the inbox (all or only mentions, grouped by
+day) and the channels and teams in the sidebar show how many mentions are waiting. Every team, project, channel and conversation has its own bell button
+**Notification settings**: everything / only mentions / nothing / use the setting above, switches for `@everyone`/`@here` and for roles (and for mentions by name),
+a mute for 15 minutes to "until I turn it back on" (a direct mention still gets through a mute unless you turn that off too), email (off / mentions / everything,
+"only when I'm away") and push, and a line saying what is in effect and where it comes from. **Settings → Notifications** holds your defaults, quiet hours (push
+and email only) and this device's Web Push. Email is its own option per chat: at most one mail per chat every 15 minutes with the count and the latest messages,
+never attachments, in your language, with one-click links to mute the chat or stop the mails (they work without signing in and for that chat only). A channel can
+hide message text from push and email (**Channel settings → Hide message text in push and email**; age-restricted channels always do). Notifications are removed after 90 days.
+
+## Shared notebooks and share links
+
+**Team and project notebooks.** Every team and project has notebooks of its own, listed in the sidebar under **Notebooks** (the project's below the team's
+while you are in a project). Who may do what is decided by the permissions *View notebooks*, *Create notebooks*, *Edit pages*, *Delete pages*, *Manage notebooks*
+and *Share notebooks*; a person who may only view gets a read-only editor and a banner saying so, and the controls they cannot use are not shown. One notebook
+can have its own **Who can see this…** (allow/deny per role or member, on top of the project's): a notebook someone may not view answers 404 everywhere (list,
+search, export, sync, files) and disappears from their device at the next sync. The controls are chosen from what the server last said the person may do
+(`GET /api/notebook-permissions`, kept locally, so they are right offline); the server decides again on every request.
+
+**Sharing a personal notebook.** **Share…** in a notebook's menu has two tabs. *People*: a teammate by name, or any email address, with *can read* or *can edit*.
+For an address the answer is the same whether or not it has an account (an address without a verified account waits, and the share starts when somebody
+verifies it). The notebook then shows up for them under **Shared with me**, live; changing the access or removing them takes effect in their open editor
+at once. Whatever an editor writes (text and files) counts toward the **owner's** storage. Nobody who was given access can pass it on, rename or delete the
+notebook. A recipient can give a notebook back from its menu.
+*Link*: an address like `https://your-site/s/<token>`. A **read** link opens in any browser with no account (no app shell, no sign-in, no cookies; tree, search
+inside the notebook, pictures, print), an **edit** link asks the visitor to sign in and then adds the notebook to their *Shared with me* as an edit share that
+ends when the link is revoked, even in the middle of their session. A link can expire and can have a password (argon2id; five wrong tries per link and address
+close it for 15 minutes; the password is traded for a two-hour session bound to that link). The server stores only a hash of the token, so the address can
+be copied only while the dialog that made it is open; revoking is always possible. A link opens that notebook only: never another one, the owner's other
+data, a trashed page, or files its pages do not use. Expired, revoked, unknown and "its notebook is gone" all answer the same 404 (*This link does not work*).
+Public pages are sent with `X-Robots-Tag: noindex` and `Referrer-Policy: no-referrer`, and show the owner's name only if the link was made with *Show my
+name*. A team's notebooks can only get **read** links, and only while the team's *Allow public links to notebooks* (Team settings → Discover) is on.
+
+**Moving.** **Move to another space…** moves a notebook (with its pages and files) between your own space, a team and a project you may create notebooks in. The
+storage it uses moves with it in one step, or the whole move is refused (`413`) when the target has no room. Its shares, links and overwrites do **not** follow:
+they end. A file used by this notebook and by another one blocks the move (copy it first). Other people's devices drop the notebook from the space it left.
+
+**Trash and export** work in team and shared notebooks with the same permissions (restoring needs *Delete pages*, or *Manage notebooks* for a notebook).
+
 ## Tests
 
 ```bash
 npm run build                    # shared, web, server
-npm test                         # unit + integration: build scripts (23), shared (206), server (315, needs MySQL)
-npm run e2e                      # the real website in real Chrome (42 scenarios, 5 of them with the API on another origin, 8 for themes, 2 for storage limits, 2 for teams, 2 for roles, 4 for joining teams; needs MySQL + Mailpit)
+npm test                         # unit + integration: build scripts (23), shared (295), server (454, needs MySQL; Redis for the two-instance test)
+npm run e2e                      # the real website in real Chrome (62 scenarios, 5 of them with the API on another origin, 8 for themes, 2 for storage limits, 2 for teams, 2 for roles, 4 for joining teams, 3 for the live connection, 4 for chat, 3 for direct messages, 4 for mentions, mute, email and Web Push, 6 for shared notebooks, links and moving; needs MySQL + Mailpit)
 npm test -w @os-planner/desktop       # the Electron shell, packaged app, publish + download (needs a Windows build)
 node scripts/i18n-check.mjs      # every translation key exists in English and Portuguese
 npm run check:themes             # contrast of every colour theme (also part of `npm test`)
@@ -304,10 +388,13 @@ The server tests run against a real MySQL database (`notes_test`), the browser t
 
 ## Known limitations
 
+- Chat lists are not virtualised: the open channel keeps what it loaded (older messages come in pages as you scroll up). A very long session in a very busy channel grows the page; windowing is the planned fix.
+- Chat has no mentions, notifications or direct messages yet (phases 8 and 9); attachments are pictures and videos (the media allowlist), shown as chips when not an image.
 - The first page load is ~460 kB gzipped: `@os-planner/shared` is a single bundle that pulls zod and the TipTap schema into the
   entry chunk. Splitting a light entry point out of it would roughly halve that.
 - The Windows installer is **not code-signed**, so SmartScreen warns on first run (the download page says so). The Linux
   `.deb`/`.rpm` do not self-update; AppImage and the Windows installer do.
 - Categories can be moved within their notebook (not between notebooks); reordering uses Move up/down, not drag and drop.
 - Mermaid, Chart.js and KaTeX load as one ~5.8 MB script (`/print/planner-libs.js`) on first use of a diagram or chart.
-- OAuth sign-in, two-factor authentication, sharing/collaboration and page history are not implemented.
+- OAuth sign-in, two-factor authentication, real-time co-editing and page history are not implemented. Until co-editing arrives, two people editing the same page keep the older rule: the second save is refused and kept as a conflict copy.
+- A notebook that was shared (or made public) has no per-page sharing, comments or suggestion mode; the public view is not indexed by search engines on purpose.

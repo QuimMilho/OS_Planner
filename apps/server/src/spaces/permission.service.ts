@@ -4,13 +4,16 @@ import {
   canViewAnything,
   computePermissions,
   hasPermission,
+  permissionsForShare,
+  permissionsToString,
   rankOf,
   Permission,
+  type ShareAccess,
   type Level,
   type PermissionInput,
   type RoleActor,
 } from '@os-planner/shared';
-import type { Overwrite, Project, Role, Space, Team } from '../generated/prisma/client.js';
+import type { Channel, Notebook, NotebookShare, Overwrite, Project, Role, Space, Team } from '../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import { forbidden, notFound } from '../tree/tree.error.js';
 
@@ -52,6 +55,37 @@ export interface SpaceAccess {
   /** Set for team and project spaces. */
   teamId: string | null;
   projectId: string | null;
+}
+
+/** Where chat happens: the team or project a space belongs to, and what the person may do there before any channel overwrite. */
+export interface ChatSpace {
+  space: Space;
+  teamId: string;
+  projectId: string | null;
+  team: TeamAccess;
+  /** Permissions in the team or project that owns the space. */
+  perms: bigint;
+  /** The overwrites of the projects on the way down (empty for a team space). */
+  levels: ChainLevel[];
+}
+
+export interface ChannelAccess {
+  channel: Channel;
+  chat: ChatSpace;
+  /** What the person may do in this channel: roles, project overwrites, then the category's and the channel's own. */
+  perms: bigint;
+}
+
+/** What a person may do in one notebook, and how they come by it. */
+export interface NotebookAccess {
+  notebook: Notebook;
+  /** Permissions in the notebook: the space's (with the notebook's overwrites) or those of the share. */
+  perms: bigint;
+  via: 'space' | 'share';
+  /** The share, when that is how the person has access. */
+  share: NotebookShare | null;
+  /** Set for notebooks of a team or project. */
+  chat: ChatSpace | null;
 }
 
 export interface VisibleProject {
@@ -117,11 +151,11 @@ export class PermissionService {
     };
   }
 
-  /** The overwrites of these projects, by project id. One query. */
-  async overwritesOf(db: Db, projectIds: readonly string[]): Promise<Map<string, Overwrite[]>> {
+  /** The overwrites of these projects (or channels, with `kind`), by target id. One query. */
+  async overwritesOf(db: Db, projectIds: readonly string[], kind: 'project' | 'channel' | 'notebook' = 'project'): Promise<Map<string, Overwrite[]>> {
     const out = new Map<string, Overwrite[]>();
     if (!projectIds.length) return out;
-    const rows = await db.overwrite.findMany({ where: { targetKind: 'project', targetId: { in: [...projectIds] } } });
+    const rows = await db.overwrite.findMany({ where: { targetKind: kind, targetId: { in: [...projectIds] } } });
     for (const o of rows) (out.get(o.targetId) ?? out.set(o.targetId, []).get(o.targetId)!).push(o);
     return out;
   }
@@ -199,6 +233,107 @@ export class PermissionService {
     return out;
   }
 
+  // ---------------------------------------------------------------- chat: channels
+
+  /** The team or project a space belongs to, if the person can see it. Personal spaces have no chat: null. */
+  async chatSpace(userId: string, spaceId: string, db: Db = this.prisma): Promise<ChatSpace | null> {
+    const space = await db.space.findUnique({ where: { id: spaceId } });
+    if (!space) return null;
+    if (space.kind === 'team' && space.teamId) {
+      const team = await this.teamAccess(userId, space.teamId, db);
+      return team ? { space, teamId: team.team.id, projectId: null, team, perms: team.perms, levels: [] } : null;
+    }
+    if (space.kind === 'project' && space.projectId) {
+      const project = await this.projectAccess(userId, space.projectId, db);
+      if (!project) return null;
+      const levels = await this.chainLevels(db, project.project.path);
+      return { space, teamId: project.team.team.id, projectId: project.project.id, team: project.team, perms: project.perms, levels };
+    }
+    return null;
+  }
+
+  /** Permissions in a channel: the container's chain of overwrites, then its category's, then its own. */
+  channelPerms(userId: string, chat: ChatSpace, channel: Pick<Channel, 'id' | 'parentId'>, overwrites: ReadonlyMap<string, Overwrite[]>): bigint {
+    const levels: ChainLevel[] = [...chat.levels];
+    if (channel.parentId) levels.push({ id: channel.parentId, overwrites: overwrites.get(channel.parentId) ?? [] });
+    levels.push({ id: channel.id, overwrites: overwrites.get(channel.id) ?? [] });
+    return computePermissions(this.buildInput(chat.team.team, chat.team.roles, chat.team.held, userId, levels));
+  }
+
+  /**
+   * A channel (or category) the person can see (VIEW_CHANNEL there), with what they may do in it. Null otherwise, which
+   * every caller answers with 404: a channel that is hidden looks exactly like one that does not exist.
+   */
+  async channelAccess(userId: string, channelId: string, db: Db = this.prisma): Promise<ChannelAccess | null> {
+    const channel = await db.channel.findUnique({ where: { id: channelId } });
+    if (!channel?.spaceId) return null; // a direct message belongs to no team: see DirectAccess
+    const chat = await this.chatSpace(userId, channel.spaceId, db);
+    if (!chat) return null;
+    const ids = channel.parentId ? [channel.id, channel.parentId] : [channel.id];
+    const perms = this.channelPerms(userId, chat, channel, await this.overwritesOf(db, ids, 'channel'));
+    return hasPermission(perms, Permission.VIEW_CHANNEL) ? { channel, chat, perms } : null;
+  }
+
+  /**
+   * Which of these people can see the channel (VIEW_CHANNEL), worked out for all of them with a handful of queries: the team's
+   * roles, their roles, the project chain and the overwrites are read once. Used to decide who may be told about a message,
+   * so it must agree with `channelAccess` for every single person.
+   */
+  async channelViewers(channel: Channel, candidateIds: readonly string[], db: Db = this.prisma): Promise<Set<string>> {
+    const viewers = new Set<string>();
+    if (!channel.spaceId || !candidateIds.length) return viewers;
+    const space = await db.space.findUnique({ where: { id: channel.spaceId } });
+    if (!space) return viewers;
+    let project: Project | null = null;
+    let teamId = space.teamId;
+    if (space.kind === 'project' && space.projectId) {
+      project = await db.project.findFirst({ where: { id: space.projectId, deletedAt: null } });
+      if (!project) return viewers;
+      teamId = project.teamId;
+    }
+    if (!teamId) return viewers;
+    const team = await db.team.findFirst({ where: { id: teamId, deletedAt: null } });
+    if (!team) return viewers;
+
+    const ids = [...new Set(candidateIds)];
+    const members = new Set((await db.teamMember.findMany({ where: { teamId, userId: { in: ids } }, select: { userId: true } })).map((m) => m.userId));
+    if (!members.size) return viewers;
+    const memberIds = [...members];
+    const [roles, held, projectMembers, chain, overwrites] = await Promise.all([
+      db.role.findMany({ where: { teamId } }),
+      db.memberRole.findMany({ where: { userId: { in: memberIds }, role: { teamId } }, select: { userId: true, roleId: true } }),
+      project ? db.projectMember.findMany({ where: { projectId: project.id, userId: { in: memberIds } }, select: { userId: true } }) : [],
+      project ? this.chainLevels(db, project.path) : [],
+      this.overwritesOf(db, channel.parentId ? [channel.id, channel.parentId] : [channel.id], 'channel'),
+    ]);
+    const heldBy = new Map<string, Set<string>>();
+    for (const h of held) (heldBy.get(h.userId) ?? heldBy.set(h.userId, new Set()).get(h.userId)!).add(h.roleId);
+    const inProject = new Set(projectMembers.map((m) => m.userId));
+
+    for (const userId of memberIds) {
+      const heldIds = heldBy.get(userId) ?? new Set<string>();
+      const teamPerms = computePermissions(this.buildInput(team, roles, heldIds, userId));
+      let perms = teamPerms;
+      if (project) {
+        const canManage = hasPermission(teamPerms, Permission.MANAGE_PROJECTS);
+        if (!inProject.has(userId) && !canManage) continue;
+        perms = computePermissions(this.buildInput(team, roles, heldIds, userId, chain));
+        if (!canManage && !canViewAnything(perms)) continue;
+      }
+      const access: TeamAccess = { team, perms: teamPerms, isOwner: team.ownerId === userId, roles, held: heldIds };
+      const chat: ChatSpace = { space, teamId, projectId: project?.id ?? null, team: access, perms, levels: chain };
+      if (hasPermission(this.channelPerms(userId, chat, channel, overwrites), Permission.VIEW_CHANNEL)) viewers.add(userId);
+    }
+    return viewers;
+  }
+
+  /** Every channel of the space with the person's permissions in it (visible or not: callers filter). */
+  async channelsOf(userId: string, chat: ChatSpace, db: Db = this.prisma): Promise<{ channel: Channel; perms: bigint }[]> {
+    const channels = await db.channel.findMany({ where: { spaceId: chat.space.id } });
+    const overwrites = await this.overwritesOf(db, channels.map((c) => c.id), 'channel');
+    return channels.map((channel) => ({ channel, perms: this.channelPerms(userId, chat, channel, overwrites) }));
+  }
+
   // ---------------------------------------------------------------- roles in a context
 
   /** Highest position among the person's roles that apply in a context: team roles, plus the project roles of `chain`. */
@@ -268,6 +403,96 @@ export class PermissionService {
     if (!access || !hasPermission(access.perms, Permission.VIEW_NOTEBOOKS)) throw notFound();
     if (!hasPermission(access.perms, needed)) throw forbidden();
     return access;
+  }
+
+  // ---------------------------------------------------------------- one notebook
+
+  /** Permissions in a notebook of a team or project: the container's, then the notebook's own overwrites. */
+  notebookPerms(userId: string, chat: ChatSpace, notebookId: string, overwrites: ReadonlyMap<string, Overwrite[]>): bigint {
+    const levels: ChainLevel[] = [...chat.levels, { id: notebookId, overwrites: overwrites.get(notebookId) ?? [] }];
+    return computePermissions(this.buildInput(chat.team.team, chat.team.roles, chat.team.held, userId, levels));
+  }
+
+  /**
+   * The notebook, if the person can see it (VIEW_NOTEBOOKS there), with what they may do in it. Null otherwise, which
+   * every caller answers with 404: a notebook that is hidden looks exactly like one that does not exist.
+   *
+   * Three ways in: the space (own personal space, or a team or project with the notebook's overwrites applied), or a
+   * direct share (personal notebooks only; also what an edit link turns into). Trashed notebooks are included: callers decide.
+   */
+  async notebookAccess(userId: string, notebookId: string, db: Db = this.prisma): Promise<NotebookAccess | null> {
+    const notebook = await db.notebook.findUnique({ where: { id: notebookId } });
+    if (!notebook) return null;
+    const space = await db.space.findUnique({ where: { id: notebook.spaceId } });
+    if (!space) return null;
+
+    if (space.kind === 'personal') {
+      if (space.userId === userId)
+        return { notebook, perms: computePermissions({ userId, ownerId: userId, everyone: 0n }), via: 'space', share: null, chat: null };
+      const share = await db.notebookShare.findUnique({ where: { notebookId_userId: { notebookId, userId } } });
+      if (!share) return null;
+      return { notebook, perms: permissionsForShare(share.access as ShareAccess), via: 'share', share, chat: null };
+    }
+
+    const chat = await this.chatSpace(userId, space.id, db);
+    if (!chat) return null;
+    const perms = this.notebookPerms(userId, chat, notebookId, await this.overwritesOf(db, [notebookId], 'notebook'));
+    return hasPermission(perms, Permission.VIEW_NOTEBOOKS) ? { notebook, perms, via: 'space', share: null, chat } : null;
+  }
+
+  /** The person's access to a notebook, or an error: 404 when they cannot see it, 403 when they can but lack `needed`. */
+  async requireNotebook(userId: string, notebookId: string, needed: bigint = Permission.VIEW_NOTEBOOKS, db: Db = this.prisma): Promise<NotebookAccess> {
+    const access = await this.notebookAccess(userId, notebookId, db);
+    if (!access) throw notFound();
+    if (!hasPermission(access.perms, needed)) throw forbidden();
+    return access;
+  }
+
+  /**
+   * The notebooks of a team or project space the person may not see (a notebook overwrite denies VIEW_NOTEBOOKS).
+   * Empty for a personal space and for people who can see everything. Sync leaves these out.
+   */
+  async hiddenNotebooks(userId: string, spaceId: string, db: Db = this.prisma): Promise<Set<string>> {
+    const hidden = new Set<string>();
+    const chat = await this.chatSpace(userId, spaceId, db);
+    if (!chat) return hidden;
+    const notebooks = await db.notebook.findMany({ where: { spaceId }, select: { id: true } });
+    if (!notebooks.length) return hidden;
+    const overwrites = await this.overwritesOf(db, notebooks.map((n) => n.id), 'notebook');
+    if (!overwrites.size) return hidden;
+    for (const n of notebooks) {
+      if (!overwrites.has(n.id)) continue;
+      if (!hasPermission(this.notebookPerms(userId, chat, n.id, overwrites), Permission.VIEW_NOTEBOOKS)) hidden.add(n.id);
+    }
+    return hidden;
+  }
+
+  /**
+   * What the person may do in each notebook of their teams and projects (the ones they can see), and in each notebook shared
+   * with them, as decimal strings by notebook id. Their own notebooks are not listed: they can do everything there. The web app
+   * keeps this next to the notebooks so controls show or hide without asking, also offline.
+   */
+  async notebookPermissions(userId: string, db: Db = this.prisma): Promise<Record<string, string>> {
+    const out: Record<string, string> = {};
+    for (const [spaceId, access] of await this.notebookSpaces(userId, db)) {
+      if (access.space.kind === 'personal') continue;
+      const chat = await this.chatSpace(userId, spaceId, db);
+      if (!chat) continue;
+      // Trashed notebooks too: the trash page restores them.
+      const ids = (await db.notebook.findMany({ where: { spaceId }, select: { id: true } })).map((n) => n.id);
+      const overwrites = await this.overwritesOf(db, ids, 'notebook');
+      for (const id of ids) {
+        const perms = this.notebookPerms(userId, chat, id, overwrites);
+        if (hasPermission(perms, Permission.VIEW_NOTEBOOKS)) out[id] = permissionsToString(perms);
+      }
+    }
+    for (const s of await this.sharesOf(userId, db)) out[s.notebookId] = permissionsToString(permissionsForShare(s.access as ShareAccess));
+    return out;
+  }
+
+  /** Every notebook shared with the person (not trashed), with the share. */
+  sharesOf(userId: string, db: Db = this.prisma): Promise<(NotebookShare & { notebook: Notebook })[]> {
+    return db.notebookShare.findMany({ where: { userId, notebook: { deletedAt: null } }, include: { notebook: true } });
   }
 
   /** Every space whose notebooks the person may see, with their permissions there: personal, teams, projects. */

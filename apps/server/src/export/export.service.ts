@@ -49,10 +49,10 @@ export class ExportService {
     if (scope === 'page') {
       const page = await this.prisma.page.findFirst({
         where: { id, deletedAt: null },
-        select: { id: true, spaceId: true, title: true, categoryId: true, position: true, content: true, notebook: { select: { name: true } } },
+        select: { id: true, spaceId: true, notebookId: true, title: true, categoryId: true, position: true, content: true, notebook: { select: { name: true } } },
       });
       if (!page) throw new NotFoundException();
-      await this.mayRead(userId, page.spaceId);
+      await this.mayRead(userId, page.notebookId);
       return { scope, spaceId: page.spaceId, name: page.title, context: page.notebook.name, roots: [], page };
     }
 
@@ -69,7 +69,7 @@ export class ExportService {
 
     const notebook = await this.prisma.notebook.findFirst({ where: { id: notebookId, deletedAt: null } });
     if (!notebook) throw new NotFoundException();
-    await this.mayRead(userId, notebook.spaceId);
+    await this.mayRead(userId, notebook.id);
     const [cats, pages] = await Promise.all([
       this.prisma.category.findMany({
         where: { notebookId, deletedAt: null },
@@ -89,10 +89,10 @@ export class ExportService {
     return { scope, spaceId: notebook.spaceId, name: notebook.name, roots };
   }
 
-  /** Exporting reads, so seeing the notebooks of the space is enough; anything else is a plain 404. */
-  private async mayRead(userId: string, spaceId: string): Promise<void> {
+  /** Exporting reads, so seeing the notebook is enough; anything else is a plain 404. */
+  private async mayRead(userId: string, notebookId: string): Promise<void> {
     try {
-      await this.perms.requireSpace(userId, spaceId);
+      await this.perms.requireNotebook(userId, notebookId);
     } catch {
       throw new NotFoundException();
     }

@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { PRESENCE_MODES, type PresenceMode } from './realtime-consts';
 import { localeSchema, themeSchema, type Locale, type Theme } from './common';
 import type { QuotaDto } from './quota';
+import { ALLOW_DMS_FROM, type AllowDmsFrom } from './dm-consts';
 
 export const emailSchema = z.string().trim().toLowerCase().max(254).pipe(z.email());
 
@@ -38,6 +40,8 @@ export const updateMeSchema = z
     displayName: z.string().trim().min(1).max(80),
     locale: localeSchema,
     theme: themeSchema,
+    presenceMode: z.enum(PRESENCE_MODES),
+    allowDMsFrom: z.enum(ALLOW_DMS_FROM),
   })
   .partial();
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;
@@ -48,6 +52,10 @@ export interface UserDto {
   displayName: string;
   locale: Locale;
   theme: Theme;
+  /** "invisible" makes the person appear offline to everyone else. */
+  presenceMode: PresenceMode;
+  /** Who may start a direct message with this person. */
+  allowDMsFrom: AllowDmsFrom;
   emailVerified: boolean;
   /** Same numbers as `quota`; kept for older clients. */
   storageUsedBytes: number;

@@ -47,6 +47,37 @@ const lowlight = createLowlight(all);
  * with a live view: undo/redo, placeholder, "/" menu, file drops, outline, word count.
  */
 export function buildExtensions(h: ExtensionHooks): Extensions {
+  const schema = schemaWithViews(h.injector, (type, pos, latex) => h.editMath(type, pos, latex));
+  return [
+    ...schema,
+    UndoRedo,
+    Dropcursor.configure({ color: 'var(--accent)', width: 2 }),
+    Gapcursor,
+    Typography,
+    CharacterCount,
+    Placeholder.configure({ placeholder: h.placeholder }),
+    TableOfContents.configure({ onUpdate: (content) => h.outline.set(content) }),
+    SlashCommand(h.slash),
+    FileHandler.configure({
+      allowedMimeTypes: [...IMAGE_MIMES, ...VIDEO_MIMES],
+      onDrop: (_editor, files, pos) => h.insertFiles(files, pos),
+      onPaste: (_editor, files, html) => {
+        if (html) return false; // pasting from a web page: keep the page's own content handling
+        h.insertFiles(files);
+        return true;
+      },
+    }),
+  ];
+}
+
+
+/** Everything a document can contain, drawn the way the editor draws it, and nothing that edits: for the page that only reads (a shared notebook's public view). */
+export function buildReaderExtensions(injector: Injector): Extensions {
+  return schemaWithViews(injector, () => undefined);
+}
+
+function schemaWithViews(injector: Injector, editMath: (type: 'inlineMath' | 'blockMath', pos: number, latex: string) => void): Extensions {
+  const h = { injector, editMath };
   // Same node, same attributes, same HTML: only a view is added.
   const views: Record<string, TipTapNode> = {
     imageFigure: ImageFigure.extend({ addNodeView: () => AngularNodeViewRenderer(ImageFigureView, { injector: h.injector }) }),
@@ -72,24 +103,5 @@ export function buildExtensions(h: ExtensionHooks): Extensions {
     return ext;
   });
 
-  return [
-    ...schema,
-    UndoRedo,
-    Dropcursor.configure({ color: 'var(--accent)', width: 2 }),
-    Gapcursor,
-    Typography,
-    CharacterCount,
-    Placeholder.configure({ placeholder: h.placeholder }),
-    TableOfContents.configure({ onUpdate: (content) => h.outline.set(content) }),
-    SlashCommand(h.slash),
-    FileHandler.configure({
-      allowedMimeTypes: [...IMAGE_MIMES, ...VIDEO_MIMES],
-      onDrop: (_editor, files, pos) => h.insertFiles(files, pos),
-      onPaste: (_editor, files, html) => {
-        if (html) return false; // pasting from a web page: keep the page's own content handling
-        h.insertFiles(files);
-        return true;
-      },
-    }),
-  ];
+  return schema;
 }

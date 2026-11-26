@@ -69,3 +69,40 @@ Content created in a shared personal notebook charges the **notebook owner's per
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **One check for everything: `PermissionService.notebookAccess(userId, notebookId)`** (and `requireNotebook`). It answers from the *space* (the person's own space: everything; a team or
+  project: the container's permissions with the notebook's own overwrites applied as one more level) or from a *share* (`permissionsForShare`: read = `VIEW_NOTEBOOKS`, edit =
+  view + `EDIT_PAGES` + `DELETE_PAGES`). Notebooks, categories, pages, search, export, files and sync all go through it, so a notebook someone cannot see is a 404 in all of them.
+  **A new endpoint that reads or writes notebook content must use it (never `requireSpace` on `spaceId` alone).** `requireSpace` is still right for "create a notebook in this space".
+- **Notebook overwrites**: `targetKind: 'notebook'` works for team/project notebooks (changing them needs `MANAGE_NOTEBOOKS` there; you cannot allow or deny what you lack); a personal
+  notebook answers 422 (it is shared with people instead). Rows are removed when the notebook is purged, when a member leaves, and on a move.
+- **Sync** (deviations): a shared notebook has its own cursor `shared:<notebookId>` (not `shared:<ownerSpaceId>`): the owner's sequence, filtered to that notebook, so sharing needs no
+  re-stamping of rows. `GET /api/sync/changes` always lists `sharedNotebooks` and answers every one of them (cursor 0 for a new one); a `shared:` key the client holds for a share that
+  ended, or whose notebook was trashed, comes back in `revokedSpaces`. `SpaceChangesDto.hiddenNotebooks` (notebooks an overwrite hides: left out, and dropped on the device; when one stops being
+  hidden the client reads the space from 0 again) and `movedOut` (from the new `NotebookMove` table: notebooks that left the space; dropped only if still filed under it). The `space:<id>`
+  room also admits somebody a notebook of that space is shared with (they hear *that* it changed, nothing more).
+- **Direct shares**: `PUT /api/notebooks/:id/shares {userId|email, access}`. A `userId` is accepted only for somebody who shares a team with the owner (else 404, so ids cannot be probed); an
+  address answers `{ok:true}` whether or not it has an account, and one without a *verified* account becomes a `PendingShare` applied on verification/sign-in (`AuthService.claimJoins`).
+  The owner's list does show an existing person by name afterwards (documented: account existence is not hidden from the person who typed the address, only from the response).
+  Limits: 100 shares and 20 live links per notebook. Recipients may leave (`DELETE /api/shared-with-me/:notebookId`).
+- **Links**: tokens are 32 random bytes, stored as SHA-256 only (so the address can only be shown when it is created). Public routes (`POST /api/links/resolve`, `GET /api/links/:token/{pages/:id,media/:id,search}`) take the
+  token in the path and, for a password link, the `session` the resolve answer handed out (`?s=`, a 2-hour JWT bound to that link). The wrong-password counter (5 per link and address per 15 min,
+  `429 too_many_attempts`) is **in memory** (a restart or a second instance only resets it; it never grants access) and counts the address Express sees: behind a proxy set `TRUST_PROXY`.
+  `POST /api/links/join` (login and verified email required, 401 otherwise) turns an edit link into an edit `NotebookShare` bound to the link; revoking deletes those shares and tells the people. Somebody who already had direct edit keeps it.
+  Team notebooks: read links only, only while `Team.allowPublicLinks` (checked on every request, so switching it off closes what was made); creating/revoking them is written to the team's audit log (`notebook.link.create`, `notebook.link.revoke`, `notebook.move`).
+- **Move** (`POST /api/notebooks/:id/move {spaceId}`): `MANAGE_NOTEBOOKS` on the source, `CREATE_NOTEBOOKS` on the target; both spaces are locked in id order, the old one is refunded before the new one is charged (a move inside one team never fails for lack of room), pages and
+  the files they use change space, shares/links/pending shares/overwrites end. A file used by pages of two notebooks makes it `409 media_shared_with_other_notebook` (no copy is attempted).
+- **Files**: `POST /api/media` takes an optional `notebookId` (the notebook the file is for): the space comes from the notebook, so an editor's uploads in a shared notebook are the owner's, and uploads into a team notebook now land in the team's space (before this phase the web
+  app always sent them to the person's own space). A file is served to a share recipient only if a live page of a shared notebook uses it (or they uploaded it themselves into one they may edit).
+- **Web**: the sidebar shows **Shared with me** (read/edit badges) under the person's notebooks and the team's/project's **Notebooks** in the team sidebar, all through one `Tree` component (`spaceId` / `shared` inputs) whose menus follow `AccessStore.can(notebookId, bit)` (own notebook: always; otherwise the
+  last `GET /api/notebook-permissions` answer kept in `meta`, refreshed every sync cycle; unknown = read-only). The editor turns read-only live (banner `data-read-only`, no toolbar, nothing queued: `onEdit`/`onTitle` return early). Dialogs: **Share…** (People/Link), **Move to another space…**, **Who can see this…**
+  (the overwrite editor with `kind="notebook"`), team setting **Allow public links**. `/s/:token` is a standalone page (own header, tree, search, print, password prompt) that talks to the link endpoints with plain `fetch` (no cookies, no refresh, no Dexie); `AuthStore.init()` skips the sign-in check on `/s/…` and `resume()` does it only when the visitor asks to edit
+  (`returnUrl` now also accepts `/s/…`). The trash page lists what the person may restore in team and shared notebooks too. **Initial bundle** 2.12 MB (error budget 2.2 MB): the second language is still the planned lazy-load for phase 17.
+- **Not done / for later**: page-level sharing, comments and suggestions (out of scope); the team *trash* is only reachable through the trash page; shared-notebook content created by a user who is later deleted cascades with the account (there is no account deletion yet, phase 17 must decide); two people editing one
+  page still get the old version-conflict copy until phase 11 brings co-editing.
+- **nginx / README**: nothing new to proxy (`/s/<token>` and `/api/links/*` go through `location /`; the server sets `X-Robots-Tag` and `Referrer-Policy` itself); the template's comment and the README say so and remind to keep `TRUST_PROXY=true`. No new environment settings.
+- Tests: shared +9 (what a share allows, a notebook overwrite as a chain level, cursor keys, request bodies), server +30 (`sharing.test.ts`: the per-bit matrix, notebook overwrites, direct shares and sync, links and passwords, files, revoking mid-session, moving, the permission list; plus the migration test), web e2e +6 (`sharing.e2e.mjs`: scenarios 7-11 and a move). **Manual:** none; printing from the public page uses the browser's own print dialog.

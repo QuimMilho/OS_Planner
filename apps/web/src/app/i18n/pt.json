@@ -58,7 +58,8 @@
     "notFound": "Não foi possível encontrar esta página. Pode ter sido eliminada ou ainda não chegou a este dispositivo.",
     "inTrash": "Esta página está na reciclagem.",
     "moveToTrash": "Mover para a reciclagem",
-    "deleted": "Página movida para a reciclagem."
+    "deleted": "Página movida para a reciclagem.",
+    "readOnly": "Pode ler esta página, mas não a pode alterar."
   },
   "trash": {
     "title": "Reciclagem",
@@ -266,7 +267,11 @@
     "notFoundTitle": "Página não encontrada",
     "notFound": "Esta página não existe ou não tem acesso a ela.",
     "backHome": "Voltar às minhas notas",
-    "forbidden": "Não tem permissão para fazer isso."
+    "forbidden": "Não tem permissão para fazer isso.",
+    "messageInvalid": "Não é possível enviar esta mensagem.",
+    "rateLimited": "Está a enviar mensagens depressa demais. Aguarde um momento.",
+    "slowmode": "Este canal está em modo lento: aguarde um pouco antes da próxima mensagem.",
+    "linkInvalid": "Esta ligação não funciona. Pode ter expirado, ter sido revogada ou nunca ter existido."
   },
   "theme": {
     "system": "Igual ao dispositivo",
@@ -298,7 +303,23 @@
     "signOutDevice": "Terminar sessão",
     "saved": "Guardado.",
     "signOutTitle": "Terminar sessão?",
-    "unsyncedWarning": "Algumas alterações ainda não chegaram ao servidor. Terminar a sessão remove as notas guardadas neste dispositivo, pelo que seriam perdidas. Aguarde pela sincronização ou termine a sessão mesmo assim."
+    "unsyncedWarning": "Algumas alterações ainda não chegaram ao servidor. Terminar a sessão remove as notas guardadas neste dispositivo, pelo que seriam perdidas. Aguarde pela sincronização ou termine a sessão mesmo assim.",
+    "privacy": {
+      "title": "Privacidade",
+      "invisible": "Aparecer como sem ligação",
+      "invisibleHint": "As outras pessoas veem-no como sem ligação enquanto usa o OS_Planner. Continua a ver todas as outras.",
+      "dms": "Quem me pode escrever",
+      "dmsMembers": "Pessoas que partilham uma equipa comigo",
+      "dmsNobody": "Ninguém",
+      "blocked": "Pessoas bloqueadas",
+      "noBlocked": "Não bloqueou ninguém."
+    },
+    "chat": {
+      "title": "Conversas",
+      "sendWithCtrl": "Enviar mensagens com Ctrl+Enter",
+      "sendWithCtrlHint": "O Enter passa então a mudar de linha. O Shift+Enter faz sempre isso."
+    },
+    "notifications": "Notificações"
   },
   "site": {
     "openApp": "Abrir o OS_Planner",
@@ -424,7 +445,8 @@
   "rail": {
     "home": "As minhas notas",
     "label": "Espaços",
-    "browse": "Explorar equipas públicas"
+    "browse": "Explorar equipas públicas",
+    "dms": "Mensagens diretas"
   },
   "breadcrumb": {
     "label": "Onde está"
@@ -471,7 +493,11 @@
       "requests": "Pedidos",
       "bans": "Banimentos",
       "discover": "Visibilidade"
-    }
+    },
+    "allowDMs": "Permitir mensagens diretas entre membros",
+    "allowDMsHint": "As pessoas desta equipa podem escrever-se em privado. Desligar só importa a quem não partilha outra equipa que o permita.",
+    "allowPublicLinks": "Permitir ligações públicas para cadernos",
+    "allowPublicLinksHint": "Quem pode partilhar cadernos pode criar ligações só de leitura que funcionam sem conta."
   },
   "members": {
     "nickname": "Alcunha",
@@ -667,6 +693,9 @@
       "team_delete": "Equipa apagada",
       "team_owner_transfer": "Propriedade alterada",
       "quota_override": "Limite de armazenamento alterado",
+      "notebook_link_create": "Ligação pública criada",
+      "notebook_link_revoke": "Ligação pública revogada",
+      "notebook_move": "Caderno movido",
       "member_add": "Membro entrou",
       "member_ban": "Membro banido",
       "member_unban": "Banimento levantado",
@@ -814,5 +843,348 @@
       "banned": "Não pode entrar nesta equipa.",
       "full": "Esta equipa está cheia."
     }
+  },
+  "realtime": {
+    "connected": "Atualizações em direto ativas",
+    "connecting": "A ligar de novo…",
+    "offline": "Sem ligação em direto"
+  },
+  "presence": {
+    "online": "Em linha",
+    "idle": "Ausente",
+    "offline": "Sem ligação"
+  },
+  "attachment": {
+    "add": "Anexar um ficheiro",
+    "download": "Transferir",
+    "offline": "Só é possível anexar ficheiros com ligação à internet.",
+    "tooMany": "Uma mensagem pode levar no máximo 10 ficheiros.",
+    "unsupported": "Este tipo de ficheiro não pode ser anexado. São aceites imagens e vídeos.",
+    "tooLarge": "O ficheiro é demasiado grande."
+  },
+  "channel": {
+    "title": "Canais",
+    "create": "Criar",
+    "newChannel": "Novo canal",
+    "newCategory": "Nova categoria",
+    "name": "Nome",
+    "nameRequired": "Indique um nome.",
+    "none": "Ainda não há canais.",
+    "noneManage": "Ainda não há canais. Use + para criar um.",
+    "settings": "Definições do canal",
+    "details": "Detalhes",
+    "topic": "Tópico",
+    "slowmode": "Modo lento",
+    "slowmodeOff": "Desligado",
+    "slowmodeHint": "Quanto tempo uma pessoa tem de esperar entre duas mensagens. Os moderadores não são limitados.",
+    "archive": "Arquivar canal",
+    "unarchive": "Restaurar canal",
+    "permissions": "Quem o pode ver e usar",
+    "permissionsHint": "Permita ou negue o que uma função ou uma pessoa pode fazer neste canal. Sem entrada, ficam com o que as suas funções dão.",
+    "deleteTitle": "Eliminar canal",
+    "deleteConfirm": "Eliminar “{{name}}” com todas as mensagens e ficheiros? Esta ação não pode ser anulada.",
+    "deleteWarning": "Todas as mensagens, ficheiros, reações e conversas nele são eliminados definitivamente e o espaço que ocupavam é libertado.",
+    "redactPreviews": "Esconder o texto das mensagens no push e no email",
+    "redactPreviewsHint": "As notificações deste canal dizem que algo aconteceu, não o que foi dito."
+  },
+  "chat": {
+    "actions": "Ações da mensagem",
+    "archivedNotice": "Este canal está arquivado: sem novas mensagens.",
+    "bold": "Negrito",
+    "italic": "Itálico",
+    "strike": "Rasurado",
+    "code": "Código",
+    "link": "Ligação",
+    "quote": "Citação",
+    "list": "Lista",
+    "formatting": "Formatação",
+    "cancel": "Cancelar",
+    "copyLink": "Copiar ligação",
+    "linkCopied": "Ligação copiada.",
+    "deleteTitle": "Eliminar mensagem",
+    "deleteConfirm": "Eliminar esta mensagem? Esta ação não pode ser anulada.",
+    "deleted": "Mensagem eliminada",
+    "deletedUser": "Utilizador eliminado",
+    "discard": "Remover",
+    "edit": "Editar",
+    "edited": "(editada)",
+    "editing": "A editar a mensagem",
+    "emoji": "Emoji",
+    "empty": "Ainda não há mensagens. Diga olá!",
+    "failed": "Não enviada.",
+    "jumpUnread": "Ir para a primeira por ler",
+    "loadOlder": "Carregar mensagens mais antigas",
+    "messages": "Mensagens",
+    "more": "Mais",
+    "newBelow": "{{n}} novas abaixo",
+    "noResults": "Nenhuma mensagem encontrada.",
+    "noSend": "Não tem permissão para escrever aqui.",
+    "offlineRead": "Está sem ligação: a mostrar as mensagens guardadas. As mensagens que escrever são enviadas quando voltar a ter ligação.",
+    "pin": "Fixar mensagem",
+    "unpin": "Desafixar mensagem",
+    "pinned": "Fixada",
+    "placeholder": "Mensagem em #{{name}}",
+    "react": "Adicionar reação",
+    "remove": "Remover",
+    "reply": "Responder",
+    "replyingTo": "A responder a {{name}}",
+    "retry": "Tentar de novo",
+    "save": "Guardar",
+    "search": "Pesquisar no canal",
+    "searchPlaceholder": "Pesquisar mensagens…",
+    "send": "Enviar",
+    "sending": "A enviar…",
+    "thread": "Conversa",
+    "unread": "{{n}} mensagens novas"
+  },
+  "thread": {
+    "archive": "Arquivar conversa",
+    "unarchive": "Reabrir conversa",
+    "archived": "arquivada",
+    "archivedNotice": "Esta conversa está arquivada. Reabra-a para responder.",
+    "defaultName": "Conversa",
+    "empty": "Ainda não há respostas.",
+    "name": "Nome da conversa",
+    "new": "Iniciar uma conversa",
+    "placeholder": "Responder na conversa",
+    "replies": "{{n}} respostas",
+    "start": "Iniciar conversa"
+  },
+  "pins": {
+    "title": "Mensagens fixadas",
+    "empty": "Ainda não há nada fixado."
+  },
+  "dm": {
+    "title": "Mensagens diretas",
+    "new": "Nova mensagem",
+    "filter": "Procurar uma conversa",
+    "empty": "Ainda não há conversas. Comece uma a partir da lista de membros ou com o lápis acima.",
+    "homeHint": "Escolha alguém das suas equipas para escrever.",
+    "pickerSearch": "Procurar pessoas nas suas equipas",
+    "pickerNone": "Ninguém a quem escrever. As pessoas aparecem aqui quando partilham consigo uma equipa que permite mensagens diretas.",
+    "message": "Mensagem",
+    "placeholder": "Mensagem para {{name}}",
+    "notAllowed": "Não é possível enviar esta mensagem.",
+    "menu": "Opções da conversa",
+    "close": "Fechar conversa",
+    "block": "Bloquear",
+    "unblock": "Desbloquear",
+    "blockTitle": "Bloquear esta pessoa?",
+    "blockConfirm": "Você e {{name}} deixam de poder enviar mensagens diretas um ao outro. O histórico mantém-se.",
+    "blockedByYou": "Bloqueou esta pessoa",
+    "sharedTeams": "Ver equipas em comum",
+    "sharedTeamsList": "Equipas em comum: {{names}}"
+  },
+  "mentions": {
+    "list": "Pessoas e funções a mencionar",
+    "everyone": "Notificar todos os que veem este canal",
+    "here": "Notificar quem está online",
+    "someone": "alguém",
+    "aRole": "função",
+    "cannotSee": "Não foram notificados, não veem este canal: {{names}}"
+  },
+  "notif": {
+    "open": "Definições de notificações",
+    "title": "Notificações: {{name}}",
+    "levelTitle": "Avisar-me sobre",
+    "level": {
+      "all": "Todas as mensagens",
+      "mentions": "Só menções",
+      "none": "Nada",
+      "inherit": "Usar a definição acima"
+    },
+    "suppressTitle": "Nunca me notificar sobre",
+    "suppressEveryone": "@everyone e @here",
+    "suppressRoles": "Menções às minhas funções",
+    "suppressDirect": "Menções ao meu nome (e respostas)",
+    "muteTitle": "Silenciar",
+    "mute": {
+      "15": "15 minutos",
+      "60": "1 hora",
+      "180": "3 horas",
+      "480": "8 horas",
+      "1440": "24 horas",
+      "forever": "Até eu voltar a ativar"
+    },
+    "mutedUntil": "Silenciado até {{time}}",
+    "mutedForever": "Silenciado até voltar a ativar",
+    "unmute": "Ativar o som",
+    "emailTitle": "Email",
+    "email": {
+      "inherit": "Usar a definição acima",
+      "off": "Sem email",
+      "mentions": "Só menções",
+      "all": "Todas as mensagens"
+    },
+    "onlyAway": "Só quando estou ausente",
+    "pushTitle": "Notificações push",
+    "pushOn": "Ligadas",
+    "pushOff": "Desligadas",
+    "effective": "O que está em vigor aqui",
+    "effLevel": "Notifica: {{level}} (de {{from}})",
+    "effMuted": "Silenciado (de {{from}})",
+    "effEmail": "Email: {{email}} (de {{from}})",
+    "effPushOn": "Push: ligado",
+    "effPushOff": "Push: desligado",
+    "where": {
+      "default": "o predefinido",
+      "here": "aqui",
+      "global": "as suas predefinições",
+      "team": "a equipa",
+      "project": "o projeto",
+      "channel": "o canal",
+      "dm": "a conversa"
+    },
+    "settingsHint": "Estas são as suas predefinições. Cada equipa, projeto, canal e conversa pode alterá-las no seu botão de sino.",
+    "defaults": "Predefinições para tudo",
+    "quietTitle": "Horas de silêncio",
+    "quietEnable": "Reter push e email durante estas horas",
+    "quietFrom": "Das",
+    "quietTo": "Às",
+    "quietDays": "Dias",
+    "quietHint": "Hora local ({{zone}}). A caixa de entrada não é retida.",
+    "day": {
+      "0": "Dom",
+      "1": "Seg",
+      "2": "Ter",
+      "3": "Qua",
+      "4": "Qui",
+      "5": "Sex",
+      "6": "Sáb"
+    },
+    "kind": {
+      "mention_user": "{{name}} mencionou-o",
+      "mention_role": "{{name}} mencionou uma função sua",
+      "mention_everyone": "{{name}} mencionou todos",
+      "mention_here": "{{name}} mencionou quem está online",
+      "reply": "{{name}} respondeu-lhe",
+      "dm": "{{name}} enviou-lhe uma mensagem",
+      "invite": "{{name}} convidou-o",
+      "task_assigned": "{{name}} atribuiu-lhe uma tarefa",
+      "task_due": "Uma tarefa está a terminar",
+      "task_comment": "{{name}} comentou uma tarefa",
+      "meeting_invite": "{{name}} convidou-o para uma reunião",
+      "meeting_reminder": "Uma reunião vai começar",
+      "join_request": "{{name}} pediu para entrar"
+    }
+  },
+  "inbox": {
+    "title": "Notificações",
+    "markAll": "Marcar tudo como lido",
+    "all": "Todas",
+    "mentions": "Menções",
+    "empty": "Ainda não há nada aqui.",
+    "more": "Mostrar mais",
+    "today": "Hoje",
+    "yesterday": "Ontem"
+  },
+  "push": {
+    "title": "Notificações push",
+    "hint": "Receba uma notificação neste dispositivo mesmo com o OS_Planner fechado.",
+    "enable": "Ativar neste dispositivo",
+    "disable": "Desativar neste dispositivo",
+    "on": "O push está ativo neste dispositivo.",
+    "denied": "O navegador não permitiu notificações. Altere nas definições do site no navegador e tente de novo.",
+    "failed": "Não foi possível ativar o push.",
+    "devices": "Dispositivos com push",
+    "noDevices": "Ainda não há dispositivos.",
+    "remove": "Remover"
+  },
+  "mail": {
+    "action": {
+      "muted": "Esta conversa está silenciada",
+      "unsubscribed": "Deixará de receber email desta conversa",
+      "note": "Pode alterar isto a qualquer momento nas definições de notificações da conversa.",
+      "invalid": "Esta ligação não funciona",
+      "invalidNote": "Pode ter expirado ou já ter sido usada. Abra o OS_Planner para alterar as definições de notificações.",
+      "open": "Abrir o OS_Planner"
+    }
+  },
+  "sharedWithMe": {
+    "title": "Partilhados comigo",
+    "leave": "Deixar de ter este caderno"
+  },
+  "share": {
+    "action": "Partilhar…",
+    "title": "Partilhar “{{name}}”",
+    "people": "Pessoas",
+    "link": "Ligação",
+    "whoPlaceholder": "Nome ou endereço de email",
+    "accessLabel": "Acesso",
+    "access": {
+      "read": "Pode ler",
+      "edit": "Pode editar"
+    },
+    "add": "Partilhar",
+    "whoHasAccess": "Quem tem acesso",
+    "you": "Você",
+    "owner": "Dono",
+    "remove": "Retirar acesso",
+    "invited": "Convidado · ainda sem conta",
+    "sentTo": "Feito. Se esse endereço tiver conta, a pessoa já tem acesso; caso contrário terá quando se registar com ele.",
+    "teamLinksDisabled": "Esta equipa não permite ligações públicas. O dono da equipa pode ativá-las nas definições da equipa.",
+    "linkAccess": "Quem tiver a ligação",
+    "linkRead": "pode ler",
+    "linkEdit": "pode editar depois de iniciar sessão",
+    "expiry": "Expira",
+    "never": "Nunca",
+    "days": "Dentro de {{n}} dias",
+    "password": "Palavra-passe",
+    "passwordOptional": "Opcional",
+    "showAuthors": "Mostrar o meu nome na página",
+    "createLink": "Criar ligação",
+    "linkCreated": "Ligação criada em",
+    "expires": "expira",
+    "protected": "palavra-passe",
+    "copy": "Copiar ligação",
+    "copied": "Ligação copiada.",
+    "revoke": "Revogar ligação",
+    "noLinks": "Ainda sem ligações. Quem tiver um endereço abre o caderno; revogá-lo fecha-o logo.",
+    "errors": {
+      "generic": "Não funcionou. Tente outra vez.",
+      "offline": "Está offline. Partilhar precisa de ligação.",
+      "notFound": "Escolha um nome das suas equipas ou escreva um endereço de email completo.",
+      "user_not_found": "Essa pessoa não está em nenhuma das suas equipas. Use o endereço de email.",
+      "cannot_share_with_self": "Este caderno já é seu.",
+      "share_limit_reached": "Este caderno já está partilhado com o máximo de pessoas.",
+      "link_limit_reached": "Este caderno já tem o máximo de ligações ativas. Revogue uma primeiro.",
+      "public_links_disabled": "Esta equipa não permite ligações públicas.",
+      "team_links_read_only": "As ligações a cadernos de equipa só podem ser de leitura.",
+      "forbidden": "Não pode partilhar este caderno."
+    }
+  },
+  "notebook": {
+    "move": {
+      "action": "Mover para outro espaço…",
+      "title": "Mover caderno para…",
+      "none": "Não há mais nenhum sítio onde possa criar cadernos.",
+      "personal": "Os meus cadernos",
+      "toTeam": "Todos os que, nesse local, podem ver cadernos vão ver este. As suas pessoas e ligações deixam de funcionar.",
+      "toPersonal": "Só você o verá. Quem tinha acesso pela equipa perde-o, e as suas pessoas e ligações deixam de funcionar.",
+      "between": "Quem vê o novo local ganha acesso; quem só via o antigo perde-o. As suas pessoas e ligações deixam de funcionar.",
+      "noRoom": "Não há espaço de armazenamento suficiente aí para este caderno.",
+      "sharedFile": "Uma imagem ou vídeo deste caderno também é usado noutro caderno. Copie-o para lá primeiro.",
+      "offline": "Está offline. Mover um caderno precisa de ligação.",
+      "refused": "Não foi possível mover. Pode precisar de mais permissões aqui ou lá."
+    },
+    "access": {
+      "action": "Quem pode ver isto…",
+      "title": "Acesso a “{{name}}”",
+      "hint": "Permita ou negue direitos neste caderno a um cargo ou a uma pessoa, além do que a equipa e o projeto já dão."
+    }
+  },
+  "publicView": {
+    "tooMany": "Demasiadas palavras-passe erradas. Tente novamente dentro de alguns minutos.",
+    "passwordTitle": "Este caderno precisa de palavra-passe",
+    "open": "Abrir",
+    "wrongPassword": "Essa palavra-passe não está certa.",
+    "sharedBy": "Partilhado por {{name}}",
+    "search": "Pesquisar neste caderno",
+    "print": "Imprimir",
+    "edit": "Iniciar sessão para editar",
+    "results": "{{n}} encontrados",
+    "empty": "Ainda não há nada aqui.",
+    "pickPage": "Escolha uma página à esquerda.",
+    "editFailed": "Não foi possível abrir este caderno para edição. Tente outra vez."
   }
 }

@@ -231,7 +231,8 @@ export async function startSite({ port, apiUrl }) {
     [
       "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
       `img-src 'self' data: blob: ${current}`, `media-src 'self' blob: ${current}`, "font-src 'self' data:",
-      `connect-src 'self' ${current}`, "worker-src 'self' blob:", "manifest-src 'self'", "object-src 'none'", "frame-ancestors 'none'",
+      // a CSP host source with http(s) does not cover the realtime WebSocket (ws/wss): list it too
+      `connect-src 'self' ${current} ${current.replace(/^http/, 'ws')}`, "worker-src 'self' blob:", "manifest-src 'self'", "object-src 'none'", "frame-ancestors 'none'",
     ].join('; ');
 
   const server = createServer((req, res) => {

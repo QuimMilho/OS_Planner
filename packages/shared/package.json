@@ -17,6 +17,11 @@
       "types": "./dist/lite.d.ts",
       "import": "./dist/lite.js",
       "require": "./dist/lite.cjs"
+    },
+    "./chat": {
+      "types": "./dist/chat.d.ts",
+      "import": "./dist/chat.js",
+      "require": "./dist/chat.cjs"
     }
   },
   "files": [

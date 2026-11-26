@@ -67,3 +67,35 @@ Attachments in DMs are charged to the *sender's* personal quota; text counts as 
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Data model.** `DirectConversation { id, userA, userB, channelId, createdAt, lastMessageAt }` with the pair stored ordered (`userA < userB`, unique);
+  `userA`/`userB` are real foreign keys that become NULL when an account is deleted, so the other person keeps the history ("Deleted user") and the
+  nightly chat job removes a conversation whose two sides are both gone. The conversation owns an ordinary `Channel` row of kind `dm` with
+  `spaceId NULL` (`Channel.spaceId` became nullable; `conversationId` on the channel was replaced by `DirectConversation.channelId`, which is the
+  same link read the other way). `DirectState` is just `{ conversationId, userId, closedAt }`: **read state reuses `ChannelRead`** and **mute reuses
+  phase 9's `NotificationSetting`** (scope `dm`) instead of two more copies of the same columns. `UserBlock`, `Team.allowMemberDMs` and
+  `User.allowDMsFrom` are as planned (`UpdateMe`/`UpdateTeam` carry them).
+- **`ChatAccess`** (`apps/server/src/chat/channel-access.ts`) is the abstraction of the plan: `ChannelsService.textChannel()` returns one for a
+  team channel (permissions from roles and overwrites) or for a conversation (`DirectAccess`: the two people only, fixed `DM_PERMISSIONS`, no
+  moderation bits). `MessagesService`, `AttachmentsService` and the media access check all work through it, so the phase 7 permission matrix test passes
+  **unmodified**. A DM has no threads (404 on thread endpoints and no thread bits); either person may pin; nobody can delete the other's message.
+  `PermissionService.channelAccess` answers null for a channel without a space, so no team endpoint can ever reach a conversation.
+- **Eligibility** (`DirectService.allowed`) is checked on create **and on every send, attachment upload, new reaction and new pin** (a retry of a message
+  that is already stored is answered without checking again). Edit and delete of one's own messages are always possible. Every refusal is the same
+  `403 dm_not_allowed`, for a missing person, oneself, a block either way, "nobody", a team that switched it off, or no shared team.
+- **Billing.** `ChannelsService.billingSpace()`: a team channel bills its space, a conversation bills the **sender's personal space** (text through
+  `Message.sizeBytes`, files as `Media` of that space), refunds go to the author. `QuotaService.breakdown('user')` counts their DM text as documents.
+- **API beyond the plan**: `GET /api/dms?closed=`, `GET /api/dms/:id`, `POST /api/dms/:id/close|open` (200 with the conversation),
+  `GET /api/dms/people?q=` (the picker: people of your teams that allow it; people you blocked are left out, people who blocked you or take nobody are
+  **not**, which would reveal it), `GET/PUT/DELETE /api/blocks`. The conversation DTO carries the peer, last message, unread, `closed`, `blocked`
+  (only your own block) and the teams you share. Events: `dm.updated` to `user:<id>` for **both** people on every message, on start, close and block
+  (to the blocker only); the messages themselves use the channel room, whose authorizer accepts a conversation's two people (also when blocked: history reads).
+- **Web.** Rail **Direct messages** (badge = unread over all conversations), sidebar list with presence and unread, `/app/dm` (picker) and
+  `/app/dm/:id` (the chat screen in "dm" mode: header with the person, menu *close / block / shared teams*, no thread or slowmode UI). **Message** on
+  every member in the team settings list. Settings → Privacy: who can message me and the blocked list; Team settings → Discover: allow direct messages. The
+  conversation list is cached in IndexedDB (`dms`); messages use the channel cache and send queue unchanged. A message the server refused shows the neutral text.
+- Tests: server +18 (`direct.test.ts`; plus the migration test), web e2e +3 (`dm.e2e.mjs`).

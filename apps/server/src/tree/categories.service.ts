@@ -82,9 +82,9 @@ export class CategoriesService {
 
   /** The space of an existing category after checking that the person may do `needed` there; null if it does not exist. */
   private async spaceOf(userId: string, id: string, needed: bigint): Promise<string | null> {
-    const cat = await this.prisma.category.findUnique({ where: { id }, select: { spaceId: true } });
+    const cat = await this.prisma.category.findUnique({ where: { id }, select: { spaceId: true, notebookId: true } });
     if (!cat) return null;
-    await this.perms.requireSpace(userId, cat.spaceId, needed);
+    await this.perms.requireNotebook(userId, cat.notebookId, needed);
     return cat.spaceId;
   }
 
@@ -92,7 +92,7 @@ export class CategoriesService {
     const inNotebook = await this.prisma.notebook.findUnique({ where: { id: input.notebookId }, select: { spaceId: true } });
     if (!inNotebook) throw notFound('notebook');
     const spaceId = inNotebook.spaceId;
-    await this.perms.requireSpace(userId, spaceId, Permission.EDIT_PAGES);
+    await this.perms.requireNotebook(userId, input.notebookId, Permission.EDIT_PAGES);
 
     return this.prisma.$transaction(async (tx) => {
       const seq = await this.seq.next(tx, spaceId);

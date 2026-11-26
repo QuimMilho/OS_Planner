@@ -16,6 +16,28 @@
   }
 }
 
+.head.sub {
+  padding: 0 8px;
+  button {
+    font-size: 13px;
+  }
+}
+
+.badge {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-dim);
+  &[data-access='edit'] {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+  }
+}
+
 .row {
   display: flex;
   align-items: center;

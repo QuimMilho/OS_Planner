@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
-import type { AuthResponse, Locale, RegisterInput, Theme, UserDto } from '@os-planner/shared';
+import { firstValueFrom, Subject } from 'rxjs';
+import type { AuthResponse, Locale, PresenceMode, RegisterInput, Theme, UserDto } from '@os-planner/shared';
 
 const LAST_USER_KEY = 'os_planner.lastUser';
 const CSRF = { 'X-Requested-With': 'os_planner' };
@@ -53,14 +53,36 @@ export class AuthStore {
 
   /** The access token lives only in memory: nothing for a script to steal from storage. */
   private token: string | null = null;
+  private expiresAt = 0;
+  /** Emits the new access token whenever there is one (sign-in, refresh) and `null` when the session ends. */
+  readonly tokenChanged = new Subject<string | null>();
   private refreshing: Promise<boolean> | null = null;
 
   getToken(): string | null {
     return this.token;
   }
 
+  /** When the access token stops working (ms since the epoch); 0 without one. */
+  tokenExpiresAt(): number {
+    return this.token ? this.expiresAt : 0;
+  }
+
   /** Called once at startup: resumes the session from the httpOnly refresh cookie. */
+  /** Set when start-up skipped the sign-in check (a shared notebook is opened without it): see resume(). */
+  private deferred = false;
+
   async init(): Promise<void> {
+    // The public view of a shared notebook never talks to the server on behalf of a person: nobody is asked who they are
+    // until they ask to edit (resume).
+    if (location.pathname.startsWith('/s/')) {
+      this.deferred = true;
+      this.status.set('anon');
+      return;
+    }
+    await this.start();
+  }
+
+  private async start(): Promise<void> {
     // A server that never answers must not hold the whole app hostage: after a few seconds, behave as if offline.
     // The timer is cancelled as soon as the refresh settles; left running it would later flip a healthy session offline.
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -69,6 +91,16 @@ export class AuthStore {
     });
     const ok = await Promise.race([this.refresh(), slow]).finally(() => clearTimeout(timer));
     if (!ok && this.status() === 'loading') this.status.set('anon');
+  }
+
+  /** Finds out who is signed in after all, if start-up did not (see init). Resolves true when somebody is. */
+  async resume(): Promise<boolean> {
+    if (this.deferred) {
+      this.deferred = false;
+      this.status.set('loading');
+      await this.start();
+    }
+    return this.status() === 'authed';
   }
 
   /**
@@ -109,9 +141,11 @@ export class AuthStore {
 
   private apply(res: AuthResponse): void {
     this.token = res.accessToken;
+    this.expiresAt = Date.now() + res.expiresIn * 1000;
     this.user.set(res.user);
     this.status.set('authed');
     this.offlineSession.set(false);
+    this.tokenChanged.next(this.token);
     try {
       localStorage.setItem(LAST_USER_KEY, JSON.stringify(res.user));
     } catch {
@@ -123,6 +157,17 @@ export class AuthStore {
     this.token = null;
     this.user.set(null);
     this.status.set('anon');
+    this.tokenChanged.next(null);
+  }
+
+  /** The server ended this login (signed out elsewhere, password changed): behave as signed out here too. */
+  endSession(): void {
+    try {
+      localStorage.removeItem(LAST_USER_KEY);
+    } catch {
+      /* ignore */
+    }
+    this.clear();
   }
 
   async login(email: string, password: string): Promise<void> {
@@ -156,7 +201,7 @@ export class AuthStore {
     }
   }
 
-  async updateProfile(changes: { displayName?: string; locale?: Locale; theme?: Theme }): Promise<void> {
+  async updateProfile(changes: { displayName?: string; locale?: Locale; theme?: Theme; presenceMode?: PresenceMode; allowDMsFrom?: 'members' | 'nobody' }): Promise<void> {
     // Applied locally first so language/theme switch instantly, even offline.
     const current = this.user();
     if (current) this.patchUser({ ...current, ...changes });

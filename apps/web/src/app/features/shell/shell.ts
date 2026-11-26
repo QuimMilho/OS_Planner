@@ -1,5 +1,5 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -15,11 +15,16 @@ import { AuthStore } from '../../core/auth-store';
 import { Notify } from '../../core/notify';
 import { Online } from '../../core/online';
 import { Platform } from '../../core/platform';
+import { RealtimeService } from '../../core/realtime';
 import { QuotaStore } from '../../core/quota';
 import { Session } from '../../core/session';
+import { ChatStore } from '../../data/chat-store';
+import { TreeStore } from '../../data/tree-store';
 import { Sync } from '../../data/sync';
 import { Dialogs } from '../../shared/dialogs';
 import { NavContext } from '../../core/nav-context';
+import { DmSidebar } from '../dm/dm-pages';
+import { Bell } from '../notifications/inbox';
 import { TeamSidebar } from '../team/team-sidebar';
 import { Breadcrumb } from './breadcrumb';
 import { Rail } from './rail';
@@ -27,7 +32,7 @@ import { Tree } from './tree';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, MatSidenavModule, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, Tree, TeamSidebar, Breadcrumb, Rail, TranslocoPipe],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, MatSidenavModule, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, Tree, TeamSidebar, DmSidebar, Bell, Breadcrumb, Rail, TranslocoPipe],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
 })
@@ -38,6 +43,8 @@ export class Shell {
   readonly platform = inject(Platform);
   readonly quota = inject(QuotaStore);
   readonly nav = inject(NavContext);
+  readonly treeStore = inject(TreeStore);
+  readonly realtime = inject(RealtimeService);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
   private readonly notify = inject(Notify);
@@ -50,12 +57,19 @@ export class Shell {
   readonly sidenavOpen = computed(() => this.manualOpen() ?? !this.isMobile());
   query = '';
 
+  private readonly chat = inject(ChatStore);
+
   constructor() {
     void this.quota.refresh();
+    // The channels of the team on screen are kept fresh and listened to.
+    effect(() => this.chat.setActiveTeam(this.nav.teamId()));
   }
 
   readonly lastIssue = computed(() => this.sync.issues().at(-1) ?? null);
   readonly initial = computed(() => (this.auth.user()?.displayName ?? '?').trim().charAt(0).toUpperCase());
+
+  /** The live connection: shown only while it is not fine, so a quiet top bar means everything is current. */
+  readonly connection = computed(() => (this.auth.status() === 'authed' ? this.realtime.status() : 'offline'));
 
   readonly status = computed(() => {
     if (!this.online.isOnline() || this.auth.offlineSession() || this.sync.state() === 'offline') return 'offline';

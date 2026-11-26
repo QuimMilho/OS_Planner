@@ -58,7 +58,8 @@
     "notFound": "This page could not be found. It may have been deleted, or it has not reached this device yet.",
     "inTrash": "This page is in the trash.",
     "moveToTrash": "Move to trash",
-    "deleted": "Page moved to the trash."
+    "deleted": "Page moved to the trash.",
+    "readOnly": "You can read this page but not change it."
   },
   "trash": {
     "title": "Trash",
@@ -266,7 +267,11 @@
     "notFoundTitle": "Page not found",
     "notFound": "This page does not exist, or you do not have access to it.",
     "backHome": "Back to my notes",
-    "forbidden": "You do not have permission to do that."
+    "forbidden": "You do not have permission to do that.",
+    "messageInvalid": "That message cannot be sent.",
+    "rateLimited": "You are sending messages too quickly. Wait a moment.",
+    "slowmode": "This channel is in slowmode: wait a little before your next message.",
+    "linkInvalid": "This link does not work. It may have expired, been revoked, or never existed."
   },
   "theme": {
     "system": "Same as device",
@@ -298,7 +303,23 @@
     "signOutDevice": "Sign out",
     "saved": "Saved.",
     "signOutTitle": "Sign out?",
-    "unsyncedWarning": "Some changes have not reached the server yet. Signing out removes the notes stored on this device, so they would be lost. Wait for syncing to finish, or sign out anyway."
+    "unsyncedWarning": "Some changes have not reached the server yet. Signing out removes the notes stored on this device, so they would be lost. Wait for syncing to finish, or sign out anyway.",
+    "privacy": {
+      "title": "Privacy",
+      "invisible": "Appear offline",
+      "invisibleHint": "Other people see you as offline while you use OS_Planner. You still see everyone else.",
+      "dms": "Who can message me",
+      "dmsMembers": "People who share a team with me",
+      "dmsNobody": "Nobody",
+      "blocked": "Blocked people",
+      "noBlocked": "You have not blocked anybody."
+    },
+    "chat": {
+      "title": "Chat",
+      "sendWithCtrl": "Send messages with Ctrl+Enter",
+      "sendWithCtrlHint": "Enter then starts a new line. Shift+Enter always does."
+    },
+    "notifications": "Notifications"
   },
   "site": {
     "openApp": "Open OS_Planner",
@@ -424,7 +445,8 @@
   "rail": {
     "home": "My notes",
     "label": "Spaces",
-    "browse": "Browse public teams"
+    "browse": "Browse public teams",
+    "dms": "Direct messages"
   },
   "breadcrumb": {
     "label": "Where you are"
@@ -471,7 +493,11 @@
       "requests": "Requests",
       "bans": "Bans",
       "discover": "Discoverability"
-    }
+    },
+    "allowDMs": "Allow direct messages between members",
+    "allowDMsHint": "People in this team can write to each other privately. Turning it off only matters for people who share no other team that allows it.",
+    "allowPublicLinks": "Allow public links to notebooks",
+    "allowPublicLinksHint": "People who may share notebooks can make read-only links that work without an account."
   },
   "members": {
     "nickname": "Nickname",
@@ -667,6 +693,9 @@
       "team_delete": "Team deleted",
       "team_owner_transfer": "Ownership changed",
       "quota_override": "Storage limit changed",
+      "notebook_link_create": "Public link created",
+      "notebook_link_revoke": "Public link revoked",
+      "notebook_move": "Notebook moved",
       "member_add": "Member joined",
       "member_ban": "Member banned",
       "member_unban": "Ban lifted",
@@ -814,5 +843,348 @@
       "banned": "You cannot join this team.",
       "full": "This team is full."
     }
+  },
+  "realtime": {
+    "connected": "Live updates on",
+    "connecting": "Reconnecting…",
+    "offline": "No live connection"
+  },
+  "presence": {
+    "online": "Online",
+    "idle": "Idle",
+    "offline": "Offline"
+  },
+  "attachment": {
+    "add": "Attach a file",
+    "download": "Download",
+    "offline": "Files can only be attached while you are online.",
+    "tooMany": "A message can carry at most 10 files.",
+    "unsupported": "That kind of file cannot be attached. Pictures and videos are accepted.",
+    "tooLarge": "That file is too large."
+  },
+  "channel": {
+    "title": "Channels",
+    "create": "Create",
+    "newChannel": "New channel",
+    "newCategory": "New category",
+    "name": "Name",
+    "nameRequired": "Give it a name.",
+    "none": "No channels yet.",
+    "noneManage": "No channels yet. Use + to create one.",
+    "settings": "Channel settings",
+    "details": "Details",
+    "topic": "Topic",
+    "slowmode": "Slowmode",
+    "slowmodeOff": "Off",
+    "slowmodeHint": "How long a person must wait between two messages. Moderators are not held back.",
+    "archive": "Archive channel",
+    "unarchive": "Restore channel",
+    "permissions": "Who can see and use it",
+    "permissionsHint": "Allow or deny what a role or a person may do in this channel. Without an entry they get what their roles give them.",
+    "deleteTitle": "Delete channel",
+    "deleteConfirm": "Delete “{{name}}” with all its messages and files? This cannot be undone.",
+    "deleteWarning": "All messages, files, reactions and threads in it are deleted for good, and the storage they used is freed.",
+    "redactPreviews": "Hide message text in push and email",
+    "redactPreviewsHint": "Notifications about this channel say that something happened, not what was said."
+  },
+  "chat": {
+    "actions": "Message actions",
+    "archivedNotice": "This channel is archived: no new messages.",
+    "bold": "Bold",
+    "italic": "Italic",
+    "strike": "Strikethrough",
+    "code": "Code",
+    "link": "Link",
+    "quote": "Quote",
+    "list": "List",
+    "formatting": "Formatting",
+    "cancel": "Cancel",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied.",
+    "deleteTitle": "Delete message",
+    "deleteConfirm": "Delete this message? This cannot be undone.",
+    "deleted": "Message deleted",
+    "deletedUser": "Deleted user",
+    "discard": "Remove",
+    "edit": "Edit",
+    "edited": "(edited)",
+    "editing": "Editing message",
+    "emoji": "Emoji",
+    "empty": "No messages yet. Say hello!",
+    "failed": "Not sent.",
+    "jumpUnread": "Jump to first unread",
+    "loadOlder": "Load older messages",
+    "messages": "Messages",
+    "more": "More",
+    "newBelow": "{{n}} new below",
+    "noResults": "No messages found.",
+    "noSend": "You do not have permission to write here.",
+    "offlineRead": "You are offline: showing saved messages. Messages you write are sent when you are back online.",
+    "pin": "Pin message",
+    "unpin": "Unpin message",
+    "pinned": "Pinned",
+    "placeholder": "Message #{{name}}",
+    "react": "Add reaction",
+    "remove": "Remove",
+    "reply": "Reply",
+    "replyingTo": "Replying to {{name}}",
+    "retry": "Retry",
+    "save": "Save",
+    "search": "Search in channel",
+    "searchPlaceholder": "Search messages…",
+    "send": "Send",
+    "sending": "Sending…",
+    "thread": "Thread",
+    "unread": "{{n}} new messages"
+  },
+  "thread": {
+    "archive": "Archive thread",
+    "unarchive": "Reopen thread",
+    "archived": "archived",
+    "archivedNotice": "This thread is archived. Reopen it to reply.",
+    "defaultName": "Thread",
+    "empty": "No replies yet.",
+    "name": "Thread name",
+    "new": "Start a thread",
+    "placeholder": "Reply in thread",
+    "replies": "{{n}} replies",
+    "start": "Start thread"
+  },
+  "pins": {
+    "title": "Pinned messages",
+    "empty": "Nothing is pinned yet."
+  },
+  "dm": {
+    "title": "Direct messages",
+    "new": "New message",
+    "filter": "Find a conversation",
+    "empty": "No conversations yet. Start one from the member list or with the pencil above.",
+    "homeHint": "Choose somebody from your teams to write to.",
+    "pickerSearch": "Search people in your teams",
+    "pickerNone": "Nobody to write to. People appear here when they share a team with you that allows direct messages.",
+    "message": "Message",
+    "placeholder": "Message {{name}}",
+    "notAllowed": "This message cannot be sent.",
+    "menu": "Conversation options",
+    "close": "Close conversation",
+    "block": "Block",
+    "unblock": "Unblock",
+    "blockTitle": "Block this person?",
+    "blockConfirm": "You and {{name}} will not be able to send each other direct messages. The history stays.",
+    "blockedByYou": "You blocked this person",
+    "sharedTeams": "View shared teams",
+    "sharedTeamsList": "Teams you share: {{names}}"
+  },
+  "mentions": {
+    "list": "People and roles to mention",
+    "everyone": "Notify everyone who can see this channel",
+    "here": "Notify those who are online",
+    "someone": "someone",
+    "aRole": "role",
+    "cannotSee": "Not notified, they cannot see this channel: {{names}}"
+  },
+  "notif": {
+    "open": "Notification settings",
+    "title": "Notifications: {{name}}",
+    "levelTitle": "Tell me about",
+    "level": {
+      "all": "Every message",
+      "mentions": "Only mentions",
+      "none": "Nothing",
+      "inherit": "Use the setting above"
+    },
+    "suppressTitle": "Never notify me about",
+    "suppressEveryone": "@everyone and @here",
+    "suppressRoles": "Mentions of my roles",
+    "suppressDirect": "Mentions of me by name (and replies)",
+    "muteTitle": "Mute",
+    "mute": {
+      "15": "15 minutes",
+      "60": "1 hour",
+      "180": "3 hours",
+      "480": "8 hours",
+      "1440": "24 hours",
+      "forever": "Until I turn it back on"
+    },
+    "mutedUntil": "Muted until {{time}}",
+    "mutedForever": "Muted until you turn it back on",
+    "unmute": "Unmute",
+    "emailTitle": "Email",
+    "email": {
+      "inherit": "Use the setting above",
+      "off": "No email",
+      "mentions": "Mentions only",
+      "all": "Every message"
+    },
+    "onlyAway": "Only when I am away",
+    "pushTitle": "Push notifications",
+    "pushOn": "On",
+    "pushOff": "Off",
+    "effective": "What is in effect here",
+    "effLevel": "Notifies: {{level}} (from {{from}})",
+    "effMuted": "Muted (from {{from}})",
+    "effEmail": "Email: {{email}} (from {{from}})",
+    "effPushOn": "Push: on",
+    "effPushOff": "Push: off",
+    "where": {
+      "default": "the default",
+      "here": "here",
+      "global": "your defaults",
+      "team": "the team",
+      "project": "the project",
+      "channel": "the channel",
+      "dm": "the conversation"
+    },
+    "settingsHint": "These are your defaults. Each team, project, channel and conversation can change them from its bell button.",
+    "defaults": "Defaults for everything",
+    "quietTitle": "Quiet hours",
+    "quietEnable": "Hold back push and email during these hours",
+    "quietFrom": "From",
+    "quietTo": "To",
+    "quietDays": "Days",
+    "quietHint": "Local time ({{zone}}). The inbox is not held back.",
+    "day": {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat"
+    },
+    "kind": {
+      "mention_user": "{{name}} mentioned you",
+      "mention_role": "{{name}} mentioned a role of yours",
+      "mention_everyone": "{{name}} mentioned everyone",
+      "mention_here": "{{name}} mentioned those online",
+      "reply": "{{name}} replied to you",
+      "dm": "{{name}} sent you a message",
+      "invite": "{{name}} invited you",
+      "task_assigned": "{{name}} assigned you a task",
+      "task_due": "A task is due",
+      "task_comment": "{{name}} commented on a task",
+      "meeting_invite": "{{name}} invited you to a meeting",
+      "meeting_reminder": "A meeting is about to start",
+      "join_request": "{{name}} asked to join"
+    }
+  },
+  "inbox": {
+    "title": "Notifications",
+    "markAll": "Mark all as read",
+    "all": "All",
+    "mentions": "Mentions",
+    "empty": "Nothing here yet.",
+    "more": "Show more",
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "push": {
+    "title": "Push notifications",
+    "hint": "Get a notification on this device even when OS_Planner is closed.",
+    "enable": "Turn on for this device",
+    "disable": "Turn off for this device",
+    "on": "Push is on for this device.",
+    "denied": "The browser did not allow notifications. Change it in the browser’s site settings, then try again.",
+    "failed": "Could not turn push on.",
+    "devices": "Devices with push",
+    "noDevices": "No devices yet.",
+    "remove": "Remove"
+  },
+  "mail": {
+    "action": {
+      "muted": "This chat is muted",
+      "unsubscribed": "You will not get email about this chat any more",
+      "note": "You can change this at any time in the notification settings of the chat.",
+      "invalid": "This link does not work",
+      "invalidNote": "It may have expired or been used already. Open OS_Planner to change your notification settings.",
+      "open": "Open OS_Planner"
+    }
+  },
+  "sharedWithMe": {
+    "title": "Shared with me",
+    "leave": "Stop having this notebook"
+  },
+  "share": {
+    "action": "Share…",
+    "title": "Share “{{name}}”",
+    "people": "People",
+    "link": "Link",
+    "whoPlaceholder": "Name or email address",
+    "accessLabel": "Access",
+    "access": {
+      "read": "Can read",
+      "edit": "Can edit"
+    },
+    "add": "Share",
+    "whoHasAccess": "Who has access",
+    "you": "You",
+    "owner": "Owner",
+    "remove": "Remove access",
+    "invited": "Invited · no account yet",
+    "sentTo": "Done. If that address has an account, the person now has access; otherwise they will when they sign up with it.",
+    "teamLinksDisabled": "This team does not allow public links. A team owner can turn them on in the team settings.",
+    "linkAccess": "Anyone with the link",
+    "linkRead": "can read",
+    "linkEdit": "can edit after signing in",
+    "expiry": "Expires",
+    "never": "Never",
+    "days": "In {{n}} days",
+    "password": "Password",
+    "passwordOptional": "Optional",
+    "showAuthors": "Show my name on the page",
+    "createLink": "Create link",
+    "linkCreated": "Link made on",
+    "expires": "expires",
+    "protected": "password",
+    "copy": "Copy link",
+    "copied": "Link copied.",
+    "revoke": "Revoke link",
+    "noLinks": "No links yet. Whoever has an address can open the notebook; revoking it closes it at once.",
+    "errors": {
+      "generic": "That did not work. Try again.",
+      "offline": "You are offline. Sharing needs a connection.",
+      "notFound": "Pick a name from your teams, or type a full email address.",
+      "user_not_found": "That person is not in any of your teams. Use their email address instead.",
+      "cannot_share_with_self": "This notebook is already yours.",
+      "share_limit_reached": "This notebook is shared with as many people as it can be.",
+      "link_limit_reached": "This notebook has as many working links as it can have. Revoke one first.",
+      "public_links_disabled": "This team does not allow public links.",
+      "team_links_read_only": "Links to team notebooks can only be read-only.",
+      "forbidden": "You may not share this notebook."
+    }
+  },
+  "notebook": {
+    "move": {
+      "action": "Move to another space…",
+      "title": "Move notebook to…",
+      "none": "There is nowhere else you may create notebooks.",
+      "personal": "My notebooks",
+      "toTeam": "Everyone in that place who may see notebooks will see this one. Its people and links stop working.",
+      "toPersonal": "Only you will see it. Everyone who had access through the team loses it, and its people and links stop working.",
+      "between": "People who see the new place gain access; people who only saw the old one lose it. Its people and links stop working.",
+      "noRoom": "There is not enough storage space there for this notebook.",
+      "sharedFile": "A picture or video in this notebook is also used in another notebook. Copy it there first.",
+      "offline": "You are offline. Moving a notebook needs a connection.",
+      "refused": "It could not be moved. You may need more rights here or there."
+    },
+    "access": {
+      "action": "Who can see this…",
+      "title": "Access to “{{name}}”",
+      "hint": "Allow or deny rights on this notebook for a role or a person, on top of what the team and project already give."
+    }
+  },
+  "publicView": {
+    "tooMany": "Too many wrong passwords. Try again in a few minutes.",
+    "passwordTitle": "This notebook needs a password",
+    "open": "Open",
+    "wrongPassword": "That password is not right.",
+    "sharedBy": "Shared by {{name}}",
+    "search": "Search this notebook",
+    "print": "Print",
+    "edit": "Sign in to edit",
+    "results": "{{n}} found",
+    "empty": "Nothing here yet.",
+    "pickPage": "Pick a page on the left.",
+    "editFailed": "Could not open this notebook for editing. Try again."
   }
 }

@@ -21,7 +21,7 @@ import {
 import { newId } from '../common/crypto.js';
 import { ENV, type Env } from '../config/env.js';
 import type { Media } from '../generated/prisma/client.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import { QuotaService } from '../quota/quota.service.js';
 import { PermissionService } from '../spaces/permission.service.js';
 import { SpacesService } from '../spaces/spaces.service.js';
@@ -30,6 +30,8 @@ import { StorageService } from './storage.service.js';
 const MB = 1024 * 1024;
 
 export interface UploadedTempFile {
+  /** The name the browser sent (latin1-decoded by multer: clients that care send the name as a field). */
+  originalname?: string;
   /** Where multer wrote the upload. Ownership passes to MediaService, which moves or deletes it. */
   path: string;
   size: number;
@@ -62,15 +64,41 @@ export class MediaService {
    * safely: a repeat for an id the user already owns returns the existing record.
    */
   async upload(userId: string, file: UploadedTempFile, fields: MediaUploadFields): Promise<MediaDto> {
+    try {
+      // Files belong to the space of the page that uses them: the person's own unless another one is named, or the
+      // notebook they are writing in says (a notebook shared with them lives in its owner's space).
+      let spaceId: string;
+      if (fields.notebookId) {
+        const access = await this.perms.requireNotebook(userId, fields.notebookId, Permission.EDIT_PAGES);
+        spaceId = access.notebook.spaceId;
+      } else {
+        spaceId = fields.spaceId ?? (await this.spaces.personalSpaceId(userId));
+        await this.perms.requireSpace(userId, spaceId, Permission.EDIT_PAGES);
+      }
+      return toMediaDto(await this.store(userId, spaceId, file, fields));
+    } finally {
+      await this.storage.discard(file.path);
+    }
+  }
+
+  /**
+   * Validates and stores a file for a space the caller has already been allowed to write to: type by the bytes, size
+   * limits, EXIF stripped, quota charged. `inTransaction` runs in the same database transaction as the Media row, so
+   * whatever the file belongs to (a chat attachment) exists or not together with it. Does not delete `file`: the caller does.
+   */
+  async store(
+    userId: string,
+    spaceId: string,
+    file: UploadedTempFile,
+    fields: Pick<MediaUploadFields, 'id' | 'width' | 'height' | 'durationSec'>,
+    inTransaction?: (tx: Tx, media: Media) => Promise<void>,
+  ): Promise<Media> {
     let processed: string | undefined;
     try {
-      // Files belong to the space of the page that uses them: the person's own unless another one is named.
-      const spaceId = fields.spaceId ?? (await this.spaces.personalSpaceId(userId));
-      await this.perms.requireSpace(userId, spaceId, Permission.EDIT_PAGES);
       const existing = await this.prisma.media.findUnique({ where: { id: fields.id } });
       if (existing) {
         if (existing.spaceId !== spaceId) throw new ConflictException('id_taken');
-        return toMediaDto(existing);
+        return existing;
       }
 
       // Trust the bytes, never the client's Content-Type or file name.
@@ -114,7 +142,7 @@ export class MediaService {
         const row = await this.prisma.$transaction(async (tx) => {
           // Atomic: two uploads that together exceed the quota cannot both pass.
           await this.quota.chargeSpace(tx, spaceId, size);
-          return tx.media.create({
+          const created = await tx.media.create({
             data: {
               id: fields.id,
               spaceId,
@@ -128,15 +156,17 @@ export class MediaService {
               durationSec: kind === 'video' ? (fields.durationSec ?? null) : null,
             },
           });
+          await inTransaction?.(tx, created);
+          return created;
         });
-        return toMediaDto(row);
+        return row;
       } catch (e) {
         // Nothing was recorded (the transaction rolled back); drop the file.
         await this.storage.remove(userId, fields.id).catch(() => undefined);
         throw e;
       }
     } finally {
-      await this.storage.discard(file.path, processed);
+      await this.storage.discard(processed);
     }
   }
 
@@ -165,8 +195,31 @@ export class MediaService {
 
   /** The row, or 404 when it does not exist or the person cannot see the space it belongs to. */
   async accessible(userId: string, id: string): Promise<Media> {
-    const row = await this.prisma.media.findUnique({ where: { id } });
-    if (!row || !(await this.perms.spaceAccess(userId, row.spaceId))) throw new NotFoundException();
+    const row = await this.prisma.media.findUnique({ where: { id }, include: { attachment: { select: { channelId: true } } } });
+    if (!row) throw new NotFoundException();
+    // A chat attachment is as visible as its channel (and not more: being in the team is not enough, and leaving it ends access).
+    if (row.attachment) {
+      // A file in a direct message is for the two people of the conversation, whatever teams they are in.
+      const conversation = await this.prisma.directConversation.findUnique({
+        where: { channelId: row.attachment.channelId },
+        select: { userA: true, userB: true },
+      });
+      if (conversation) {
+        if (conversation.userA !== userId && conversation.userB !== userId) throw new NotFoundException();
+        return row;
+      }
+      if (!(await this.perms.channelAccess(userId, row.attachment.channelId))) throw new NotFoundException();
+      return row;
+    }
+    if (await this.perms.spaceAccess(userId, row.spaceId)) return row;
+    // What the person uploaded themselves (into somebody else's notebook, before the page that uses it was saved).
+    if (row.userId === userId && (await this.perms.sharesOf(userId)).some((s) => s.notebook.spaceId === row.spaceId && s.access === 'edit')) return row;
+    // A notebook shared with the person: the files its pages use, and nothing else in that space.
+    const used = await this.prisma.pageMedia.findFirst({
+      where: { mediaId: id, page: { deletedAt: null, notebook: { deletedAt: null, shares: { some: { userId } } } } },
+      select: { mediaId: true },
+    });
+    if (!used) throw new NotFoundException();
     return row;
   }
 

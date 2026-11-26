@@ -41,6 +41,11 @@ export class NavContext {
     () => new RegExp(`^/app/p/(${UUID})`, 'i').exec(this.url())?.[1] ?? null,
   );
 
+  /** On a conversation (or the list of them): the sidebar shows the conversations. */
+  readonly inDms = computed(() => /^\/app\/dm(?:[/?#]|$)/.test(this.url()));
+
+  private readonly channelId = computed(() => new RegExp(`^/app/c/(${UUID})`, 'i').exec(this.url())?.[1] ?? null);
+
   /** The team (and projects) the current view sits in, if any. */
   readonly place = computed<Place | null>(() => {
     const { teamId, projectId } = this.route();
@@ -49,6 +54,8 @@ export class NavContext {
         team: this.teams.teamById().get(teamId) ?? null,
         projects: projectId ? this.teams.chainOf(projectId) : [],
       };
+    const channelId = this.channelId();
+    if (channelId) return this.teams.placeOfSpace(this.teams.channelSpaceId(channelId));
     const pageId = this.pageId();
     return pageId ? this.teams.placeOfSpace(this.tree.pageById().get(pageId)?.spaceId) : null;
   });

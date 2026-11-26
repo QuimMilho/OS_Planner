@@ -1,8 +1,10 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TranslocoPipe } from '@jsverse/transloco';
+import { Permission } from '@os-planner/shared/lite';
 import { Language } from '../../core/i18n';
+import { AccessStore } from '../../data/access-store';
 import { TreeStore, type TrashItem } from '../../data/tree-store';
 
 @Component({
@@ -13,10 +15,10 @@ import { TreeStore, type TrashItem } from '../../data/tree-store';
       <h1>{{ 'trash.title' | transloco }}</h1>
       <p class="muted">{{ 'trash.info' | transloco }}</p>
       <ul>
-        @for (t of store.trash(); track t.item.id) {
-          <li>
+        @for (t of items(); track t.item.id) {
+          <li [attr.data-trash]="name(t)">
             <mat-icon>{{ icon(t) }}</mat-icon>
-            <span class="name">{{ name(t) }}</span>
+            <span class="name">{{ name(t) }}@if (where(t); as w) { <small class="muted"> · {{ w }}</small> }</span>
             <span class="muted when">{{ 'trash.kind.' + t.kind | transloco }} · {{ lang.date(t.item.deletedAt!) }}</span>
             <button mat-stroked-button type="button" (click)="restore(t)"><mat-icon>restore</mat-icon>{{ 'common.restore' | transloco }}</button>
           </li>
@@ -35,6 +37,19 @@ import { TreeStore, type TrashItem } from '../../data/tree-store';
 export class TrashPage {
   readonly store = inject(TreeStore);
   readonly lang = inject(Language);
+  private readonly access = inject(AccessStore);
+
+  /** What the person may bring back: in their own notebooks everything, elsewhere what their rights there allow. */
+  readonly items = computed(() =>
+    this.store.trash().filter((t) => this.access.can(t.kind === 'notebook' ? t.item.id : t.item.notebookId, t.kind === 'notebook' ? Permission.MANAGE_NOTEBOOKS : Permission.DELETE_PAGES)),
+  );
+
+  /** For something in somebody else's notebook (or a team's): which notebook. */
+  where(t: TrashItem): string | null {
+    if (t.kind === 'notebook') return null;
+    const nb = this.store.notebookById().get(t.item.notebookId);
+    return nb && !this.access.isOwn(nb) ? nb.name : null;
+  }
 
   icon(t: TrashItem): string {
     return t.kind === 'notebook' ? 'book' : t.kind === 'category' ? 'folder' : 'description';

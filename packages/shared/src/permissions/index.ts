@@ -33,3 +33,4 @@ export {
   type RoleDenial,
   type RoleTarget,
 } from './hierarchy';
+export { SHARE_EDIT_PERMISSIONS, SHARE_READ_PERMISSIONS, permissionsForShare } from './share';

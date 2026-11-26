@@ -7,6 +7,7 @@ import { ACCESS_TTL_SECONDS, MEDIA_TTL_SECONDS } from './auth.constants.js';
 const ISSUER = 'os_planner';
 const AUD_API = 'os_planner-api';
 const AUD_MEDIA = 'os_planner-media';
+const AUD_LINK = 'os_planner-link';
 
 /** Signs and verifies the short-lived access token and the media token (HS256). */
 @Injectable()
@@ -19,14 +20,14 @@ export class TokenService {
     this.mediaKey = new TextEncoder().encode(env.JWT_MEDIA_SECRET);
   }
 
-  signAccess(userId: string, sessionId: string): Promise<string> {
+  signAccess(userId: string, sessionId: string, ttlSeconds = ACCESS_TTL_SECONDS): Promise<string> {
     return new SignJWT({ sid: sessionId })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(userId)
       .setIssuer(ISSUER)
       .setAudience(AUD_API)
       .setIssuedAt()
-      .setExpirationTime(`${ACCESS_TTL_SECONDS}s`)
+      .setExpirationTime(`${ttlSeconds}s`)
       .sign(this.accessKey);
   }
 
@@ -38,7 +39,7 @@ export class TokenService {
         algorithms: ['HS256'],
       });
       if (!payload.sub || typeof payload['sid'] !== 'string') return null;
-      return { id: payload.sub, sessionId: payload['sid'] };
+      return { id: payload.sub, sessionId: payload['sid'], ...(typeof payload.exp === 'number' ? { expiresAt: payload.exp } : {}) };
     } catch {
       return null;
     }
@@ -54,6 +55,28 @@ export class TokenService {
       .setIssuedAt()
       .setExpirationTime(`${MEDIA_TTL_SECONDS}s`)
       .sign(this.mediaKey);
+  }
+
+  /** Proof that a visitor passed a share link's checks (its password). Bound to that one link; never carries a person. */
+  signLinkSession(linkId: string, ttlSeconds = 2 * 60 * 60): Promise<string> {
+    return new SignJWT({})
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(linkId)
+      .setIssuer(ISSUER)
+      .setAudience(AUD_LINK)
+      .setIssuedAt()
+      .setExpirationTime(`${ttlSeconds}s`)
+      .sign(this.mediaKey);
+  }
+
+  /** The link id the session was issued for, or null if invalid/expired. */
+  async verifyLinkSession(token: string): Promise<string | null> {
+    try {
+      const { payload } = await jwtVerify(token, this.mediaKey, { issuer: ISSUER, audience: AUD_LINK, algorithms: ['HS256'] });
+      return payload.sub ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Returns the user id the media token was issued to, or null if invalid/expired. */

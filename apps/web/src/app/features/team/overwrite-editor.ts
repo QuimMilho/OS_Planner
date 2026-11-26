@@ -214,7 +214,11 @@ const bitCount = (n: bigint): number => n.toString(2).replaceAll('0', '').length
   `,
 })
 export class OverwriteEditor {
+  /** What the overwrites are set on: a project (the default), a channel or a notebook; `projectId` is that target's id. */
+  readonly kind = input<'project' | 'channel' | 'notebook'>('project');
   readonly projectId = input.required<string>();
+  /** For a channel: what the person holds in it (decimal string); you can only allow or deny what you hold. */
+  readonly held = input<string | null>(null);
   readonly teamId = input.required<string>();
   /** The roles that can be the subject here: team roles, @everyone and the roles of this project and above. */
   readonly roles = input.required<readonly RoleDto[]>();
@@ -279,7 +283,7 @@ export class OverwriteEditor {
   });
   /** You can only allow or deny what you hold yourself in this project. */
   protected readonly editable = computed(() => {
-    const raw = this.teams.permissionsOf(this.teamId(), this.projectId());
+    const raw = this.kind() !== 'project' ? this.held() : this.teams.permissionsOf(this.teamId(), this.projectId());
     return raw === null ? 0n : (permissionsFromString(raw) ?? ALL_PERMISSIONS);
   });
   protected readonly dirty = computed(() => {
@@ -318,7 +322,7 @@ export class OverwriteEditor {
 
   private async load(projectId: string): Promise<void> {
     try {
-      this.rows.set(await this.store.overwrites(projectId));
+      this.rows.set(await this.store.overwrites(projectId, this.kind()));
     } catch (e) {
       this.notify.error(roleErrorKey(e as ApiProblem));
     }
@@ -355,7 +359,7 @@ export class OverwriteEditor {
   private async write(s: Subject, allow: string, deny: string): Promise<void> {
     this.saving.set(true);
     try {
-      await this.store.setOverwrite(this.projectId(), s.kind, s.id, allow, deny);
+      await this.store.setOverwrite(this.projectId(), s.kind, s.id, allow, deny, this.kind());
       await this.load(this.projectId());
       this.notify.info('overwrite.saved');
     } catch (e) {

@@ -5,6 +5,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslocoPipe } from '@jsverse/transloco';
 import type { TeamDto } from '@os-planner/shared';
 import { NavContext } from '../../core/nav-context';
+import { DmStore } from '../../data/dm-store';
+import { NotificationStore } from '../../data/notification-store';
 import { TeamStore } from '../../data/team-store';
 
 /** The narrow strip on the left, like Discord's: your own notes, then one button per team. */
@@ -24,6 +26,20 @@ import { TeamStore } from '../../data/team-store';
       >
         <mat-icon>home</mat-icon>
       </a>
+      <a
+        class="item dms"
+        routerLink="/app/dm"
+        [class.on]="nav.inDms()"
+        data-rail="dms"
+        [matTooltip]="'rail.dms' | transloco"
+        matTooltipPosition="right"
+        [attr.aria-label]="'rail.dms' | transloco"
+      >
+        <mat-icon>chat</mat-icon>
+        @if (dms.unreadTotal() > 0) {
+          <span class="badge" data-rail-badge="dms">{{ dms.unreadTotal() > 99 ? '99+' : dms.unreadTotal() }}</span>
+        }
+      </a>
       @if ((teams.teams() ?? []).length) {
         <span class="sep" aria-hidden="true"></span>
       }
@@ -41,6 +57,9 @@ import { TeamStore } from '../../data/team-store';
           {{ initial(t) }}
           @if (teams.pendingRequests(t.id) > 0) {
             <span class="badge" [attr.data-rail-badge]="t.name">{{ teams.pendingRequests(t.id) }}</span>
+          }
+          @if ((notifications.count().byTeam[t.id] ?? 0) > 0) {
+            <span class="badge mentions" [attr.data-rail-mentions]="t.name">{{ notifications.count().byTeam[t.id]! > 99 ? '99+' : notifications.count().byTeam[t.id] }}</span>
           }
         </a>
       }
@@ -126,6 +145,11 @@ import { TeamStore } from '../../data/team-store';
     mat-icon {
       color: inherit;
     }
+    .badge.mentions {
+      right: -4px;
+      top: -4px;
+      bottom: auto;
+    }
     .badge {
       position: absolute;
       right: -4px;
@@ -144,6 +168,8 @@ import { TeamStore } from '../../data/team-store';
 export class Rail {
   readonly teams = inject(TeamStore);
   readonly nav = inject(NavContext);
+  protected readonly dms = inject(DmStore);
+  protected readonly notifications = inject(NotificationStore);
 
   /** The first letter of the team name, for teams that have no icon of their own. */
   initial(t: TeamDto): string {

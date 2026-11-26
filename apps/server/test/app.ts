@@ -5,10 +5,13 @@ import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
 import { parseEnv } from '../src/config/env.js';
 import { MailService } from '../src/mail/mail.service.js';
+import type { DigestMail } from '../src/mail/templates.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 
 export interface SentMail {
-  kind: 'verify' | 'reset' | 'invite' | 'decision' | 'ownership';
+  kind: 'verify' | 'reset' | 'invite' | 'decision' | 'ownership' | 'digest' | 'share';
+  /** A notification mail: what it says and where its links go. */
+  digest?: DigestMail;
   to: string;
   name: string | null;
   locale: string;
@@ -17,6 +20,8 @@ export interface SentMail {
   team?: string;
   approved?: boolean;
   ownership?: 'offered' | 'assigned';
+  /** A share mail: what was shared, with which access, and whether the address has an account. */
+  share?: { sharer: string; notebook: string; access: string; hasAccount: boolean };
 }
 
 /** Captures outgoing mail so tests can follow verification and reset links. */
@@ -40,6 +45,14 @@ export class FakeMail {
   }
   async sendOwnership(to: string, name: string | null, locale: string, team: string, ownership: 'offered' | 'assigned') {
     this.sent.push({ kind: 'ownership', to, name, locale, token: '', team, ownership });
+    return true;
+  }
+  async sendShare(to: string, locale: string, sharer: string, notebook: string, access: string, hasAccount: boolean) {
+    this.sent.push({ kind: 'share', to, name: sharer, locale, token: '', share: { sharer, notebook, access, hasAccount } });
+    return true;
+  }
+  async sendNotificationDigest(to: string, name: string, locale: string, digest: DigestMail) {
+    this.sent.push({ kind: 'digest', to, name, locale, token: '', digest });
     return true;
   }
   last(kind: SentMail['kind'], to: string): SentMail | undefined {

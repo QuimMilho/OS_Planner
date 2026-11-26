@@ -3,6 +3,7 @@ import argon2 from 'argon2';
 import type { SessionDto, UpdateMeInput, UserDto } from '@os-planner/shared';
 import { isCommonPassword } from '../auth/common-passwords.js';
 import { ENV, type Env } from '../config/env.js';
+import { EventBus } from '../events/event-bus.js';
 import { QuotaService } from '../quota/quota.service.js';
 import { SpacesService } from '../spaces/spaces.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -14,6 +15,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly quota: QuotaService,
     private readonly spaces: SpacesService,
+    private readonly bus: EventBus,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -24,7 +26,9 @@ export class UsersService {
   }
 
   async update(userId: string, input: UpdateMeInput): Promise<UserDto> {
+    const before = input.presenceMode ? await this.prisma.user.findUnique({ where: { id: userId }, select: { presenceMode: true } }) : null;
     const user = await this.prisma.user.update({ where: { id: userId }, data: input });
+    if (input.presenceMode && before?.presenceMode !== input.presenceMode) await this.bus.publish('presence.mode', { userId });
     return toUserDto(user, this.env, await this.quota.userQuota(userId), await this.spaces.personalSpaceId(userId));
   }
 
@@ -44,6 +48,7 @@ export class UsersService {
         data: { revokedAt: new Date() },
       }),
     ]);
+    await this.bus.publish('session.revoked', { userId, exceptSessionId: currentSessionId, reason: 'password_changed' });
   }
 
   /** One entry per login (token family), described by its most recent token. */
@@ -71,5 +76,6 @@ export class UsersService {
       where: { userId, familyId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    await this.bus.publish('session.revoked', { userId, sessionId: familyId, reason: 'revoked' });
   }
 }

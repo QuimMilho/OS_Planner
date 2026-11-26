@@ -7,12 +7,19 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { filter, map, startWith } from 'rxjs';
-import type { ExportScope } from '@os-planner/shared';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { Permission, type ExportScope } from '@os-planner/shared';
 import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';
+import { AccessStore } from '../../data/access-store';
+import { Sync } from '../../data/sync';
 import { byPosition, TreeStore, type CategoryNode, type NotebookNode } from '../../data/tree-store';
 import { ExportDialog } from '../export/export-dialog';
+import { NotebookAccessDialog } from '../share/notebook-access-dialog';
+import { ShareDialog } from '../share/share-dialog';
 import { MoveDialog } from './move-dialog';
+import { NotebookMoveDialog } from './notebook-move-dialog';
 
 type Kind = 'notebook' | 'category' | 'page';
 const COLLAPSED_KEY = 'os_planner.collapsed';
@@ -25,6 +32,15 @@ export class TreeUi {
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(Notify);
   private readonly lang = inject(Language);
+  private readonly http = inject(HttpClient);
+  private readonly sync = inject(Sync);
+  readonly access = inject(AccessStore);
+  readonly P = Permission;
+
+  /** Whether the person may do something in a notebook (the server decides again). */
+  can(notebookId: string, permission: bigint): boolean {
+    return this.access.can(notebookId, permission);
+  }
 
   readonly renaming = signal<string | null>(null);
   readonly collapsed = signal<Set<string>>(this.loadCollapsed());
@@ -61,9 +77,29 @@ export class TreeUi {
   }
 
   // ---- creating
-  async newNotebook(): Promise<void> {
-    const nb = await this.store.createNotebook(this.lang.t('tree.newNotebook'));
+  async newNotebook(spaceId?: string): Promise<void> {
+    const nb = await this.store.createNotebook(this.lang.t('tree.newNotebook'), spaceId);
     this.renaming.set(nb.id);
+  }
+
+  // ---- sharing, moving between spaces, who may see it
+  share(notebookId: string, name: string): void {
+    this.dialog.open(ShareDialog, { data: { notebookId, name }, width: '560px', maxWidth: '96vw' });
+  }
+  async moveNotebook(notebookId: string): Promise<void> {
+    const ref = this.dialog.open(NotebookMoveDialog, { data: { notebookId }, width: '460px', maxWidth: '96vw' });
+    const moved = await new Promise<boolean>((res) => ref.afterClosed().subscribe((v) => res(!!v)));
+    if (moved) await this.sync.run();
+  }
+  notebookAccess(notebookId: string, name: string): void {
+    this.dialog.open(NotebookAccessDialog, { data: { notebookId, name }, width: '920px', maxWidth: '96vw' });
+  }
+  /** The person stops having a notebook somebody shared with them. */
+  async leave(notebookId: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/shared-with-me/${notebookId}`));
+    await this.sync.run();
+    const open = this.selectedPage();
+    if (open && !this.store.pageById().get(open)) await this.router.navigate(['/app']);
   }
   async newCategory(notebookId: string, parentId: string | null): Promise<void> {
     const c = await this.store.createCategory(notebookId, parentId, this.lang.t('tree.newCategory'));
@@ -172,19 +208,25 @@ export class InlineName {
       <mat-icon class="ic">{{ ui.isOpen(c.id) ? 'folder_open' : 'folder' }}</mat-icon>
       <app-inline-name kind="category" [id]="c.id" [value]="c.name" />
       <span class="actions">
-        <button type="button" (click)="ui.newPage(c.id)" [attr.aria-label]="'tree.newPage' | transloco"><mat-icon>add</mat-icon></button>
+        @if (ui.can(c.notebookId, ui.P.EDIT_PAGES)) {
+          <button type="button" (click)="ui.newPage(c.id)" [attr.aria-label]="'tree.newPage' | transloco"><mat-icon>add</mat-icon></button>
+        }
         <button type="button" #trigger="matMenuTrigger" [matMenuTriggerFor]="menu" [attr.aria-label]="'common.more' | transloco"><mat-icon>more_horiz</mat-icon></button>
       </span>
     </div>
     <mat-menu #menu="matMenu">
-      <button mat-menu-item type="button" (click)="ui.newPage(c.id)"><mat-icon>note_add</mat-icon>{{ 'tree.newPage' | transloco }}</button>
-      <button mat-menu-item type="button" (click)="ui.newCategory(c.notebookId, c.id)"><mat-icon>create_new_folder</mat-icon>{{ 'tree.newSubcategory' | transloco }}</button>
-      <button mat-menu-item type="button" (click)="ui.renaming.set(c.id)"><mat-icon>edit</mat-icon>{{ 'common.rename' | transloco }}</button>
-      <button mat-menu-item type="button" (click)="ui.moveTo('category', c.id)"><mat-icon>drive_file_move</mat-icon>{{ 'tree.moveTo' | transloco }}</button>
-      <button mat-menu-item type="button" (click)="ui.move('category', c, siblings(), -1)"><mat-icon>arrow_upward</mat-icon>{{ 'tree.moveUp' | transloco }}</button>
-      <button mat-menu-item type="button" (click)="ui.move('category', c, siblings(), 1)"><mat-icon>arrow_downward</mat-icon>{{ 'tree.moveDown' | transloco }}</button>
+      @if (ui.can(c.notebookId, ui.P.EDIT_PAGES)) {
+        <button mat-menu-item type="button" (click)="ui.newPage(c.id)"><mat-icon>note_add</mat-icon>{{ 'tree.newPage' | transloco }}</button>
+        <button mat-menu-item type="button" (click)="ui.newCategory(c.notebookId, c.id)"><mat-icon>create_new_folder</mat-icon>{{ 'tree.newSubcategory' | transloco }}</button>
+        <button mat-menu-item type="button" (click)="ui.renaming.set(c.id)"><mat-icon>edit</mat-icon>{{ 'common.rename' | transloco }}</button>
+        <button mat-menu-item type="button" (click)="ui.moveTo('category', c.id)"><mat-icon>drive_file_move</mat-icon>{{ 'tree.moveTo' | transloco }}</button>
+        <button mat-menu-item type="button" (click)="ui.move('category', c, siblings(), -1)"><mat-icon>arrow_upward</mat-icon>{{ 'tree.moveUp' | transloco }}</button>
+        <button mat-menu-item type="button" (click)="ui.move('category', c, siblings(), 1)"><mat-icon>arrow_downward</mat-icon>{{ 'tree.moveDown' | transloco }}</button>
+      }
       <button mat-menu-item type="button" (click)="ui.export('category', c.id, c.name)"><mat-icon>download</mat-icon>{{ 'export.title' | transloco }}</button>
-      <button mat-menu-item type="button" (click)="ui.remove('category', c.id, c.name)"><mat-icon>delete</mat-icon>{{ 'common.delete' | transloco }}</button>
+      @if (ui.can(c.notebookId, ui.P.DELETE_PAGES)) {
+        <button mat-menu-item type="button" (click)="ui.remove('category', c.id, c.name)"><mat-icon>delete</mat-icon>{{ 'common.delete' | transloco }}</button>
+      }
     </mat-menu>
 
     @if (ui.isOpen(c.id)) {
@@ -199,12 +241,16 @@ export class InlineName {
           </span>
         </div>
         <mat-menu #pmenu="matMenu">
-          <button mat-menu-item type="button" (click)="ui.renaming.set(p.id)"><mat-icon>edit</mat-icon>{{ 'common.rename' | transloco }}</button>
-          <button mat-menu-item type="button" (click)="ui.moveTo('page', p.id)"><mat-icon>drive_file_move</mat-icon>{{ 'tree.moveTo' | transloco }}</button>
-          <button mat-menu-item type="button" (click)="ui.move('page', p, node().pages, -1)"><mat-icon>arrow_upward</mat-icon>{{ 'tree.moveUp' | transloco }}</button>
-          <button mat-menu-item type="button" (click)="ui.move('page', p, node().pages, 1)"><mat-icon>arrow_downward</mat-icon>{{ 'tree.moveDown' | transloco }}</button>
+          @if (ui.can(p.notebookId, ui.P.EDIT_PAGES)) {
+            <button mat-menu-item type="button" (click)="ui.renaming.set(p.id)"><mat-icon>edit</mat-icon>{{ 'common.rename' | transloco }}</button>
+            <button mat-menu-item type="button" (click)="ui.moveTo('page', p.id)"><mat-icon>drive_file_move</mat-icon>{{ 'tree.moveTo' | transloco }}</button>
+            <button mat-menu-item type="button" (click)="ui.move('page', p, node().pages, -1)"><mat-icon>arrow_upward</mat-icon>{{ 'tree.moveUp' | transloco }}</button>
+            <button mat-menu-item type="button" (click)="ui.move('page', p, node().pages, 1)"><mat-icon>arrow_downward</mat-icon>{{ 'tree.moveDown' | transloco }}</button>
+          }
           <button mat-menu-item type="button" (click)="ui.export('page', p.id, p.title)"><mat-icon>download</mat-icon>{{ 'export.title' | transloco }}</button>
-          <button mat-menu-item type="button" (click)="ui.remove('page', p.id, p.title)"><mat-icon>delete</mat-icon>{{ 'common.delete' | transloco }}</button>
+          @if (ui.can(p.notebookId, ui.P.DELETE_PAGES)) {
+            <button mat-menu-item type="button" (click)="ui.remove('page', p.id, p.title)"><mat-icon>delete</mat-icon>{{ 'common.delete' | transloco }}</button>
+          }
         </mat-menu>
       }
       @for (child of node().children; track child.category.id) {
@@ -232,31 +278,61 @@ export class TreeCategory {
   selector: 'app-tree',
   imports: [MatIconModule, MatButtonModule, MatMenuModule, TranslocoPipe, InlineName, TreeCategory],
   template: `
-    <div class="head">
-      <span class="title">{{ 'tree.notebooks' | transloco }}</span>
-      <button mat-icon-button type="button" (click)="ui.newNotebook()" [attr.aria-label]="'tree.newNotebook' | transloco"><mat-icon>add</mat-icon></button>
-    </div>
-    @for (nb of ui.store.tree(); track nb.notebook.id) {
+    @if (!spaceId()) {
+      <div class="head" [attr.data-section]="shared() ? 'shared' : 'own'">
+        <span class="title">{{ (shared() ? 'sharedWithMe.title' : 'tree.notebooks') | transloco }}</span>
+        @if (!shared()) {
+          <button mat-icon-button type="button" (click)="ui.newNotebook()" [attr.aria-label]="'tree.newNotebook' | transloco"><mat-icon>add</mat-icon></button>
+        }
+      </div>
+    } @else if (canCreate()) {
+      <div class="head sub">
+        <button mat-button type="button" (click)="ui.newNotebook(spaceId()!)" data-action="new-notebook"><mat-icon>add</mat-icon>{{ 'tree.newNotebook' | transloco }}</button>
+      </div>
+    }
+    @for (nb of nodes(); track nb.notebook.id) {
       @let n = nb.notebook;
-      <div class="row nb" (contextmenu)="$event.preventDefault(); trigger.openMenu()">
+      <div class="row nb" [attr.data-notebook]="n.name" (contextmenu)="$event.preventDefault(); trigger.openMenu()">
         <button class="twisty" type="button" (click)="ui.toggle(n.id)" [attr.aria-label]="'tree.toggle' | transloco" [attr.aria-expanded]="ui.isOpen(n.id)">
           <mat-icon>{{ ui.isOpen(n.id) ? 'expand_more' : 'chevron_right' }}</mat-icon>
         </button>
         <mat-icon class="ic" [style.color]="n.color">{{ n.icon || 'book' }}</mat-icon>
         <app-inline-name kind="notebook" [id]="n.id" [value]="n.name" />
+        @if (shared() && accessOf(n.id); as a) {
+          <span class="badge" [attr.data-access]="a">{{ 'share.access.' + a | transloco }}</span>
+        }
         <span class="count">{{ nb.pageCount }}</span>
         <span class="actions">
-          <button type="button" (click)="ui.newCategory(n.id, null)" [attr.aria-label]="'tree.newCategory' | transloco"><mat-icon>create_new_folder</mat-icon></button>
-          <button type="button" #trigger="matMenuTrigger" [matMenuTriggerFor]="menu" [attr.aria-label]="'common.more' | transloco"><mat-icon>more_horiz</mat-icon></button>
+          @if (ui.can(n.id, ui.P.EDIT_PAGES)) {
+            <button type="button" (click)="ui.newCategory(n.id, null)" [attr.aria-label]="'tree.newCategory' | transloco"><mat-icon>create_new_folder</mat-icon></button>
+          }
+          <button type="button" #trigger="matMenuTrigger" [matMenuTriggerFor]="menu" [attr.aria-label]="'common.more' | transloco" data-notebook-menu><mat-icon>more_horiz</mat-icon></button>
         </span>
       </div>
       <mat-menu #menu="matMenu">
-        <button mat-menu-item type="button" (click)="ui.newCategory(n.id, null)"><mat-icon>create_new_folder</mat-icon>{{ 'tree.newCategory' | transloco }}</button>
-        <button mat-menu-item type="button" (click)="ui.renaming.set(n.id)"><mat-icon>edit</mat-icon>{{ 'common.rename' | transloco }}</button>
-        <button mat-menu-item type="button" (click)="ui.move('notebook', n, notebooks(), -1)"><mat-icon>arrow_upward</mat-icon>{{ 'tree.moveUp' | transloco }}</button>
-        <button mat-menu-item type="button" (click)="ui.move('notebook', n, notebooks(), 1)"><mat-icon>arrow_downward</mat-icon>{{ 'tree.moveDown' | transloco }}</button>
+        @if (ui.can(n.id, ui.P.EDIT_PAGES)) {
+          <button mat-menu-item type="button" (click)="ui.newCategory(n.id, null)"><mat-icon>create_new_folder</mat-icon>{{ 'tree.newCategory' | transloco }}</button>
+        }
+        @if (ui.can(n.id, ui.P.MANAGE_NOTEBOOKS)) {
+          <button mat-menu-item type="button" (click)="ui.renaming.set(n.id)"><mat-icon>edit</mat-icon>{{ 'common.rename' | transloco }}</button>
+          <button mat-menu-item type="button" (click)="ui.move('notebook', n, notebooks(), -1)"><mat-icon>arrow_upward</mat-icon>{{ 'tree.moveUp' | transloco }}</button>
+          <button mat-menu-item type="button" (click)="ui.move('notebook', n, notebooks(), 1)"><mat-icon>arrow_downward</mat-icon>{{ 'tree.moveDown' | transloco }}</button>
+          @if (!shared()) {
+            <button mat-menu-item type="button" (click)="ui.moveNotebook(n.id)" data-action="move-notebook"><mat-icon>drive_file_move</mat-icon>{{ 'notebook.move.action' | transloco }}</button>
+          }
+        }
+        @if (!shared() && ui.can(n.id, ui.P.SHARE_NOTEBOOKS)) {
+          <button mat-menu-item type="button" (click)="ui.share(n.id, n.name)" data-action="share"><mat-icon>share</mat-icon>{{ 'share.action' | transloco }}</button>
+        }
+        @if (spaceId() && ui.can(n.id, ui.P.MANAGE_NOTEBOOKS)) {
+          <button mat-menu-item type="button" (click)="ui.notebookAccess(n.id, n.name)" data-action="notebook-access"><mat-icon>lock_person</mat-icon>{{ 'notebook.access.action' | transloco }}</button>
+        }
         <button mat-menu-item type="button" (click)="ui.export('notebook', n.id, n.name)"><mat-icon>download</mat-icon>{{ 'export.title' | transloco }}</button>
-        <button mat-menu-item type="button" (click)="ui.remove('notebook', n.id, n.name)"><mat-icon>delete</mat-icon>{{ 'common.delete' | transloco }}</button>
+        @if (shared()) {
+          <button mat-menu-item type="button" (click)="ui.leave(n.id)" data-action="leave"><mat-icon>logout</mat-icon>{{ 'sharedWithMe.leave' | transloco }}</button>
+        } @else if (ui.can(n.id, ui.P.MANAGE_NOTEBOOKS)) {
+          <button mat-menu-item type="button" (click)="ui.remove('notebook', n.id, n.name)"><mat-icon>delete</mat-icon>{{ 'common.delete' | transloco }}</button>
+        }
       </mat-menu>
       @if (ui.isOpen(n.id)) {
         @for (c of nb.roots; track c.category.id) {
@@ -264,14 +340,31 @@ export class TreeCategory {
         }
       }
     } @empty {
-      <p class="empty muted">{{ 'tree.empty' | transloco }}</p>
+      @if (!spaceId() && !shared()) {
+        <p class="empty muted">{{ 'tree.empty' | transloco }}</p>
+      }
     }
   `,
   styleUrl: './tree.scss',
 })
 export class Tree {
   readonly ui = inject(TreeUi);
-  readonly notebooks = computed(() => this.ui.store.tree().map((n) => n.notebook));
+  /** Show the notebooks of this team or project space instead of the person's own. */
+  readonly spaceId = input<string | null>(null);
+  /** Show the notebooks other people shared with the person. */
+  readonly shared = input(false);
+  readonly nodes = computed(() => {
+    const space = this.spaceId();
+    return this.shared() ? this.ui.store.sharedTree() : space ? this.ui.store.treeOfSpace(space) : this.ui.store.tree();
+  });
+  readonly notebooks = computed(() => this.nodes().map((n) => n.notebook));
+  readonly canCreate = computed(() => {
+    const space = this.spaceId();
+    return !!space && this.ui.access.canCreateIn(space);
+  });
+  accessOf(notebookId: string): 'read' | 'edit' | null {
+    return this.ui.store.sharedRows().find((s) => s.notebookId === notebookId)?.access ?? null;
+  }
   siblingsOf(nb: NotebookNode) {
     return nb.roots.map((r) => r.category);
   }

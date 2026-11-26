@@ -29,9 +29,21 @@ export class SearchService {
     const query = parseSearchQuery(q);
     if (!query.boolean) return [];
 
-    // Everything the person can read: their own notes plus the notebooks of the teams and projects they belong to.
-    const spaceIds = [...(await this.perms.notebookSpaces(userId)).keys()];
-    if (!spaceIds.length) return [];
+    // Everything the person can read: their own notes, the notebooks of the teams and projects they belong to (except the
+    // ones an overwrite hides from them), and the notebooks shared with them.
+    const spaces = await this.perms.notebookSpaces(userId);
+    const spaceIds = [...spaces.keys()];
+    const hidden: string[] = [];
+    for (const [id, access] of spaces) if (access.space.kind !== 'personal') hidden.push(...(await this.perms.hiddenNotebooks(userId, id)));
+    const shared = (await this.perms.sharesOf(userId)).map((s) => s.notebookId);
+    if (!spaceIds.length && !shared.length) return [];
+    const where = Prisma.join(
+      [
+        spaceIds.length ? Prisma.sql`(p.spaceId IN (${Prisma.join(spaceIds)})${hidden.length ? Prisma.sql` AND p.notebookId NOT IN (${Prisma.join(hidden)})` : Prisma.empty})` : null,
+        shared.length ? Prisma.sql`p.notebookId IN (${Prisma.join(shared)})` : null,
+      ].filter((x): x is Prisma.Sql => x !== null),
+      ' OR ',
+    );
 
     // Over-fetch, then re-rank so pages whose *title* matches come first.
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
@@ -41,7 +53,7 @@ export class SearchService {
       FROM Page p
       JOIN Notebook n ON n.id = p.notebookId
       JOIN Category c ON c.id = p.categoryId
-      WHERE p.spaceId IN (${Prisma.join(spaceIds)})
+      WHERE (${where})
         AND p.deletedAt IS NULL AND n.deletedAt IS NULL AND c.deletedAt IS NULL
         AND MATCH(p.title, p.contentText) AGAINST (${query.boolean} IN BOOLEAN MODE)
         ${notebookId ? Prisma.sql`AND p.notebookId = ${notebookId}` : Prisma.empty}

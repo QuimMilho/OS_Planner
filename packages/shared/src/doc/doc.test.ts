@@ -6,6 +6,7 @@ import { extractText, countWords, collectMediaIds } from './text';
 import { validateDoc } from './validate';
 import { docToMarkdown, markdownToDoc } from './markdown';
 import { IMG_ID, richDoc } from './fixtures';
+import { HOSTILE_MARKDOWN, SAFE_HREFS, UNSAFE_HREFS } from './hostile';
 
 const para = (text: string, marks?: JSONContent['marks']): JSONContent => ({
   type: 'doc',
@@ -43,7 +44,7 @@ describe('validateDoc', () => {
     expect(validateDoc('x').ok).toBe(false);
   });
 
-  it.each(['javascript:alert(1)', 'data:text/html,<b>x</b>', 'vbscript:x', '//evil.example.com'])(
+  it.each(UNSAFE_HREFS)(
     'rejects unsafe link %s',
     (href) => {
       const res = validateDoc(para('x', [{ type: 'link', attrs: { href } }]));
@@ -51,7 +52,7 @@ describe('validateDoc', () => {
     },
   );
 
-  it.each(['https://a.example/x?y=1', 'mailto:a@b.co', 'tel:+351123456', '#section', '/app/p/123'])(
+  it.each(SAFE_HREFS.filter((h) => h !== 'http://a.example'))(
     'accepts safe link %s',
     (href) => {
       const res = validateDoc(para('x', [{ type: 'link', attrs: { href } }]));
@@ -231,8 +232,13 @@ describe('Markdown interop', () => {
   });
 
   it('never produces a document that fails validation, even for hostile input', () => {
-    const hostile = '<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n![a](javascript:alert(1))\n';
-    const res = markdownToDoc(hostile);
-    if (res.ok) expect(JSON.stringify(res.doc)).not.toContain('javascript:');
+    for (const hostile of [...HOSTILE_MARKDOWN, '<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n![a](javascript:alert(1))\n']) {
+      const res = markdownToDoc(hostile);
+      if (res.ok) {
+        expect(validateDoc(res.doc).ok, hostile).toBe(true);
+        // as text it may stay (it is only characters); as a link or an image address it must not
+        expect(JSON.stringify(res.doc).toLowerCase(), hostile).not.toMatch(/"(href|src)":"\s*(javascript|vbscript|data):/);
+      }
+    }
   });
 });

@@ -33,26 +33,31 @@ Tick a phase only when its **Definition of done** (see [overview.md](overview.md
   - [x] public directory, join policy, requests
   - [x] leave, kick, ban, ownership transfer
   - [x] tests: server +36 (incl. migration), web e2e +4
-- [ ] **Phase 6**: [Realtime infrastructure](phase-6.md)
-  - [ ] Socket.IO gateway with JWT auth and permission-checked rooms
-  - [ ] presence, event bus, Redis adapter
-  - [ ] client `RealtimeService`
-- [ ] **Phase 7**: [Chat channels](phase-7.md)
-  - [ ] channels in teams/projects
-  - [ ] messages, edit/delete, attachments
-  - [ ] reactions, replies, pins, threads
-  - [ ] history paging, offline read cache, send queue
-- [ ] **Phase 8**: [Direct messages](phase-8.md)
-  - [ ] 1:1 DMs between people sharing a team
-  - [ ] per-team DM privacy, block, close
-- [ ] **Phase 9**: [Mentions, notifications and mute](phase-9.md)
-  - [ ] `@member`, `@role`, `@everyone`, `@here`
-  - [ ] per-team/project/channel notification levels and mute durations
-  - [ ] inbox, badges, Web Push, per-chat email
-- [ ] **Phase 10**: [Shared notebooks and share links](phase-10.md)
-  - [ ] team/project notebooks
-  - [ ] direct shares (read/edit)
-  - [ ] share links (anonymous read, login to edit, expiry, password)
+- [x] **Phase 6**: [Realtime infrastructure](phase-6.md)
+  - [x] Socket.IO gateway with JWT auth and permission-checked rooms
+  - [x] presence, event bus, Redis adapter
+  - [x] client `RealtimeService`
+  - [x] tests: server +20 (incl. two instances on Redis), web e2e +3, desktop +1
+- [x] **Phase 7**: [Chat channels](phase-7.md)
+  - [x] channels in teams/projects (categories, overwrites per channel)
+  - [x] messages, edit/delete, attachments
+  - [x] reactions, replies, pins, threads
+  - [x] history paging, offline read cache, send queue
+  - [x] tests: shared +43, server +38, web e2e +4
+- [x] **Phase 8**: [Direct messages](phase-8.md)
+  - [x] 1:1 DMs between people sharing a team
+  - [x] per-team DM privacy, block, close
+  - [x] tests: server +18 (and the migration test), web e2e +3
+- [x] **Phase 9**: [Mentions, notifications and mute](phase-9.md)
+  - [x] `@member`, `@role`, `@everyone`, `@here`
+  - [x] per-team/project/channel notification levels and mute durations
+  - [x] inbox, badges, Web Push, per-chat email
+  - [x] tests: shared +31, server +29 (+2 for the migrations), web e2e +4
+- [x] **Phase 10**: [Shared notebooks and share links](phase-10.md)
+  - [x] team/project notebooks (per-notebook overwrites, move between spaces)
+  - [x] direct shares (read/edit), Shared with me, pending shares for new accounts
+  - [x] share links (anonymous read, login to edit, expiry, password, revoke)
+  - [x] tests: server +30 (and the migration test), web e2e +6
 - [ ] **Phase 11**: [Real-time co-editing](phase-11.md)
   - [ ] Yjs + Hocuspocus with permission-checked auth
   - [ ] JSON ↔ Y-doc migration, derived search text

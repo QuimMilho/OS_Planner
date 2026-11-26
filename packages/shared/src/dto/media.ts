@@ -11,6 +11,8 @@ export const mediaUploadFieldsSchema = z.object({
   id: idSchema,
   /** The space the file belongs to (the one of the page that uses it); the person own space when left out. */
   spaceId: idSchema.optional(),
+  /** The notebook the file is for. Needed to upload into a notebook shared with the person (it names the space). */
+  notebookId: idSchema.optional(),
   /** Client-measured hints for videos (the server cannot probe them). Images are measured server-side. */
   width: z.coerce.number().int().min(1).max(16384).optional(),
   height: z.coerce.number().int().min(1).max(16384).optional(),

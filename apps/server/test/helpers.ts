@@ -72,3 +72,19 @@ export const para = (text: string) => ({
   type: 'doc',
   content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
 });
+
+/** A UUIDv7 like the web app makes for messages: a millisecond timestamp first, so ids sort by time. Later calls always sort later. */
+let lastMs = 0;
+let sequence = 0;
+export function uuidv7(): string {
+  const now = Date.now();
+  if (now === lastMs) sequence++;
+  else (lastMs = now, (sequence = 0));
+  const ms = BigInt(now);
+  const hex = (n: bigint, len: number) => n.toString(16).padStart(len, '0');
+  const rand = hex(BigInt(Math.floor(Math.random() * 2 ** 48)), 12);
+  // 48 bits of time, version 7, then a counter that keeps ids made in the same millisecond in order, then random bits
+  const time = hex(ms, 12);
+  const counter = hex(BigInt(sequence & 0xfff), 3);
+  return `${time.slice(0, 8)}-${time.slice(8, 12)}-7${counter}-${(0x8 | (Math.floor(Math.random() * 4))).toString(16)}${rand.slice(0, 3)}-${rand.slice(3, 12)}${hex(BigInt(Math.floor(Math.random() * 2 ** 12)), 3)}`;
+}

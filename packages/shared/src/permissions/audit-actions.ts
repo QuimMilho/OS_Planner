@@ -29,5 +29,8 @@ export const AUDIT_ACTIONS = [
   'team.delete',
   'team.owner.transfer',
   'quota.override',
+  'notebook.link.create',
+  'notebook.link.revoke',
+  'notebook.move',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

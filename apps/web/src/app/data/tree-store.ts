@@ -1,6 +1,6 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { EMPTY_DOC, positionBetween } from '@os-planner/shared/lite';
-import type { CategoryDto, NotebookDto, PageMetaDto } from '@os-planner/shared';
+import type { CategoryDto, NotebookDto, PageMetaDto, SharedNotebookDto } from '@os-planner/shared';
 import { AuthStore } from '../core/auth-store';
 import { Language } from '../core/i18n';
 import { uuidv7 } from '../core/ids';
@@ -55,10 +55,28 @@ export class TreeStore {
   readonly categoryById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
   readonly notebookById = computed(() => new Map(this.notebooks().map((n) => [n.id, n])));
 
+  /** Notebooks other people shared with the person (the notebooks themselves are among `notebooks`). */
+  readonly sharedRows = liveSignal(this.dbs, (d) => d.shared.toArray(), [] as SharedNotebookDto[]);
+
   /** Live (not trashed) notebooks with their nested categories and pages, in position order. */
-  readonly tree = computed<NotebookNode[]>(() => {
-    const cats = this.categories().filter((c) => !c.deletedAt && this.isPersonal(c));
-    const pages = this.pages().filter((p) => !p.deletedAt && this.isPersonal(p));
+  readonly tree = computed<NotebookNode[]>(() => this.build((n) => this.isPersonal(n)));
+
+  /** The notebooks of one team or project space (call it inside a computed or a template: it reads signals). */
+  treeOfSpace(spaceId: string): NotebookNode[] {
+    return this.build((n) => n.spaceId === spaceId);
+  }
+
+  /** The notebooks shared with the person. */
+  readonly sharedTree = computed<NotebookNode[]>(() => {
+    const ids = new Set(this.sharedRows().map((s) => s.notebookId));
+    return this.build((n) => ids.has(n.id));
+  });
+
+  private build(pick: (notebook: NotebookDto) => boolean): NotebookNode[] {
+    const picked = this.notebooks().filter((n) => !n.deletedAt && pick(n));
+    const ids = new Set(picked.map((n) => n.id));
+    const cats = this.categories().filter((c) => !c.deletedAt && ids.has(c.notebookId));
+    const pages = this.pages().filter((p) => !p.deletedAt && ids.has(p.notebookId));
     const nodes = new Map<string, CategoryNode>(cats.map((c) => [c.id, { category: c, pages: [], children: [] }]));
     for (const p of [...pages].sort(byPosition)) nodes.get(p.categoryId)?.pages.push(p);
 
@@ -69,31 +87,33 @@ export class TreeStore {
       if (parent) parent.children.push(node);
       else (rootsByNotebook.get(c.notebookId) ?? rootsByNotebook.set(c.notebookId, []).get(c.notebookId)!).push(node);
     }
-    return this.notebooks()
-      .filter((n) => !n.deletedAt && this.isPersonal(n))
+    return picked
       .sort(byPosition)
       .map((n) => ({
         notebook: n,
         roots: rootsByNotebook.get(n.id) ?? [],
         pageCount: pages.filter((p) => p.notebookId === n.id).length,
       }));
-  });
+  }
 
-  /** Items in the trash that were deleted on their own (not merely as part of a trashed parent). */
+  /**
+   * Items in the trash that were deleted on their own (not merely as part of a trashed parent), of every notebook this device
+   * holds: the trash page shows the ones the person may restore.
+   */
   readonly trash = computed<TrashItem[]>(() => {
     const nbs = this.notebookById();
     const cats = this.categoryById();
     const out: TrashItem[] = [];
-    for (const n of this.notebooks()) if (n.deletedAt && this.isPersonal(n)) out.push({ kind: 'notebook', item: n });
+    for (const n of this.notebooks()) if (n.deletedAt) out.push({ kind: 'notebook', item: n });
     for (const c of this.categories()) {
-      if (!c.deletedAt || !this.isPersonal(c)) continue;
+      if (!c.deletedAt) continue;
       const parent = c.parentId ? cats.get(c.parentId) : undefined;
       const nb = nbs.get(c.notebookId);
       if (nb?.deletedAt === c.deletedAt || parent?.deletedAt === c.deletedAt) continue;
       out.push({ kind: 'category', item: c });
     }
     for (const p of this.pages()) {
-      if (!p.deletedAt || !this.isPersonal(p)) continue;
+      if (!p.deletedAt) continue;
       const cat = cats.get(p.categoryId);
       if (cat?.deletedAt === p.deletedAt || nbs.get(p.notebookId)?.deletedAt === p.deletedAt) continue;
       out.push({ kind: 'page', item: p });
@@ -119,13 +139,14 @@ export class TreeStore {
 
   // ------------------------------------------------------------------ notebooks
 
-  async createNotebook(name: string): Promise<NotebookDto> {
+  /** Creates a notebook (with its first category) in the person's own space, or in the team or project space `inSpace`. */
+  async createNotebook(name: string, inSpace?: string): Promise<NotebookDto> {
     const db = this.dbs.db;
     const id = uuidv7();
     const categoryId = uuidv7();
     const stamp = now();
-    const position = await this.lastPosition(await db.notebooks.filter((n) => !n.deletedAt).toArray());
-    const spaceId = this.personalSpaceId();
+    const spaceId = inSpace ?? this.personalSpaceId();
+    const position = await this.lastPosition(await db.notebooks.filter((n) => !n.deletedAt && (n.spaceId ?? this.personalSpaceId()) === spaceId).toArray());
     const notebook: NotebookDto = { id, spaceId, name, icon: null, color: null, position, seq: 0, deletedAt: null, createdAt: stamp, updatedAt: stamp };
     const category: CategoryDto = {
       id: categoryId,
@@ -143,7 +164,7 @@ export class TreeStore {
       await db.notebooks.add(notebook);
       await db.categories.add(category);
     });
-    await this.outbox.enqueue({ opId: uuidv7(), type: 'notebook.create', id, name, icon: null, color: null, position });
+    await this.outbox.enqueue({ opId: uuidv7(), type: 'notebook.create', id, name, icon: null, color: null, position, ...(inSpace ? { spaceId: inSpace } : {}) });
     await this.outbox.enqueue({ opId: uuidv7(), type: 'category.create', id: categoryId, notebookId: id, parentId: null, name: category.name, position: category.position });
     return notebook;
   }

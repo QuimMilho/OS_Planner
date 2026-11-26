@@ -17,7 +17,7 @@ import {
 import { newId } from '../common/crypto.js';
 import type { Overwrite } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { PermissionService, type ProjectAccess } from '../spaces/permission.service.js';
+import { PermissionService, type TeamAccess } from '../spaces/permission.service.js';
 import { AuditService } from './audit.service.js';
 
 /** Overwrites on one target: more than this is surely a mistake. */
@@ -33,13 +33,23 @@ const toDto = (o: Overwrite): OverwriteDto => ({
   deny: permissionsToString(o.deny),
 });
 
+/** What the rules below need to know about the thing an overwrite is set on. */
+interface Target {
+  team: TeamAccess;
+  /** What the person may do there (in the project, or in the channel). */
+  perms: bigint;
+  /** The permission that allows changing overwrites on this kind of target. */
+  manage: bigint;
+  /** The projects from the root down to (and including) this one, or to the one the channel is in. */
+  chain: string[];
+}
+
 /**
- * Allow/deny overwrites on a project, for a role or a member. Only projects exist as targets today; the channel,
- * notebook and board kinds are accepted by the schema so the data model does not change when those arrive, and are
- * refused here until then.
+ * Allow/deny overwrites on a project, a channel (or category) or a notebook, for a role or a member. The board kind is
+ * accepted by the schema so the data model does not change when boards arrive, and is refused here until then.
  *
- * Rules: seeing the project comes first (404); changing its overwrites needs MANAGE_PROJECTS there (403); and a
- * person can only allow or deny permissions they hold in that project themselves.
+ * Rules: seeing the target comes first (404); changing its overwrites needs MANAGE_PROJECTS in the project,
+ * MANAGE_CHANNELS in the channel or MANAGE_NOTEBOOKS in the notebook (403); and a person can only allow or deny permissions they hold there themselves.
  */
 @Injectable()
 export class OverwritesService {
@@ -49,23 +59,30 @@ export class OverwritesService {
     private readonly audit: AuditService,
   ) {}
 
-  private async projectTarget(
-    userId: string,
-    kind: OverwriteTarget,
-    id: string,
-  ): Promise<ProjectAccess> {
-    if (kind !== 'project') throw new UnprocessableEntityException('unsupported_target');
-    const access = await this.perms.projectAccess(userId, id);
-    if (!access) throw new NotFoundException();
-    return access;
+  private async target(userId: string, kind: OverwriteTarget, id: string): Promise<Target> {
+    if (kind === 'project') {
+      const access = await this.perms.projectAccess(userId, id);
+      if (!access) throw new NotFoundException();
+      return { team: access.team, perms: access.perms, manage: Permission.MANAGE_PROJECTS, chain: access.chain };
+    }
+    if (kind === 'channel') {
+      const access = await this.perms.channelAccess(userId, id);
+      if (!access) throw new NotFoundException();
+      return { team: access.chat.team, perms: access.perms, manage: Permission.MANAGE_CHANNELS, chain: access.chat.levels.map((l) => l.id) };
+    }
+    if (kind === 'notebook') {
+      // Only a notebook of a team or project has overwrites; a personal one is shared with people instead.
+      const access = await this.perms.notebookAccess(userId, id);
+      if (!access) throw new NotFoundException();
+      if (!access.chat) throw new UnprocessableEntityException('unsupported_target');
+      return { team: access.chat.team, perms: access.perms, manage: Permission.MANAGE_NOTEBOOKS, chain: access.chat.levels.map((l) => l.id) };
+    }
+    throw new UnprocessableEntityException('unsupported_target');
   }
 
   async list(userId: string, kind: OverwriteTarget, id: string): Promise<OverwriteDto[]> {
-    const access = await this.projectTarget(userId, kind, id);
-    if (
-      !hasPermission(access.perms, Permission.MANAGE_PROJECTS) &&
-      !hasPermission(access.perms, Permission.MANAGE_ROLES)
-    )
+    const target = await this.target(userId, kind, id);
+    if (!hasPermission(target.perms, target.manage) && !hasPermission(target.perms, Permission.MANAGE_ROLES))
       throw new ForbiddenException('forbidden');
     const rows = await this.prisma.overwrite.findMany({
       where: { targetKind: kind, targetId: id },
@@ -75,14 +92,12 @@ export class OverwritesService {
 
   /** Sets what a role or member is allowed and denied on the target. Allowing and denying nothing clears it. */
   async set(userId: string, input: SetOverwriteInput): Promise<OverwriteDto | null> {
-    const access = await this.projectTarget(userId, input.targetKind, input.targetId);
-    if (!hasPermission(access.perms, Permission.MANAGE_PROJECTS))
-      throw new ForbiddenException('forbidden');
+    const target = await this.target(userId, input.targetKind, input.targetId);
+    if (!hasPermission(target.perms, target.manage)) throw new ForbiddenException('forbidden');
     const allow = permissionsFromString(input.allow) ?? 0n;
     const deny = permissionsFromString(input.deny) ?? 0n;
-    if (((allow | deny) & ~access.perms) !== 0n)
-      throw new ForbiddenException('permission_not_held');
-    const subjectName = await this.requireSubject(access, input.subjectKind, input.subjectId);
+    if (((allow | deny) & ~target.perms) !== 0n) throw new ForbiddenException('permission_not_held');
+    const subjectName = await this.requireSubject(target, input.subjectKind, input.subjectId);
 
     const where = {
       targetKind_targetId_subjectKind_subjectId: {
@@ -94,7 +109,7 @@ export class OverwritesService {
     };
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.overwrite.findUnique({ where });
-      const teamId = access.team.team.id;
+      const teamId = target.team.team.id;
       const describe = (o: { allow: bigint; deny: bigint }) => ({
         subjectKind: input.subjectKind,
         subjectId: input.subjectId,
@@ -155,21 +170,15 @@ export class OverwritesService {
   async clear(userId: string, overwriteId: string): Promise<void> {
     const existing = await this.prisma.overwrite.findUnique({ where: { id: overwriteId } });
     if (!existing) throw new NotFoundException();
-    const access = await this.projectTarget(
-      userId,
-      existing.targetKind as OverwriteTarget,
-      existing.targetId,
-    );
-    if (!hasPermission(access.perms, Permission.MANAGE_PROJECTS))
-      throw new ForbiddenException('forbidden');
-    if (((existing.allow | existing.deny) & ~access.perms) !== 0n)
-      throw new ForbiddenException('permission_not_held');
-    const subjectName = await this.subjectName(access, existing.subjectKind, existing.subjectId);
+    const target = await this.target(userId, existing.targetKind as OverwriteTarget, existing.targetId);
+    if (!hasPermission(target.perms, target.manage)) throw new ForbiddenException('forbidden');
+    if (((existing.allow | existing.deny) & ~target.perms) !== 0n) throw new ForbiddenException('permission_not_held');
+    const subjectName = await this.subjectName(target, existing.subjectKind, existing.subjectId);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.overwrite.delete({ where: { id: overwriteId } });
       await this.audit.record(tx, {
-        teamId: access.team.team.id,
+        teamId: target.team.team.id,
         actorId: userId,
         action: 'overwrite.clear',
         targetKind: existing.targetKind,
@@ -185,34 +194,25 @@ export class OverwritesService {
     });
   }
 
-  /** The subject must be something that can exist in the project: @everyone, a team role, a role of the project or above it, a team member. */
-  private async requireSubject(
-    access: ProjectAccess,
-    kind: 'role' | 'member',
-    id: string,
-  ): Promise<string> {
+  /** The subject must be something that can exist there: @everyone, a team role, a role of the project or above it, a team member. */
+  private async requireSubject(target: Target, kind: 'role' | 'member', id: string): Promise<string> {
     if (kind === 'role') {
-      const role = access.team.roles.find((r) => r.id === id);
-      if (!role || (role.projectId !== null && !access.chain.includes(role.projectId)))
-        throw new NotFoundException();
+      const role = target.team.roles.find((r) => r.id === id);
+      if (!role || (role.projectId !== null && !target.chain.includes(role.projectId))) throw new NotFoundException();
       return role.name;
     }
     const member = await this.prisma.teamMember.findUnique({
-      where: { teamId_userId: { teamId: access.team.team.id, userId: id } },
+      where: { teamId_userId: { teamId: target.team.team.id, userId: id } },
       include: { user: { select: { displayName: true } } },
     });
     if (!member) throw new UnprocessableEntityException('not_a_member');
     return member.nickname || member.user.displayName;
   }
 
-  private async subjectName(
-    access: ProjectAccess,
-    kind: string,
-    id: string,
-  ): Promise<string | null> {
-    if (kind === 'role') return access.team.roles.find((r) => r.id === id)?.name ?? null;
+  private async subjectName(target: Target, kind: string, id: string): Promise<string | null> {
+    if (kind === 'role') return target.team.roles.find((r) => r.id === id)?.name ?? null;
     const member = await this.prisma.teamMember.findUnique({
-      where: { teamId_userId: { teamId: access.team.team.id, userId: id } },
+      where: { teamId_userId: { teamId: target.team.team.id, userId: id } },
       include: { user: { select: { displayName: true } } },
     });
     return member ? member.nickname || member.user.displayName : null;

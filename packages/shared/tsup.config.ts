@@ -7,7 +7,7 @@ export default defineConfig([
     // `lite` is a second entry on purpose: the full package builds TipTap nodes and zod schemas at import
     // time, which a bundler cannot drop, so code on the first-load path imports `@os-planner/shared/lite`
     // (a handful of helpers) and the heavy libraries only load with the screens that need them.
-    entry: { index: 'src/index.ts', lite: 'src/lite.ts' },
+    entry: { index: 'src/index.ts', lite: 'src/lite.ts', chat: 'src/chat.ts' },
     format: ['esm', 'cjs'],
     dts: true,
     sourcemap: true,

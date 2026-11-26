@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { hasPermission, permissionsFromString } from '@os-planner/shared/lite';
 import type { ProjectDto, TeamDto, TeamMeDto, TeamMemberDto } from '@os-planner/shared';
 import { toProblem } from '../core/auth-store';
-import { Db, type MemberRow } from './db';
+import { Db, type ChannelRow, type MemberRow } from './db';
 import { liveSignal } from './live';
 import { byPosition } from './tree-store';
 
@@ -45,11 +45,23 @@ export class TeamStore {
     [] as TeamMeDto[],
   );
 
+  /** The channels cached on this device (the chat feature keeps them current): enough to say which space a channel is in. */
+  private readonly channelRows = liveSignal(this.dbs, (d) => d.channels.toArray(), [] as ChannelRow[]);
+
   readonly teamById = computed(() => new Map((this.teams() ?? []).map((t) => [t.id, t])));
   readonly projectById = computed(() => new Map(this.projects().map((p) => [p.id, p])));
   readonly teamBySpace = computed(() => new Map((this.teams() ?? []).map((t) => [t.spaceId, t])));
   readonly projectBySpace = computed(() => new Map(this.projects().map((p) => [p.spaceId, p])));
   private readonly meByTeam = computed(() => new Map(this.meRows().map((m) => [m.teamId, m])));
+
+  /** The space a (cached) channel belongs to, so a chat address can show where in the hierarchy it is. */
+  channelSpaceId(channelId: string): string | undefined {
+    const row = this.channelRows().find((c) => c.id === channelId);
+    // Remembered for the session: a channel that was hidden or deleted still tells which team's sidebar the page sits in.
+    if (row) this.channelSpaces.set(channelId, row.spaceId);
+    return row?.spaceId ?? this.channelSpaces.get(channelId);
+  }
+  private readonly channelSpaces = new Map<string, string>();
 
   /** The projects of a team as a tree in position order (archived ones included; the view decides how to show them). */
   treeOf(teamId: string): ProjectNode[] {

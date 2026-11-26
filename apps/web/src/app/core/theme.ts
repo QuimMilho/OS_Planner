@@ -146,10 +146,18 @@ export class ThemeService {
       } catch (e) {
         // Unreachable now: stays pending and is retried when the connection returns. Anything else is a refusal; retrying cannot help.
         if (!isUnreachable(e)) this.setPending(false);
+        else this.retryLater();
         return;
       }
       if (this.choice() === sent) this.setPending(false); // otherwise it changed while the request was in flight: send the new one
     }
+  }
+
+  /** The browser says it is online a moment before requests get through: try again shortly, until it is delivered. */
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private retryLater(): void {
+    clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => void this.flush(), 3000);
   }
 
   private apply(theme: Theme): void {

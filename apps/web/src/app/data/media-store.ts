@@ -35,7 +35,7 @@ export class MediaStore {
   private token: { value: string; expiresAt: number } | null = null;
 
   /** Detects the real type from the file, stores it locally, and (for videos) captures a poster frame. */
-  async add(file: File | Blob): Promise<AddedMedia> {
+  async add(file: File | Blob, notebookId?: string | null): Promise<AddedMedia> {
     const mime = file.type;
     const kind: MediaKind | null = (IMAGE_MIMES as readonly string[]).includes(mime)
       ? 'image'
@@ -55,17 +55,17 @@ export class MediaStore {
     } else {
       const probe = await probeVideo(file);
       ({ width, height, durationSec } = probe);
-      if (probe.poster) posterId = (await this.storePoster(probe.poster)).id;
+      if (probe.poster) posterId = (await this.storePoster(probe.poster, notebookId)).id;
     }
 
-    await this.dbs.db.media.add({ id, kind, mime, size: file.size, blob: file, uploaded: 0, width, height, durationSec });
+    await this.dbs.db.media.add({ id, kind, mime, size: file.size, blob: file, uploaded: 0, width, height, durationSec, notebookId: notebookId ?? null });
     this.outbox.changed.next(); // wakes Sync so the upload starts
     return { id, kind, width, height, posterId };
   }
 
-  private async storePoster(blob: Blob): Promise<{ id: string }> {
+  private async storePoster(blob: Blob, notebookId?: string | null): Promise<{ id: string }> {
     const id = uuidv7();
-    await this.dbs.db.media.add({ id, kind: 'image', mime: blob.type, size: blob.size, blob, uploaded: 0, width: null, height: null, durationSec: null });
+    await this.dbs.db.media.add({ id, kind: 'image', mime: blob.type, size: blob.size, blob, uploaded: 0, width: null, height: null, durationSec: null, notebookId: notebookId ?? null });
     return { id };
   }
 
