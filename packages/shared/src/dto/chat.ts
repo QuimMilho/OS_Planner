@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { MentionsDto } from '../chat/mentions';
 import { positionSchema } from './common';
+import { VOICE_LIMITS, VOICE_QUALITY, type VoiceQuality } from './voice-consts';
 
 // ---------------------------------------------------------------- limits
 
@@ -63,6 +64,10 @@ export interface ChannelDto {
   /** Push and email about this channel show a generic text instead of the message (also for age-restricted channels). */
   redactPreviews: boolean;
   slowmodeSeconds: number;
+  /** Voice channels: most people at once (null = the server's default). */
+  userLimit: number | null;
+  /** Voice channels: audio quality (null = normal). */
+  quality: VoiceQuality | null;
   archived: boolean;
   /** What the person may do in it (decimal string of the permission bit field). */
   permissions: string;
@@ -79,6 +84,8 @@ export const createChannelSchema = z.object({
   nsfw: z.boolean().optional(),
   redactPreviews: z.boolean().optional(),
   slowmodeSeconds: z.number().int().min(0).max(CHAT_LIMITS.slowmodeMax).optional(),
+  userLimit: z.number().int().min(1).max(VOICE_LIMITS.userLimitMax).nullable().optional(),
+  quality: z.enum(VOICE_QUALITY).nullable().optional(),
 });
 export type CreateChannelInput = z.infer<typeof createChannelSchema>;
 
@@ -89,6 +96,8 @@ export const updateChannelSchema = z
     nsfw: z.boolean(),
     redactPreviews: z.boolean(),
     slowmodeSeconds: z.number().int().min(0).max(CHAT_LIMITS.slowmodeMax),
+    userLimit: z.number().int().min(1).max(VOICE_LIMITS.userLimitMax).nullable(),
+    quality: z.enum(VOICE_QUALITY).nullable(),
     archived: z.boolean(),
     parentId: z.uuid().nullable(),
     position: positionSchema,

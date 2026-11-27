@@ -102,6 +102,7 @@ const NEAR_BOTTOM = 80;
       @case ('ready') {
         @if (channel(); as ch) {
           <div class="chat" data-channel-page [attr.data-channel]="ch.name">
+            <div class="sr-only" aria-live="polite" aria-atomic="true" data-live-messages>{{ announcement() }}</div>
             <section class="main">
               <header class="top">
                 @if (dm(); as d) {
@@ -582,6 +583,10 @@ export class ChannelPage {
   protected readonly newBelow = signal(0);
   protected readonly highlighted = signal<string | null>(null);
   protected readonly unreadFrom = signal<string | null>(null);
+  /** What a screen reader says when other people write here (phase 17). */
+  protected readonly announcement = signal('');
+  private heard: MessageDto[] = [];
+  private announceTimer: ReturnType<typeof setTimeout> | undefined;
   protected readonly unreadCount = signal(0);
   protected readonly pins = signal<MessageDto[]>([]);
   protected readonly results = signal<MessageDto[]>([]);
@@ -892,12 +897,29 @@ export class ChannelPage {
     this.change((l) => upsert(l, m), m.seq);
     this.remember([m]);
     if (created && !known) {
+      if (m.authorId !== this.auth.userId() && !m.deletedAt) this.announce(m);
       if (this.atBottom) {
         this.scrollToBottom(false);
         this.scheduleRead();
       } else if (m.authorId !== this.auth.userId()) this.newBelow.update((n) => n + 1);
       else this.scrollToBottom(true);
     }
+  }
+
+  /** Gathers what arrives for a few seconds, then says it once: one message with its author, several as how many. */
+  private announce(m: MessageDto): void {
+    this.heard.push(m);
+    if (this.announceTimer) return;
+    this.announceTimer = setTimeout(() => {
+      const heard = this.heard.splice(0);
+      this.announceTimer = undefined;
+      const one = heard.length === 1 ? heard[0]! : null;
+      this.announcement.set(
+        one
+          ? this.lang.t('chat.announceOne', { name: one.authorName ?? this.lang.t('chat.deletedUser'), text: one.content.replace(/[*_~`>#|[\]()]/g, '').slice(0, 140) })
+          : this.lang.t('chat.announceMany', { n: heard.length }),
+      );
+    }, 4000);
   }
 
   private change(fn: (list: MessageDto[]) => MessageDto[], seq?: string): void {

@@ -1,6 +1,6 @@
 {
   "name": "@os-planner/server",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "OS_Planner API: auth, notebooks/categories/pages, sync, media, search, export, downloads",
@@ -15,6 +15,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@hocuspocus/extension-redis": "^4.9.0",
+    "@hocuspocus/server": "^4.9.0",
     "@nestjs/common": "^12.6.2",
     "@nestjs/core": "^12.6.2",
     "@nestjs/platform-express": "^12.6.2",
@@ -24,6 +26,7 @@
     "@prisma/adapter-mariadb": "7.10.1",
     "@prisma/client": "7.10.1",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@tiptap/y-tiptap": "^3.3.1",
     "argon2": "^0.45.2",
     "cookie-parser": "^1.4.7",
     "fflate": "^0.8.2",
@@ -39,9 +42,13 @@
     "sharp": "^0.35.5",
     "socket.io": "^4.8.4",
     "web-push": "^3.6.7",
+    "ws": "^8.23.0",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@hocuspocus/provider": "^4.9.0",
     "@nestjs/cli": "^12.0.15",
     "@nestjs/schematics": "^12.0.16",
     "@nestjs/testing": "^12.6.2",
@@ -52,6 +59,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^7.2.1",
     "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.2",
     "pdfjs-dist": "^6.5.438",
     "socket.io-client": "^4.8.4",
     "supertest": "^7.3.2",

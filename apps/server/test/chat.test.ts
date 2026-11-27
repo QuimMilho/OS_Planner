@@ -243,7 +243,7 @@ describe('channels', () => {
           .set(owner.auth)
           .send({ name: 'v', kind: 'voice' })
       ).status,
-    ).toBe(422); // later phase
+    ).toBe(422); // voice is not configured in this test
 
     // Hiding the channel from a member leaves it out of their list.
     expect((await overwrite(owner, inside.id, member, 0n, P.VIEW_CHANNEL)).status).toBe(200);

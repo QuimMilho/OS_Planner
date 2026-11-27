@@ -44,7 +44,7 @@ async function pdfInfo(buffer: Buffer) {
 }
 
 const putContent = async (pageId: string, content: unknown, baseVersion = 0) => {
-  const res = await t.http.put(`/api/pages/${pageId}/content`).set(me.auth).send({ content, baseVersion });
+  const res = await t.http.post(`/api/pages/${pageId}/snapshots/replace`).set(me.auth).send({ content, baseVersion });
   expect(res.status, JSON.stringify(res.body)).toBe(200);
 };
 

@@ -116,12 +116,6 @@ type View = 'loading' | 'ready' | 'missing';
             </section>
           }
 
-          <section class="soon">
-            <h2>{{ 'team.boards' | transloco }}</h2>
-            <p class="muted">{{ 'team.comingSoon' | transloco }}</p>
-            <h2>{{ 'team.channels' | transloco }}</h2>
-            <p class="muted">{{ 'team.comingSoon' | transloco }}</p>
-          </section>
         </div>
       }
     }
@@ -236,12 +230,6 @@ type View = 'loading' | 'ready' | 'missing';
     }
     .count {
       font-weight: 400;
-    }
-    .soon {
-      opacity: 0.6;
-    }
-    .soon p {
-      margin: 0 0 16px;
     }
   `,
 })

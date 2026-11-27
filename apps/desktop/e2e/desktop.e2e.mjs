@@ -46,10 +46,88 @@ describe('desktop shell', () => {
         process: typeof window.process,
         fs: typeof window.fs,
       }));
-      assert.deepEqual(probe.bridge, { isDesktop: true, keys: ['isDesktop', 'onMenuCommand', 'platform', 'saveFile', 'version'] });
+      assert.deepEqual(probe.bridge, { isDesktop: true, keys: ['isDesktop', 'onMenuCommand', 'platform', 'saveFile', 'setBusy', 'updatedFrom', 'version'] });
       assert.equal(probe.config, 'undefined');
       assert.equal(probe.require, 'undefined');
       assert.equal(probe.process, 'undefined');
+      // the real version, not an empty npm variable; and no update happened on this first start
+      assert.equal(await page.evaluate(() => window.osPlannerDesktop.version), JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8')).version);
+      assert.equal(await page.evaluate(() => window.osPlannerDesktop.updatedFrom), null);
+    } finally {
+      await app.close();
+      rmSync(userData, { recursive: true, force: true });
+    }
+  });
+
+  test('after an update the page learns the old version once, says so, and does not repeat it on a reload', T, async () => {
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
+    mkdirSync(userData, { recursive: true });
+    writeFileSync(join(userData, 'config.json'), JSON.stringify({ serverUrl: base, lastVersion: '0.9.0' }));
+    const { app, page } = await launchApp(userData);
+    try {
+      await page.waitForSelector('h1');
+      assert.equal(await page.evaluate(() => window.osPlannerDesktop.updatedFrom), '0.9.0');
+      const version = await page.evaluate(() => window.osPlannerDesktop.version);
+      await page.waitForSelector(`text=OS_Planner desktop was updated to ${version}`);
+      assert.equal(JSON.parse(readFileSync(join(userData, 'config.json'), 'utf8')).lastVersion, version);
+
+      await page.reload();
+      await page.waitForSelector('h1');
+      assert.equal(await page.evaluate(() => window.osPlannerDesktop.updatedFrom), null);
+      await page.waitForTimeout(1500);
+      assert.equal(await page.locator('text=OS_Planner desktop was updated').count(), 0);
+    } finally {
+      await app.close();
+      rmSync(userData, { recursive: true, force: true });
+    }
+  });
+
+  test('after a silent update restart the window returns to the page it was on, and an address on another site is ignored', T, async () => {
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
+    mkdirSync(userData, { recursive: true });
+    writeFileSync(join(userData, 'config.json'), JSON.stringify({ serverUrl: base, resume: { url: `${base}/register`, minimized: false } }));
+    const first = await launchApp(userData);
+    try {
+      await first.page.waitForSelector('h1, form');
+      assert.equal(new URL(first.page.url()).pathname, '/register');
+      assert.equal(JSON.parse(readFileSync(join(userData, 'config.json'), 'utf8')).resume, undefined, 'the note is used up');
+    } finally {
+      await first.app.close();
+    }
+
+    writeFileSync(join(userData, 'config.json'), JSON.stringify({ serverUrl: base, resume: { url: 'https://example.invalid/steal', minimized: false } }));
+    const second = await launchApp(userData);
+    try {
+      await second.page.waitForSelector('h1');
+      assert.equal(new URL(second.page.url()).origin, new URL(base).origin);
+      assert.notEqual(new URL(second.page.url()).pathname, '/steal');
+    } finally {
+      await second.app.close();
+      rmSync(userData, { recursive: true, force: true });
+    }
+  });
+
+  test('the microphone and the screen are allowed for the OS_Planner site only: another origin asks and is refused', T, async () => {
+    const userData = mkdtempSync(join(tmpdir(), 'os-planner-desktop-'));
+    const { app, page } = await launchApp(userData, base);
+    try {
+      await page.waitForSelector('h1');
+      const state = (p) => p.evaluate(() => navigator.permissions.query({ name: 'microphone' }).then((s) => s.state));
+      assert.equal(await state(page), 'granted');
+      // the same server under another name is another origin
+      const other = base.replace('localhost', '127.0.0.1');
+      assert.notEqual(other, base);
+      const answer = await app.evaluate(async ({ BrowserWindow }, url) => {
+        const win = new BrowserWindow({ show: false, webPreferences: { partition: 'persist:os_planner', sandbox: true, contextIsolation: true } });
+        try {
+          await win.loadURL(url);
+          return await win.webContents.executeJavaScript("navigator.permissions.query({ name: 'microphone' }).then((s) => s.state)");
+        } finally {
+          win.destroy();
+        }
+      }, other);
+      assert.notEqual(answer, 'granted');
+      assert.equal(await page.evaluate(() => navigator.permissions.query({ name: 'geolocation' }).then((s) => s.state)), 'denied');
     } finally {
       await app.close();
       rmSync(userData, { recursive: true, force: true });

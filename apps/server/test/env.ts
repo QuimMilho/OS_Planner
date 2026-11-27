@@ -16,5 +16,6 @@ export function applyTestEnv(): void {
   process.env.DATABASE_URL = base.toString();
   process.env.NODE_ENV = 'test';
   process.env.THROTTLE_DISABLED = 'true';
+  process.env.COLLAB_MIGRATE_ON_START = 'false';
   process.env.DATA_DIR = resolve(import.meta.dirname, '../.test-data');
 }

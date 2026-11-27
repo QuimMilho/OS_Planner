@@ -58,31 +58,45 @@ Tick a phase only when its **Definition of done** (see [overview.md](overview.md
   - [x] direct shares (read/edit), Shared with me, pending shares for new accounts
   - [x] share links (anonymous read, login to edit, expiry, password, revoke)
   - [x] tests: server +30 (and the migration test), web e2e +6
-- [ ] **Phase 11**: [Real-time co-editing](phase-11.md)
-  - [ ] Yjs + Hocuspocus with permission-checked auth
-  - [ ] JSON ↔ Y-doc migration, derived search text
-  - [ ] offline merge, presence cursors
-- [ ] **Phase 12**: [Boards and tasks](phase-12.md)
-  - [ ] boards, columns, tasks, subtasks, checklists
-  - [ ] labels, assignees, dates, comments
-  - [ ] personal boards, "My tasks"
-- [ ] **Phase 13**: [Calendar and meetings](phase-13.md)
-  - [ ] month/week/day/agenda views
-  - [ ] meetings, recurrence, RSVP, time zones
-  - [ ] `ADD_TO_MEMBER_CALENDARS`, reminders
-- [ ] **Phase 14**: [ICS feeds and import](phase-14.md)
-  - [ ] private subscription feed
-  - [ ] external ICS subscriptions (SSRF-safe)
-  - [ ] `.ics` import
-- [ ] **Phase 15**: [Offline merge and local history](phase-15.md)
-  - [ ] per-field versions and server merge
-  - [ ] local history with Replace / Add as new
-  - [ ] boards, tasks, calendar and notebooks offline
-- [ ] **Phase 16**: [Voice and video channels](phase-16.md)
-  - [ ] optional LiveKit service
-  - [ ] voice channels, permissions, moderation
-  - [ ] Electron media permissions
-- [ ] **Phase 17**: [Hardening and release](phase-17.md)
-  - [ ] authorization fuzz, security review
-  - [ ] load and bundle budgets, accessibility
-  - [ ] self-hosting documentation
+- [x] **Phase 11**: [Real-time co-editing](phase-11.md)
+  - [x] Yjs + Hocuspocus with permission-checked auth
+  - [x] JSON ↔ Y-doc migration, derived search text
+  - [x] offline merge, presence cursors
+  - [x] tests: shared +9, server +25 (and the migration test), web e2e +3 (the old conflict-copy scenario was replaced by the offline merge)
+- [x] **Phase 12**: [Boards and tasks](phase-12.md)
+  - [x] boards, columns (WIP limits), tasks, subtasks, checklists
+  - [x] labels (inheritable), assignees, dates, comments with mentions, files, activity
+  - [x] personal boards, "My tasks", offline task changes
+  - [x] tests: shared +26, server +29 (and the migration test), web e2e +5
+- [x] **Phase 13**: [Calendar and meetings](phase-13.md)
+  - [x] month/week/day/agenda views
+  - [x] meetings, recurrence, RSVP, time zones
+  - [x] `ADD_TO_MEMBER_CALENDARS`, reminders
+  - [x] tests: shared +31, server +34 (incl. the migration), web e2e +4
+- [x] **Phase 14**: [ICS feeds and import](phase-14.md)
+  - [x] private subscription feed (secret address, `ETag`/304, permissions at fetch time)
+  - [x] external ICS subscriptions (SSRF-safe, scheduled refresh, backoff, auto-disable)
+  - [x] `.ics` import (preview, duplicates by UID) and export
+  - [x] tests: shared +23, server +96 (incl. the migration), web e2e +3
+  - [ ] manual: Google, Outlook and Apple clients following a real feed (acceptance 10)
+- [x] **Phase 15**: [Offline merge and local history](phase-15.md)
+  - [x] per-field versions (`fieldSeq`) and the server merge, decided inside the write transaction
+  - [x] local history with Replace / Add as new / Dismiss, retention and caps, Settings → Offline
+  - [x] boards, tasks, calendar and notebooks offline (events and tasks merged field by field)
+  - [x] tests: shared +22, server +22 (incl. the migration), web e2e +6 and one assertion in collab
+  - [x] the Portuguese texts became a lazy chunk (initial bundle 2.15 MB of 2.2 MB)
+- [ ] **Phase 16**: [Voice and video channels](phase-16.md) (open: only the manual checks of acceptance 10; the real-media browser tests ran and pass since phase 17)
+  - [x] optional LiveKit service (compose profile `voice`, `/api/features`, nginx host for signalling)
+  - [x] voice channels, permissions, moderation (server tested against a stand-in for LiveKit; web screens tested without media)
+  - [x] Electron media permissions
+  - [x] web e2e with a real media server (acceptance 5, 6, 7): run on 2026-11-27 with phase 17, 4 of 4 pass (a voice link opened before the device knew the channel's team showed a blank page: fixed)
+  - [ ] the manual checks (10): real headset and webcam, network change, NAT
+- [ ] **Phase 17**: [Hardening and release](phase-17.md) (open: the manual checks, see its Result section)
+  - [x] `@Authz` on every route; generated test: 252 routes × 10 people, hidden = missing, mass assignment, across teams, rooms, co-editing
+  - [x] shims removed (`User.changeSeq`, `?since=`, `PUT /pages/:id/content`), migrations rehearsed from the single-user release
+  - [x] load (every budget met) and a 10-minute soak (no leak); the 24-hour soak is for the operator (`npm run soak -- --minutes=1440`)
+  - [x] bundle budgets (initial 597 → 236 kB gzipped), EXPLAIN of the hot queries (+ inbox index)
+  - [x] accessibility: axe on the main screens, keyboard flows, live regions, reduced motion
+  - [x] operations: health per part, metrics, structured scrubbed logs, request ids, rate-limit factor, secret checks, backup/restore (rehearsed)
+  - [x] documentation (README, generated configuration reference, CHANGELOG, security review), demo seed, the full-journey e2e
+  - [ ] manual: pt-PT review by a native speaker, restore on a clean machine, a second person stands up two instances from the README, security sign-off (acceptance 9, 10), the release itself (publish desktop builds, tag)

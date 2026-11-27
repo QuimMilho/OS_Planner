@@ -13,9 +13,13 @@
     </div>
     <div class="side-scroll" (click)="onNavigate()">
       @if (nav.teamId()) { <app-team-sidebar /> } @else if (nav.inDms()) { <app-dm-sidebar /> } @else { <app-tree />
-        @if (treeStore.sharedRows().length) { <app-tree [shared]="true" /> } }
+        @if (treeStore.sharedRows().length) { <app-tree [shared]="true" /> }
+        <app-board-list /> }
     </div>
+    @if (features.voice()) { <app-voice-bar /> }
     <nav class="side-foot">
+      <a routerLink="/app/tasks" routerLinkActive="active" data-nav="my-tasks" (click)="onNavigate()"><mat-icon>task_alt</mat-icon>{{ 'nav.myTasks' | transloco }}</a>
+      <a routerLink="/app/calendar" routerLinkActive="active" data-nav="calendar" (click)="onNavigate()"><mat-icon>calendar_month</mat-icon>{{ 'nav.calendar' | transloco }}@if (calendar.pendingInvites() > 0) {<span class="nav-badge" data-calendar-badge>{{ calendar.pendingInvites() }}</span>}</a>
       <a routerLink="/app/trash" routerLinkActive="active" (click)="onNavigate()"><mat-icon>delete</mat-icon>{{ 'nav.trash' | transloco }}</a>
       <a routerLink="/app/settings" routerLinkActive="active" (click)="onNavigate()"><mat-icon>settings</mat-icon>{{ 'nav.settings' | transloco }}</a>
       @if (auth.user()?.isAdmin) {
@@ -28,6 +32,7 @@
   </mat-sidenav>
 
   <mat-sidenav-content class="main">
+    @if (features.voice() && (!sidenavOpen() || isMobile()) && !onVoicePage()) { <app-voice-bar [floating]="true" /> }
     <header class="top">
       @if (!sidenavOpen()) {
         <button mat-icon-button type="button" (click)="toggleSidenav()" [attr.aria-label]="'nav.showSidebar' | transloco"><mat-icon>menu</mat-icon></button>
@@ -45,7 +50,12 @@
         <span class="cdk-visually-hidden">{{ 'realtime.' + connection() | transloco }}</span>
       </span>
 
-      <button type="button" class="chip" [class]="'chip ' + status()" (click)="sync.run()" [matTooltip]="'sync.now' | transloco">
+      @if (history.count() > 0) {
+        <a mat-icon-button routerLink="/app/history" data-history-button [attr.aria-label]="'nav.history' | transloco" [matTooltip]="'nav.history' | transloco">
+          <mat-icon [matBadge]="history.count()" matBadgeSize="small" matBadgeColor="warn">history</mat-icon>
+        </a>
+      }
+      <button type="button" class="chip" [class]="'chip ' + status()" (click)="sync.run()" [matTooltip]="sync.pending() > 0 ? ('offline.pending' | transloco: { n: sync.pending() }) : ('sync.now' | transloco)">
         <mat-icon>{{ status() === 'offline' ? 'cloud_off' : status() === 'error' ? 'error' : status() === 'syncing' ? 'sync' : 'cloud_done' }}</mat-icon>
         <span class="chip-text">{{ 'sync.' + status() | transloco }}</span>
         @if (sync.pending() > 0) { <span class="badge">{{ sync.pending() }}</span> }
@@ -57,6 +67,7 @@
           <strong>{{ auth.user()?.displayName }}</strong>
           <span class="muted">{{ auth.user()?.email }}</span>
         </div>
+        <a mat-menu-item routerLink="/app/history"><mat-icon>history</mat-icon>{{ 'nav.history' | transloco }}</a>
         <a mat-menu-item routerLink="/app/settings"><mat-icon>settings</mat-icon>{{ 'nav.settings' | transloco }}</a>
         <a mat-menu-item routerLink="/download"><mat-icon>install_desktop</mat-icon>{{ 'nav.getApp' | transloco }}</a>
         <button mat-menu-item type="button" (click)="signOut()"><mat-icon>logout</mat-icon>{{ 'nav.signOut' | transloco }}</button>
@@ -85,6 +96,7 @@
         <mat-icon>info</mat-icon>
         <span>{{ issue.messageKey | transloco: issue.params }}</span>
         @if (issue.pageId) { <button mat-button type="button" (click)="openIssue()">{{ 'common.open' | transloco }}</button> }
+        @if (issue.link) { <a mat-button [routerLink]="issue.link" (click)="sync.dismissIssue(issue.id)">{{ 'history.openHistory' | transloco }}</a> }
         <button mat-icon-button type="button" (click)="sync.dismissIssue(issue.id)" [attr.aria-label]="'common.close' | transloco"><mat-icon>close</mat-icon></button>
       </div>
     }

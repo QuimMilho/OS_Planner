@@ -161,7 +161,7 @@ async function seed(page, name, pages, { spaceId, image } = {}) {
       };
     }
     assert.equal(
-      (await api(page, 'PUT', `/api/pages/${pid}/content`, { content, baseVersion: 0 })).status,
+      (await api(page, 'POST', `/api/pages/${pid}/snapshots/replace`, { content, baseVersion: 0 })).status,
       200,
     );
     out.push({ id: pid, title: p.title });
@@ -219,8 +219,8 @@ describe('notebooks shared with people', () => {
     // --- Bea finds it under "Shared with me" and edits it
     await bea.page.locator('[data-section="shared"]').waitFor({ timeout: 40_000 });
     await bea.page.locator('app-tree-category a.link', { hasText: 'First' }).click();
-    await bea.page.waitForSelector('.ProseMirror.doc');
-    assert.equal(await editable(bea.page), 'true');
+    // A page this device has never opened is shown from its saved copy (read-only) until the server's version arrives, then it is editable.
+    await bea.page.waitForSelector('.ProseMirror.doc[contenteditable="true"]');
     assert.match(await bea.page.locator('.ProseMirror').textContent(), /plan one/);
     await bea.page.locator('.ProseMirror').click();
     await bea.page.keyboard.press('Control+End');

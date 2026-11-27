@@ -43,6 +43,7 @@ import { StorageService } from '../media/storage.service.js';
 import { PermissionService } from '../spaces/permission.service.js';
 import { LinksService } from './links.service.js';
 import { SharesService } from './shares.service.js';
+import { Authz } from '../common/authz.js';
 
 const Id = (name = 'id') => Param(name, { schema: idSchema });
 const sessionQuery = z.object({ s: z.string().max(2000).optional() });
@@ -61,16 +62,19 @@ export class SharingController {
   ) {}
 
   /** What the person may do in each team, project and shared notebook (see PermissionService.notebookPermissions). */
+  @Authz({ scope: 'self' })
   @Get('notebook-permissions')
   notebookPermissions(@CurrentUser() u: AuthUser): Promise<Record<string, string>> {
     return this.perms.notebookPermissions(u.id);
   }
 
+  @Authz({ scope: 'own', note: 'direct shares are for notebooks of the person\'s own space' })
   @Get('notebooks/:id/shares')
   list(@CurrentUser() u: AuthUser, @Id() id: string): Promise<NotebookSharesDto> {
     return this.shares.list(u.id, id);
   }
 
+  @Authz({ scope: 'own', note: 'direct shares are for notebooks of the person\'s own space' })
   @Put('notebooks/:id/shares')
   put(
     @CurrentUser() u: AuthUser,
@@ -81,6 +85,7 @@ export class SharingController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'own', note: 'direct shares are for notebooks of the person\'s own space' })
   @Delete('notebooks/:id/shares/:shareId')
   remove(
     @CurrentUser() u: AuthUser,
@@ -91,6 +96,7 @@ export class SharingController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'own', note: 'direct shares are for notebooks of the person\'s own space' })
   @Delete('notebooks/:id/pending-shares/:pendingId')
   removePending(
     @CurrentUser() u: AuthUser,
@@ -100,12 +106,14 @@ export class SharingController {
     return this.shares.removePending(u.id, id, pendingId);
   }
 
+  @Authz({ scope: 'self' })
   @Get('shared-with-me')
   sharedWithMe(@CurrentUser() u: AuthUser): Promise<SharedNotebookDto[]> {
     return this.shares.sharedWithMe(u.id);
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'self', note: "the caller's own share" })
   @Delete('shared-with-me/:notebookId')
   leave(@CurrentUser() u: AuthUser, @Id('notebookId') notebookId: string): Promise<void> {
     return this.shares.leave(u.id, notebookId);
@@ -113,11 +121,13 @@ export class SharingController {
 
   // ---------------------------------------------------------------- links (owner side)
 
+  @Authz({ scope: 'notebook', needs: ['SHARE_NOTEBOOKS'] })
   @Get('notebooks/:id/links')
   listLinks(@CurrentUser() u: AuthUser, @Id() id: string): Promise<ShareLinkDto[]> {
     return this.links.list(u.id, id);
   }
 
+  @Authz({ scope: 'notebook', needs: ['SHARE_NOTEBOOKS'] })
   @Post('notebooks/:id/links')
   createLink(
     @CurrentUser() u: AuthUser,
@@ -127,6 +137,7 @@ export class SharingController {
     return this.links.create(u.id, id, body);
   }
 
+  @Authz({ scope: 'notebook', needs: ['SHARE_NOTEBOOKS'] })
   @Patch('links/:id')
   updateLink(
     @CurrentUser() u: AuthUser,
@@ -137,6 +148,7 @@ export class SharingController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'notebook', needs: ['SHARE_NOTEBOOKS'] })
   @Delete('links/:id')
   revokeLink(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     return this.links.revoke(u.id, id);
@@ -148,6 +160,7 @@ export class SharingController {
   @RequireVerified()
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @HttpCode(200)
+  @Authz({ scope: 'self', verified: true, note: 'the edit link token in the body is the key' })
   @Post('links/join')
   join(
     @CurrentUser() u: AuthUser,
@@ -172,6 +185,7 @@ export class PublicLinksController {
   @Public()
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @HttpCode(200)
+  @Authz({ scope: 'secret', note: 'wrong passwords are counted per link and address' })
   @Post('resolve')
   resolve(
     @Body({ schema: resolveLinkSchema }) body: ResolveLinkInput,
@@ -184,6 +198,7 @@ export class PublicLinksController {
 
   @Public()
   @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  @Authz({ scope: 'secret' })
   @Get(':token/pages/:pageId')
   page(
     @Param('token', { schema: linkTokenSchema }) token: string,
@@ -198,6 +213,7 @@ export class PublicLinksController {
 
   @Public()
   @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @Authz({ scope: 'secret' })
   @Get(':token/search')
   search(
     @Param('token', { schema: linkTokenSchema }) token: string,
@@ -212,6 +228,7 @@ export class PublicLinksController {
   /** Same file rules as /media/:id: data, never a document. Short caching: a revoked link must stop working soon. */
   @Public()
   @Throttle({ default: { limit: 600, ttl: 60_000 } })
+  @Authz({ scope: 'secret' })
   @Get(':token/media/:mediaId')
   async media(
     @Param('token', { schema: linkTokenSchema }) token: string,

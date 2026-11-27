@@ -5,7 +5,7 @@
 export const REALTIME_PATH = '/api/realtime';
 
 /** Rooms a client may ask to join. `user:<id>` and `team:<id>` are joined by the server itself. */
-export const JOINABLE_ROOM_KINDS = ['space', 'channel', 'thread'] as const;
+export const JOINABLE_ROOM_KINDS = ['space', 'channel', 'thread', 'board'] as const;
 export type JoinableRoomKind = (typeof JOINABLE_ROOM_KINDS)[number];
 export type RoomKind = JoinableRoomKind | 'user' | 'team';
 
@@ -81,6 +81,35 @@ export const SERVER_EVENTS = {
   sessionRevoked: 'session.revoked',
   /** Room user:<id>: a direct-message conversation changed (new, reopened, closed, new message). */
   dmUpdated: 'dm.updated',
+} as const;
+
+/**
+ * Boards (phase 12): sent to the rooms `space:<id>` and `board:<id>`. The payload is the changed row (a task, a board, a column,
+ * a label or a comment); a deleted task is its tombstone.
+ */
+export const BOARD_EVENTS = {
+  boardUpdated: 'board.updated',
+  taskCreated: 'task.created',
+  taskUpdated: 'task.updated',
+  taskMoved: 'task.moved',
+  taskDeleted: 'task.deleted',
+  commentCreated: 'comment.created',
+  labelCreated: 'label.created',
+  labelUpdated: 'label.updated',
+  labelDeleted: 'label.deleted',
+} as const;
+
+/**
+ * Calendar (phase 13): sent to the room `space:<id>` of the event's space with just where and what changed (`{spaceId, id}`: the
+ * event itself may be for some people only), and to the person invited in their room `user:<id>`.
+ */
+export const CALENDAR_EVENTS = {
+  eventCreated: 'event.created',
+  eventUpdated: 'event.updated',
+  eventCancelled: 'event.cancelled',
+  eventInvited: 'event.invited',
+  rsvpChanged: 'rsvp.changed',
+  reminderDue: 'reminder.due',
 } as const;
 
 /** `GET /api/teams/:id/presence`: everyone of the team who is not offline (and not invisible). */

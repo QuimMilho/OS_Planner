@@ -6,7 +6,8 @@
 # KEEP THIS FILE IN SYNC WITH THE APP. When a change adds or alters any of these, update this file, the README section
 # "HTTPS reverse proxy" and (if a new setting is involved) .env.example / docker-compose.yml in the same change:
 #   - a new URL prefix that is not under /api or /downloads, or a second origin (API on its own host)
-#   - WebSocket paths: Socket.IO /api/realtime (phase 6), Hocuspocus /api/collab (phase 11), LiveKit (phase 16, its own host)
+#   - WebSocket paths: Socket.IO /api/realtime (phase 6), Hocuspocus /api/collab (phase 11), LiveKit (phase 16, its own host: see
+#     os-planner-voice.conf.template; the media server's webhook goes straight to the app container and never passes here)
 #   - upload limits (MAX_IMAGE_MB, MAX_VIDEO_MB, installer sizes) -> client_max_body_size
 #   - slow endpoints (PDF export, big exports, ICS import) -> proxy_read_timeout
 #   - headers the server sets itself (HSTS, CSP, CORP, cache headers): do NOT repeat them here, the server owns them
@@ -97,6 +98,8 @@ server {
   proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Forwarded-Host  $host;
+  # One id per request, in nginx's access log and the server's request log (the server echoes it as X-Request-Id).
+  proxy_set_header X-Request-Id      $request_id;
   proxy_set_header Upgrade           $http_upgrade;
   proxy_set_header Connection        $os_planner_connection;
   # PDF export starts a headless browser; give it room.
@@ -105,15 +108,28 @@ server {
   proxy_send_timeout    180s;
 
   # Real-time paths: Socket.IO at /api/realtime (live since phase 6; WebSocket first, long polling as the fallback, both pass
-  # here), Hocuspocus co-editing at /api/collab (phase 11). Sockets stay open for hours, so no buffering and a long read timeout.
+  # here), Hocuspocus co-editing at /api/collab (live since phase 11: plain WebSocket only, no long-polling fallback; the server pings
+  # every 25 s, so an idle page stays connected through the 1 h timeout below; one message is at most 2 MB, enforced by the server,
+  # so nothing to set for it here). Sockets stay open for hours, so no buffering and a long read timeout.
   # Several OS_Planner servers behind this proxy: set REDIS_URL on each of them (the sockets then share their rooms). Clients that
   # fall back to long polling need requests of one session to reach the same server: add `ip_hash;` to the upstream above, or use
-  # one server. Plain WebSocket connections need neither.
+  # one server. Plain WebSocket connections (all of co-editing) need neither: with REDIS_URL set the instances share each page.
   location ~ ^/api/(realtime|collab)(/|$) {
     proxy_pass http://os_planner_app;
     proxy_buffering off;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
+  }
+
+  # The media server's webhook (phase 16, POST /api/voice/webhook) is sent by LiveKit inside the docker network, so it normally does not come through
+  # this proxy; if yours does, nothing special is needed (the body is read raw by the server and must not be changed on the way: no sub_filter etc.).
+
+  # Calendar feeds (phase 14): calendar apps (Google, Outlook, Apple) fetch /api/feeds/<secret>.ics with no sign-in, so the secret in the
+  # address is the key: keep it out of the access log. Nothing else differs (the server sends the ETag and cache headers; fetches are short;
+  # an uploaded .ics for import is at most 5 MB, far below client_max_body_size).
+  location ^~ /api/feeds/ {
+    access_log off;
+    proxy_pass http://os_planner_app;
   }
 
   # Everything else: the API, the website, /downloads, and shared notebooks (/s/<token> is a page of the app, /api/links/... answers it;

@@ -3,6 +3,7 @@ import { idSchema, type TeamPresenceDto } from '@os-planner/shared';
 import { CurrentUser, type AuthUser } from '../common/auth.decorators.js';
 import { PermissionService } from '../spaces/permission.service.js';
 import { PresenceService } from './presence.service.js';
+import { Authz } from '../common/authz.js';
 
 @Controller('teams')
 export class RealtimeController {
@@ -12,6 +13,7 @@ export class RealtimeController {
   ) {}
 
   /** Who of the team is online or idle right now. Members only; everyone else gets 404. */
+  @Authz({ scope: 'team' })
   @Get(':id/presence')
   async presenceOf(
     @CurrentUser() user: AuthUser,

@@ -60,13 +60,17 @@ export async function startStack({ port = PORT, serveWeb = true, env: extraEnv =
       DATA_DIR: dataDir,
       RELEASE_TOKEN,
       THROTTLE_DISABLED: 'true',
+      // Co-editing writes a page to the database this long after the last edit; short here so a test that reads it over REST need not wait.
+      COLLAB_DEBOUNCE_MS: '200',
+      COLLAB_MAX_DEBOUNCE_MS: '800',
+      COLLAB_RECHECK_MS: '3000',
       ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
-  child.stdout.on('data', (d) => (log += d));
-  child.stderr.on('data', (d) => (log += d));
+  child.stdout.on('data', (d) => ((log += d), process.env.E2E_SERVER_LOG && process.stderr.write(`[server] ${d}`)));
+  child.stderr.on('data', (d) => ((log += d), process.env.E2E_SERVER_LOG && process.stderr.write(`[server] ${d}`)));
 
   for (let i = 0; i < 60; i++) {
     try {

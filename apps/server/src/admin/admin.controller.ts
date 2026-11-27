@@ -22,15 +22,19 @@ import {
   type CreateTeamInput,
   type AdminUsersPage,
   type QuotaOverrideInput,
+  type CollabStatsDto,
   type RealtimeStatsDto,
 } from '@os-planner/shared';
 import { z } from 'zod';
 import { CurrentUser, Public, type AuthUser } from '../common/auth.decorators.js';
+import { CollabServer } from '../collab/collab.server.js';
+import { CollabService } from '../collab/collab.service.js';
 import { RealtimeServer } from '../realtime/realtime.server.js';
 import { QuotaService } from '../quota/quota.service.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { AdminGuard } from './admin.guard.js';
 import { AdminService } from './admin.service.js';
+import { Authz } from '../common/authz.js';
 
 type QuotaParams = z.infer<typeof adminQuotaParamsSchema>;
 
@@ -40,6 +44,7 @@ type QuotaParams = z.infer<typeof adminQuotaParamsSchema>;
  */
 @Public()
 @UseGuards(AdminGuard)
+@Authz({ scope: 'admin' })
 @Controller('admin')
 export class AdminController {
   constructor(
@@ -47,9 +52,16 @@ export class AdminController {
     private readonly quota: QuotaService,
     private readonly teams: TeamsService,
     private readonly realtime: RealtimeServer,
+    private readonly collab: CollabServer,
+    private readonly collabStats: CollabService,
   ) {}
 
   /** Connections and rooms of the instance that answers, and what the gateway has dropped or refused. */
+  @Get('collab')
+  collabStatsDto(): Promise<CollabStatsDto> {
+    return this.collabStats.stats(this.collab.snapshot());
+  }
+
   @Get('realtime')
   realtimeStats(): RealtimeStatsDto {
     return this.realtime.snapshot();

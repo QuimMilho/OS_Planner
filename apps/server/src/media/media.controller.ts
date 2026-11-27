@@ -25,6 +25,7 @@ import { CurrentUser, Public, RequireVerified, type AuthUser } from '../common/a
 import { TokenService } from '../auth/token.service.js';
 import { ENV, type Env } from '../config/env.js';
 import { MediaService, type UploadedTempFile } from './media.service.js';
+import { Authz } from '../common/authz.js';
 
 const MB = 1024 * 1024;
 
@@ -53,6 +54,7 @@ export class MediaController {
 
   @RequireVerified()
   @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @Authz({ scope: 'self', verified: true, note: 'with notebookId: EDIT_PAGES in that notebook' })
   @Post()
   @UseInterceptors(FileInterceptor('file'))
   async upload(
@@ -70,6 +72,7 @@ export class MediaController {
    * Range requests, conditional requests and caching are handled by Express's sendFile.
    */
   @Public()
+  @Authz({ scope: 'own', note: 'bearer token or media token; files of every space the person can see, 404 for any other' })
   @Get(':id')
   async file(
     @Param('id', { schema: idSchema }) id: string,

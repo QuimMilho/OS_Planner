@@ -212,7 +212,7 @@ describe('roles, overwrites and the audit log', () => {
       });
       assert.equal(created.status, 201);
       const write = (who, text, version) =>
-        api(who.page, 'PUT', `/api/pages/${pageId}/content`, {
+        api(who.page, 'POST', `/api/pages/${pageId}/snapshots/replace`, {
           content: {
             type: 'doc',
             content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],

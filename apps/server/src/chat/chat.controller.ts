@@ -58,6 +58,7 @@ import { AttachmentsService } from './attachments.service.js';
 import { ChannelsService } from './channels.service.js';
 import { MessagesService } from './messages.service.js';
 import { ThreadsService } from './threads.service.js';
+import { Authz } from '../common/authz.js';
 
 const Id = () => Param('id', { schema: idSchema });
 
@@ -66,11 +67,13 @@ const Id = () => Param('id', { schema: idSchema });
 export class ChannelsController {
   constructor(private readonly channels: ChannelsService) {}
 
+  @Authz({ scope: 'space', note: 'only the channels the person can see' })
   @Get('spaces/:id/channels')
   list(@CurrentUser() u: AuthUser, @Id() spaceId: string): Promise<ChannelDto[]> {
     return this.channels.list(u.id, spaceId);
   }
 
+  @Authz({ scope: 'space', needs: ['MANAGE_CHANNELS'] })
   @Post('spaces/:id/channels')
   create(
     @CurrentUser() u: AuthUser,
@@ -81,6 +84,7 @@ export class ChannelsController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'space', needs: ['MANAGE_CHANNELS'] })
   @Put('spaces/:id/channels/order')
   async reorder(
     @CurrentUser() u: AuthUser,
@@ -91,26 +95,31 @@ export class ChannelsController {
   }
 
   /** Every channel of the team and its projects that the person can see (what the sidebar lists). */
+  @Authz({ scope: 'team', note: 'only the channels the person can see' })
   @Get('teams/:id/channels')
   teamChannels(@CurrentUser() u: AuthUser, @Id() teamId: string): Promise<ChannelDto[]> {
     return this.channels.listTeam(u.id, teamId);
   }
 
+  @Authz({ scope: 'team' })
   @Get('teams/:id/unread')
   teamUnread(@CurrentUser() u: AuthUser, @Id() teamId: string): Promise<UnreadDto[]> {
     return this.channels.unreadTeam(u.id, teamId);
   }
 
+  @Authz({ scope: 'space' })
   @Get('spaces/:id/unread')
   unread(@CurrentUser() u: AuthUser, @Id() spaceId: string): Promise<UnreadDto[]> {
     return this.channels.unread(u.id, spaceId);
   }
 
+  @Authz({ scope: 'channel' })
   @Get('channels/:id')
   one(@CurrentUser() u: AuthUser, @Id() id: string): Promise<ChannelDto> {
     return this.channels.get(u.id, id);
   }
 
+  @Authz({ scope: 'channel', needs: ['MANAGE_CHANNELS'] })
   @Patch('channels/:id')
   update(
     @CurrentUser() u: AuthUser,
@@ -121,12 +130,14 @@ export class ChannelsController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'channel', needs: ['MANAGE_CHANNELS'] })
   @Delete('channels/:id')
   async remove(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     await this.channels.remove(u.id, id);
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'channel' })
   @Put('channels/:id/read')
   async read(
     @CurrentUser() u: AuthUser,
@@ -145,6 +156,7 @@ export class MessagesController {
     private readonly attachments: AttachmentsService,
   ) {}
 
+  @Authz({ scope: 'channel', needs: ['READ_MESSAGE_HISTORY'] })
   @Get('channels/:id/messages')
   list(
     @CurrentUser() u: AuthUser,
@@ -156,6 +168,7 @@ export class MessagesController {
 
   /** 201 for a new message, 200 when the same id was sent before (a retry): the answer is the same message either way. */
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Authz({ scope: 'channel', needs: ['SEND_MESSAGES'], note: 'SEND_IN_THREADS in a thread, ATTACH_FILES with files' })
   @Post('channels/:id/messages')
   async send(
     @CurrentUser() u: AuthUser,
@@ -168,11 +181,14 @@ export class MessagesController {
     return sent.message;
   }
 
+  @Authz({ scope: 'channel', needs: ['READ_MESSAGE_HISTORY'] })
   @Get('channels/:id/pins')
   pins(@CurrentUser() u: AuthUser, @Id() id: string): Promise<MessageDto[]> {
     return this.messages.pins(u.id, id);
   }
 
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Authz({ scope: 'channel', needs: ['READ_MESSAGE_HISTORY'] })
   @Get('channels/:id/search')
   search(
     @CurrentUser() u: AuthUser,
@@ -184,6 +200,7 @@ export class MessagesController {
 
   @RequireVerified()
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Authz({ scope: 'channel', needs: ['ATTACH_FILES'], verified: true })
   @Post('channels/:id/attachments')
   @UseInterceptors(FileInterceptor('file'))
   upload(
@@ -199,6 +216,7 @@ export class MessagesController {
     });
   }
 
+  @Authz({ scope: 'channel', author: 'only' })
   @Patch('messages/:id')
   edit(
     @CurrentUser() u: AuthUser,
@@ -209,12 +227,14 @@ export class MessagesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'channel', needs: ['MANAGE_MESSAGES'], author: 'or' })
   @Delete('messages/:id')
   async remove(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     await this.messages.remove(u.id, id);
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'channel', needs: ['ADD_REACTIONS'] })
   @Put('messages/:id/reactions/:emoji')
   async react(
     @CurrentUser() u: AuthUser,
@@ -225,6 +245,7 @@ export class MessagesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'channel', note: "removes the caller's own reaction" })
   @Delete('messages/:id/reactions/:emoji')
   async unreact(
     @CurrentUser() u: AuthUser,
@@ -234,11 +255,13 @@ export class MessagesController {
     await this.messages.react(u.id, id, emoji, false);
   }
 
+  @Authz({ scope: 'channel', needs: ['MANAGE_MESSAGES'] })
   @Put('messages/:id/pin')
   pin(@CurrentUser() u: AuthUser, @Id() id: string): Promise<MessageDto> {
     return this.messages.pin(u.id, id, true);
   }
 
+  @Authz({ scope: 'channel', needs: ['MANAGE_MESSAGES'] })
   @Delete('messages/:id/pin')
   unpin(@CurrentUser() u: AuthUser, @Id() id: string): Promise<MessageDto> {
     return this.messages.pin(u.id, id, false);
@@ -249,6 +272,7 @@ export class MessagesController {
 export class ThreadsController {
   constructor(private readonly threads: ThreadsService) {}
 
+  @Authz({ scope: 'channel', needs: ['CREATE_THREADS'] })
   @Post('messages/:id/thread')
   create(
     @CurrentUser() u: AuthUser,
@@ -258,6 +282,7 @@ export class ThreadsController {
     return this.threads.create(u.id, id, body);
   }
 
+  @Authz({ scope: 'channel', needs: ['READ_MESSAGE_HISTORY'] })
   @Get('threads/:id/messages')
   messages(
     @CurrentUser() u: AuthUser,
@@ -267,6 +292,7 @@ export class ThreadsController {
     return this.threads.messages(u.id, id, q);
   }
 
+  @Authz({ scope: 'channel', needs: ['MANAGE_MESSAGES'], author: 'or' })
   @Patch('threads/:id')
   update(
     @CurrentUser() u: AuthUser,

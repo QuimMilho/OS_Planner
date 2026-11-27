@@ -16,11 +16,15 @@ import { QuotaStore } from '../../core/quota';
 import { ThemeService } from '../../core/theme';
 import { sendWithCtrl, setSendWithCtrl } from '../chat/chat-composer';
 import { BlockedUsers, NotificationSettings } from '../notifications/settings-sections';
+import { CalendarSync } from '../calendar/calendar-sync';
 import { AppsPanel } from '../site/apps-panel';
+import { OfflineSettings } from '../history/offline-settings';
+import { Features } from '../../data/features';
+import { VoiceSettings } from '../voice/voice-settings';
 
 @Component({
   selector: 'app-settings-page',
-  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, TranslocoPipe, AppsPanel, BlockedUsers, NotificationSettings],
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, TranslocoPipe, AppsPanel, BlockedUsers, NotificationSettings, CalendarSync, OfflineSettings, VoiceSettings],
   template: `
     <div class="wrap">
       <h1>{{ 'nav.settings' | transloco }}</h1>
@@ -67,6 +71,11 @@ import { AppsPanel } from '../site/apps-panel';
       <section class="card" id="notifications">
         <h2>{{ 'settings.notifications' | transloco }}</h2>
         <app-notification-settings />
+      </section>
+
+      <section class="card" id="calendar-sync">
+        <h2>{{ 'calendarSync.title' | transloco }}</h2>
+        <app-calendar-sync />
       </section>
 
       <section class="card" id="chat">
@@ -123,6 +132,18 @@ import { AppsPanel } from '../site/apps-panel';
         }
       </section>
 
+      @if (features.voice()) {
+        <section class="card" id="voice">
+          <h2>{{ 'settings.voice' | transloco }}</h2>
+          <app-voice-settings />
+        </section>
+      }
+
+      <section class="card" id="offline">
+        <h2>{{ 'offline.settings.title' | transloco }}</h2>
+        <app-offline-settings />
+      </section>
+
       <section class="card">
         <h2>{{ 'settings.password' | transloco }}</h2>
         <form (ngSubmit)="changePassword()">
@@ -156,7 +177,7 @@ import { AppsPanel } from '../site/apps-panel';
     .card { border: 1px solid var(--border); border-radius: 16px; padding: 20px 24px; } h2 { margin: 0 0 12px; font-size: 18px; } .apps-title { margin: 16px 0 0; }
     .toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; } .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
     .row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; } form { display: flex; flex-direction: column; gap: 4px; } form.row { flex-direction: row; } mat-form-field { min-width: 220px; }
-    .ok, .warn { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; } .ok { color: #2f9e44; } .warn { color: #e8590c; } mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .ok, .warn { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; } .ok { color: color-mix(in srgb, #2f9e44 60%, var(--text)); } .warn { color: color-mix(in srgb, #e8590c 60%, var(--text)); } mat-icon { font-size: 18px; width: 18px; height: 18px; }
     .bar { height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; } .fill { height: 100%; background: var(--accent); }
     .bar.warn .fill { background: #e8590c; } .bar.full .fill { background: var(--mat-sys-error); }
     .usage { margin: 8px 0 4px; } .kinds { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 4px; }
@@ -187,6 +208,7 @@ export class SettingsPage implements OnInit {
   readonly theme = inject(ThemeService);
   readonly quota = inject(QuotaStore);
   readonly themes = THEMES;
+  readonly features = inject(Features);
   private readonly http = inject(HttpClient);
   private readonly notify = inject(Notify);
 

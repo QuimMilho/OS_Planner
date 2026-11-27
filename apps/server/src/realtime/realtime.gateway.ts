@@ -16,6 +16,7 @@ import {
 } from '@os-planner/shared';
 import type { ZodType } from 'zod';
 import { TokenService } from '../auth/token.service.js';
+import { unknownKeys } from '../common/strict-schema.pipe.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PresenceService } from './presence.service.js';
 import { RoomAuthorizer } from './room-authorizer.js';
@@ -185,7 +186,8 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
   ): Promise<void> {
     const ack = ackOf(maybeAck);
     const parsed = schema.safeParse(payload);
-    if (!parsed.success) {
+    // a field the event does not declare is refused like a malformed payload (as on the REST side)
+    if (!parsed.success || unknownKeys(payload, parsed.data).length) {
       this.rt.stats.dropped.invalid++;
       return ack({ ok: false });
     }

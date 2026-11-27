@@ -1,6 +1,6 @@
 {
   "name": "@os-planner/desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "OS_Planner desktop app: a native window around the OS_Planner website",
   "author": "OS_Planner",

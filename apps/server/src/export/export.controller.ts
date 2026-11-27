@@ -6,6 +6,7 @@ import type { z } from 'zod';
 import { CurrentUser, RequireVerified, type AuthUser } from '../common/auth.decorators.js';
 import { ExportService } from './export.service.js';
 import { attachment } from './forest.js';
+import { Authz } from '../common/authz.js';
 
 @Controller('export')
 export class ExportController {
@@ -19,6 +20,7 @@ export class ExportController {
   @RequireVerified()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
+  @Authz({ scope: 'notebook', verified: true, note: 'what to print (a page, category or notebook) is in the body' })
   @Post('pdf')
   async pdf(
     @CurrentUser() user: AuthUser,
@@ -35,6 +37,7 @@ export class ExportController {
 
   /** One page as a .md file (a .zip when it has images/videos), or a folder tree as a .zip. */
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Authz({ scope: 'notebook', note: 'what to export (a page, category or notebook) is in the query' })
   @Get('markdown')
   async markdown(
     @CurrentUser() user: AuthUser,

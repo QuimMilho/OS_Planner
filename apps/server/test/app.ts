@@ -9,7 +9,7 @@ import type { DigestMail } from '../src/mail/templates.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 
 export interface SentMail {
-  kind: 'verify' | 'reset' | 'invite' | 'decision' | 'ownership' | 'digest' | 'share';
+  kind: 'verify' | 'reset' | 'invite' | 'decision' | 'ownership' | 'digest' | 'share' | 'reminder';
   /** A notification mail: what it says and where its links go. */
   digest?: DigestMail;
   to: string;
@@ -22,6 +22,8 @@ export interface SentMail {
   ownership?: 'offered' | 'assigned';
   /** A share mail: what was shared, with which access, and whether the address has an account. */
   share?: { sharer: string; notebook: string; access: string; hasAccount: boolean };
+  /** A meeting reminder: which event and when it was said to start. */
+  reminder?: { title: string; when: string };
 }
 
 /** Captures outgoing mail so tests can follow verification and reset links. */
@@ -49,6 +51,10 @@ export class FakeMail {
   }
   async sendShare(to: string, locale: string, sharer: string, notebook: string, access: string, hasAccount: boolean) {
     this.sent.push({ kind: 'share', to, name: sharer, locale, token: '', share: { sharer, notebook, access, hasAccount } });
+    return true;
+  }
+  async sendMeetingReminder(to: string, name: string, locale: string, title: string, when: string) {
+    this.sent.push({ kind: 'reminder', to, name, locale, token: '', reminder: { title, when } });
     return true;
   }
   async sendNotificationDigest(to: string, name: string, locale: string, digest: DigestMail) {

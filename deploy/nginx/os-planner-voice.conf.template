@@ -1,0 +1,44 @@
+# OS_Planner voice and video (phase 16): nginx in front of the LiveKit media server's signalling port.
+#
+# TEMPLATE, like os-planner.conf.template (same envsubst rules). Only the SIGNALLING (WebSocket + a small https API on port 7880) passes through
+# nginx, on its own host name: LIVEKIT_URL=wss://${OS_PLANNER_LIVEKIT_DOMAIN}. The AUDIO AND VIDEO do not: they go straight to the media server on
+# 7881/tcp and 7882/udp, which must be open in the firewall (and forwarded by the router behind NAT). nginx cannot proxy them.
+# The certificate is the one in TLS_CERT_DIR: use one that covers both host names, or point ssl_certificate below at another pair.
+# Without OS_PLANNER_LIVEKIT_DOMAIN the server name defaults to "voice.invalid", which no browser asks for.
+
+map $http_upgrade $os_planner_voice_connection {
+  default upgrade;
+  ''      '';
+}
+
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  http2 on;
+  server_name ${OS_PLANNER_LIVEKIT_DOMAIN};
+
+  server_tokens off;
+  ssl_certificate     /etc/nginx/certs/fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
+
+  # The media server may not be running (it is a separate docker profile): resolve its name when a request comes, not when nginx starts.
+  resolver 127.0.0.11 valid=10s ipv6=off;
+  set $os_planner_livekit ${OS_PLANNER_LIVEKIT_UPSTREAM};
+
+  location / {
+    proxy_pass http://$os_planner_livekit;
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade           $http_upgrade;
+    proxy_set_header Connection        $os_planner_voice_connection;
+    proxy_buffering off;
+    # A call lasts hours; LiveKit pings, so an idle signalling socket is not cut.
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  }
+}

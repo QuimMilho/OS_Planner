@@ -44,7 +44,7 @@ describe('orphan media collection', () => {
     const recentOrphan = await uploadImage();
 
     const doc = { type: 'doc', content: [{ type: 'imageFigure', attrs: { mediaId: used.id, alt: '', caption: '', width: null, align: 'center' } }] };
-    expect((await t.http.put(`/api/pages/${page.id}/content`).set(me.auth).send({ content: doc, baseVersion: 0 })).status).toBe(200);
+    expect((await t.http.post(`/api/pages/${page.id}/snapshots/replace`).set(me.auth).send({ content: doc, baseVersion: 0 })).status).toBe(200);
 
     await t.prisma.media.updateMany({ where: { id: { in: [used.id, oldOrphan.id] } }, data: { createdAt: daysAgo(10) } });
     const before = await usedBytes(t, me.id);
@@ -64,7 +64,7 @@ describe('orphan media collection', () => {
     const page = await b.page((await b.category((await b.notebook()).id)).id);
     const img = await uploadImage();
     const doc = { type: 'doc', content: [{ type: 'imageFigure', attrs: { mediaId: img.id, alt: '', caption: '', width: null, align: 'center' } }] };
-    await t.http.put(`/api/pages/${page.id}/content`).set(me.auth).send({ content: doc, baseVersion: 0 });
+    await t.http.post(`/api/pages/${page.id}/snapshots/replace`).set(me.auth).send({ content: doc, baseVersion: 0 });
     await t.http.delete(`/api/pages/${page.id}`).set(me.auth);
     await t.prisma.media.update({ where: { id: img.id }, data: { createdAt: daysAgo(30) } });
 

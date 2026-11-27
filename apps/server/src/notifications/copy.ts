@@ -5,6 +5,10 @@ interface Copy {
   /** Push and inbox text when the channel hides previews: says what happened, not what was said. */
   redacted: (actor: string, kind: NotificationKind | 'message') => string;
   deletedUser: string;
+  /** Push text about a task: what happened, by whom. */
+  taskPush: (kind: NotificationKind, actor: string) => string;
+  /** Push text about a meeting or event. */
+  meetingPush: (kind: NotificationKind, actor: string) => string;
   pushTitleChannel: (channel: string, team: string) => string;
   mailSubject: (count: number, where: string) => string;
   mailHello: (name: string) => string;
@@ -29,6 +33,24 @@ export const COPY: Record<Locale, Copy> = {
             ? `${actor} sent a message`
             : `${actor} mentioned you`,
     deletedUser: 'Deleted user',
+    taskPush: (kind, actor) =>
+      kind === 'task_assigned'
+        ? `${actor} assigned you a task`
+        : kind === 'task_due'
+          ? 'A task is due soon'
+          : kind === 'task_comment'
+            ? `${actor} commented on a task`
+            : `${actor} mentioned you in a task`,
+    meetingPush: (kind, actor) =>
+      kind === 'meeting_invite'
+        ? `${actor} invited you`
+        : kind === 'meeting_updated'
+          ? `${actor} changed it`
+          : kind === 'meeting_cancelled'
+            ? `${actor} cancelled it`
+            : kind === 'meeting_response'
+              ? `${actor} answered`
+              : 'Starting soon',
     pushTitleChannel: (channel, team) => `#${channel} · ${team}`,
     mailSubject: (n, where) =>
       n === 1 ? `New message in ${where}` : `${n} new messages in ${where}`,
@@ -55,6 +77,24 @@ export const COPY: Record<Locale, Copy> = {
             ? `${actor} enviou uma mensagem`
             : `${actor} mencionou-o`,
     deletedUser: 'Utilizador eliminado',
+    taskPush: (kind, actor) =>
+      kind === 'task_assigned'
+        ? `${actor} atribuiu-lhe uma tarefa`
+        : kind === 'task_due'
+          ? 'Uma tarefa está a terminar'
+          : kind === 'task_comment'
+            ? `${actor} comentou uma tarefa`
+            : `${actor} mencionou-o numa tarefa`,
+    meetingPush: (kind, actor) =>
+      kind === 'meeting_invite'
+        ? `${actor} convidou-o`
+        : kind === 'meeting_updated'
+          ? `${actor} alterou`
+          : kind === 'meeting_cancelled'
+            ? `${actor} cancelou`
+            : kind === 'meeting_response'
+              ? `${actor} respondeu`
+              : 'Começa em breve',
     pushTitleChannel: (channel, team) => `#${channel} · ${team}`,
     mailSubject: (n, where) =>
       n === 1 ? `Nova mensagem em ${where}` : `${n} novas mensagens em ${where}`,

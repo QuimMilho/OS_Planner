@@ -18,6 +18,7 @@ import { TiptapEditorDirective } from 'ngx-tiptap';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TranslocoPipe } from '@jsverse/transloco';
+import { Language } from '../../core/i18n';
 import { firstValueFrom } from 'rxjs';
 import type { JSONContent } from '@tiptap/core';
 import type {
@@ -406,6 +407,7 @@ const byPosition = <T extends { position: string }>(a: T, b: T): number =>
   `,
 })
 export class PublicReader {
+  private readonly lang = inject(Language);
   /** From the address: /s/:token. */
   readonly token = input.required<string>();
 
@@ -571,7 +573,7 @@ export class PublicReader {
         extensions: buildReaderExtensions(reader),
         content,
         editable: false,
-        editorProps: { attributes: { class: 'doc', spellcheck: 'false' } },
+        editorProps: { attributes: { class: 'doc', spellcheck: 'false', 'aria-label': this.lang.t('editor.document'), 'aria-readonly': 'true', 'aria-multiline': 'true' } },
       }),
     );
   }

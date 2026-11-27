@@ -24,6 +24,7 @@ const toOverrideDto = (o: QuotaOverride): QuotaOverrideDto => ({
   maxMembers: o.maxMembers,
   maxProjects: o.maxProjects,
   maxFileBytes: toNumber(o.maxFileBytes),
+  maxVoiceParticipants: o.maxVoiceParticipants,
   note: o.note,
   updatedBy: o.updatedBy,
   updatedAt: o.updatedAt.toISOString(),
@@ -103,7 +104,7 @@ export class QuotaService {
 
   async breakdown(scope: QuotaScope, id: string): Promise<StorageBreakdownDto> {
     const owner = { spaceId: { in: await this.spaceIds(scope, id) } };
-    const [quota, media, docs, chat] = await Promise.all([
+    const [quota, media, docs, chat, tasks, comments] = await Promise.all([
       this.quotaOf(scope, id),
       this.prisma.media.groupBy({ by: ['kind'], where: owner, _sum: { size: true } }),
       this.prisma.page.aggregate({ where: owner, _sum: { sizeBytes: true } }),
@@ -113,13 +114,16 @@ export class QuotaService {
         where: scope === 'user' ? { OR: [{ channel: owner }, { authorId: id, channel: { kind: 'dm' } }] } : { channel: owner },
         _sum: { sizeBytes: true },
       }),
+      // Task text and comments count as documents too (their files are media).
+      this.prisma.task.aggregate({ where: owner, _sum: { sizeBytes: true } }),
+      this.prisma.taskComment.aggregate({ where: { task: owner }, _sum: { sizeBytes: true } }),
     ]);
     const sum = (kind: string) => media.find((m) => m.kind === kind)?._sum.size ?? 0;
     return {
       ...quota,
       images: sum('image'),
       video: sum('video'),
-      documents: (docs._sum.sizeBytes ?? 0) + (chat._sum.sizeBytes ?? 0),
+      documents: (docs._sum.sizeBytes ?? 0) + (chat._sum.sizeBytes ?? 0) + (tasks._sum.sizeBytes ?? 0) + (comments._sum.sizeBytes ?? 0),
     };
   }
 
@@ -295,6 +299,7 @@ export class QuotaService {
       maxMembers: input.maxMembers ?? null,
       maxProjects: input.maxProjects ?? null,
       maxFileBytes: input.maxFileBytes == null ? null : BigInt(input.maxFileBytes),
+      maxVoiceParticipants: input.maxVoiceParticipants ?? null,
       note: input.note,
       updatedBy: adminId,
     };

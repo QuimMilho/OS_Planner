@@ -5,6 +5,7 @@ import { ENV, type Env } from '../config/env.js';
 import {
   digestMail,
   inviteMail,
+  meetingReminderMail,
   ownershipMail,
   requestDecisionMail,
   resetPasswordMail,
@@ -26,6 +27,18 @@ export class MailService {
       secure: env.SMTP_SECURE,
       auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
     });
+  }
+
+  /** Can the mail server be reached and does it take our login? (For /api/health; at most a few seconds.) */
+  async verify(): Promise<boolean> {
+    try {
+      return await Promise.race([
+        this.transport.verify().then(() => true),
+        new Promise<boolean>((r) => setTimeout(() => r(false), 3000).unref()),
+      ]);
+    } catch {
+      return false;
+    }
   }
 
   private link(path: string, token: string): string {
@@ -68,6 +81,11 @@ export class MailService {
   /** The mail about one chat (phase 9): a count, the latest messages, and links to open it, mute it or stop the mails. */
   sendNotificationDigest(to: string, name: string, locale: Locale, digest: DigestMail): Promise<boolean> {
     return this.send(to, digestMail(locale, name, digest));
+  }
+
+  /** A reminder of a meeting for somebody who turned on email reminders (phase 13). */
+  sendMeetingReminder(to: string, name: string, locale: Locale, title: string, when: string): Promise<boolean> {
+    return this.send(to, meetingReminderMail(locale, name, title, when, this.appUrl('/app/calendar')));
   }
 
   /** Never throws: a broken mail server must not break registration or leak account existence. */

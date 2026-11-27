@@ -6,6 +6,7 @@ import {
   shouldEmail,
   shouldNotify,
   strongest,
+  type ResolveDefaults,
   type ScopeRule,
 } from './notify';
 
@@ -26,7 +27,7 @@ const rule = (scopeKind: ScopeRule['scopeKind'], over: Partial<ScopeRule> = {}):
   ...over,
 });
 
-const channelDefaults = { level: 'mentions' as const };
+const channelDefaults: ResolveDefaults = { level: 'mentions' };
 const resolve = (chain: ScopeRule[], now = NOW, defaults = channelDefaults) =>
   resolveSetting(chain, now, defaults);
 

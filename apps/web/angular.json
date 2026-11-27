@@ -30,12 +30,12 @@
               "../../node_modules/katex/dist/katex.min.css",
               "src/styles.scss"
             ],
-            "allowedCommonJsDependencies": []
+            "allowedCommonJsDependencies": ["qrcode-generator"]
           },
           "configurations": {
             "production": {
               "budgets": [
-                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2.2MB" },
+                { "type": "initial", "maximumWarning": "950kB", "maximumError": "1.1MB" },
                 { "type": "anyComponentStyle", "maximumWarning": "10kB", "maximumError": "20kB" }
               ],
               "outputHashing": "all",

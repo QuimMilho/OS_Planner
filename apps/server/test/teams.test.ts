@@ -627,7 +627,7 @@ describe('notebooks of a team or project space', () => {
     expect(
       (
         await t.http
-          .put(`/api/pages/${page.body.id}/content`)
+          .post(`/api/pages/${page.body.id}/snapshots/replace`)
           .set(owner.auth)
           .send({ content: para('Welcome'), baseVersion: 0 })
       ).status,
@@ -647,7 +647,7 @@ describe('notebooks of a team or project space', () => {
     expect(
       (
         await t.http
-          .put(`/api/pages/${page.body.id}/content`)
+          .post(`/api/pages/${page.body.id}/snapshots/replace`)
           .set(member.auth)
           .send({ content: para('hack'), baseVersion: 1 })
       ).status,
@@ -671,7 +671,7 @@ describe('notebooks of a team or project space', () => {
       await t.http.get(`/api/pages/${page.body.id}`).set(outsider.auth),
       await t.http.get(`/api/notebooks/${nb.body.id}/tree`).set(outsider.auth),
       await t.http
-        .put(`/api/pages/${page.body.id}/content`)
+        .post(`/api/pages/${page.body.id}/snapshots/replace`)
         .set(outsider.auth)
         .send({ content: para('x'), baseVersion: 1 }),
       await t.http.delete(`/api/pages/${page.body.id}`).set(outsider.auth),
@@ -712,7 +712,7 @@ describe('notebooks of a team or project space', () => {
         .send({ id: uuid(), categoryId: cat.id, title: 'Xylophone handbook', position: 'a0' })
     ).body;
     await t.http
-      .put(`/api/pages/${page.id}/content`)
+      .post(`/api/pages/${page.id}/snapshots/replace`)
       .set(owner.auth)
       .send({ content: para('the xylophone is in the cupboard'), baseVersion: 0 });
 
@@ -833,7 +833,7 @@ describe('notebooks of a team or project space', () => {
 describe('storage of teams and projects', () => {
   const save = (who: Account, pageId: string, text: string, baseVersion: number) =>
     t.http
-      .put(`/api/pages/${pageId}/content`)
+      .post(`/api/pages/${pageId}/snapshots/replace`)
       .set(who.auth)
       .send({ content: para(text), baseVersion });
 

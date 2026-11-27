@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Permission, type CategoryDto, type CreateCategoryInput, type UpdateCategoryInput } from '@os-planner/shared';
+import { changedKeys, guardDelete, guardUpdate } from '../common/merge-scope.js';
 import { ChangeSeqService } from '../prisma/change-seq.service.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import { PermissionService } from '../spaces/permission.service.js';
@@ -90,7 +91,7 @@ export class CategoriesService {
 
   async create(userId: string, input: CreateCategoryInput): Promise<CategoryDto> {
     const inNotebook = await this.prisma.notebook.findUnique({ where: { id: input.notebookId }, select: { spaceId: true } });
-    if (!inNotebook) throw notFound('notebook');
+    if (!inNotebook) throw notFound();
     const spaceId = inNotebook.spaceId;
     await this.perms.requireNotebook(userId, input.notebookId, Permission.EDIT_PAGES);
 
@@ -103,7 +104,7 @@ export class CategoriesService {
       }
 
       const notebook = await tx.notebook.findFirst({ where: { id: input.notebookId, spaceId } });
-      if (!notebook) throw notFound('notebook');
+      if (!notebook) throw notFound();
       if (notebook.deletedAt) throw parentDeleted();
 
       if (input.parentId) {
@@ -137,8 +138,12 @@ export class CategoriesService {
       const seq = await this.seq.next(tx, spaceId);
       const current = await tx.category.findFirst({ where: { id, spaceId, deletedAt: null } });
       if (!current) throw notFound();
+      // Offline merge: only what nobody else changed since the device saw it (everything, for a plain request).
+      const wanted = changedKeys(patch, current);
+      const guard = wanted.size ? guardUpdate('category', current, wanted, patch, current) : null;
+      const keys = guard?.keys ?? new Set<string>();
 
-      if (patch.parentId !== undefined && patch.parentId !== current.parentId) {
+      if (keys.has('parentId') && patch.parentId !== undefined && patch.parentId !== current.parentId) {
         const forest = await this.forest(tx, current.notebookId);
         if (patch.parentId !== null) {
           const parent = forest.get(patch.parentId);
@@ -154,9 +159,10 @@ export class CategoriesService {
       const row = await tx.category.update({
         where: { id },
         data: {
-          ...(patch.name !== undefined && { name: patch.name }),
-          ...(patch.parentId !== undefined && { parentId: patch.parentId }),
-          ...(patch.position !== undefined && { position: patch.position }),
+          ...(keys.has('name') && { name: patch.name }),
+          ...(keys.has('parentId') && { parentId: patch.parentId }),
+          ...(keys.has('position') && { position: patch.position }),
+          ...(guard && { fieldSeq: guard.next(seq) }),
           seq,
         },
       });
@@ -167,11 +173,11 @@ export class CategoriesService {
   /** Trashes the category, its subcategories and all their pages under one timestamp. */
   async remove(userId: string, id: string): Promise<void> {
     const spaceId = await this.spaceOf(userId, id, Permission.DELETE_PAGES);
-    if (!spaceId) return; // gone already: deleting twice is fine
+    if (!spaceId) throw notFound(); // a second delete of what is in the trash is fine (it is still there)
     return this.prisma.$transaction(async (tx) => {
       const seq = await this.seq.next(tx, spaceId);
       const cat = await tx.category.findFirst({ where: { id, spaceId } });
-      if (!cat || cat.deletedAt) return;
+      if (!cat || !guardDelete(cat)) return;
       const ids = (await this.forest(tx, cat.notebookId)).subtree(id);
       const deletedAt = new Date();
       await tx.category.updateMany({ where: { id: { in: ids }, deletedAt: null }, data: { deletedAt, seq } });

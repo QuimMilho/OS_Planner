@@ -1,17 +1,19 @@
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
+import { AppLogger, logLevels } from './common/app-logger.js';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 import { configureApp } from './app.setup.js';
-import { loadDotEnv, parseEnv } from './config/env.js';
+import { loadDotEnv, logFormat, parseEnv } from './config/env.js';
 
 async function bootstrap(): Promise<void> {
   loadDotEnv();
   const env = parseEnv();
 
   // Body parsing is configured in configureApp so documents get their own size limit.
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  const logger = new AppLogger({ json: logFormat(env) === 'json', logLevels: logLevels(env.LOG_LEVEL), prefix: 'OS_Planner' });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false, logger });
   configureApp(app, env);
 
   await app.listen(env.PORT);

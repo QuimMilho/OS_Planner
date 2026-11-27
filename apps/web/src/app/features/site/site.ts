@@ -15,7 +15,7 @@ import { AppsPanel } from './apps-panel';
       <a routerLink="/" class="brand"><img src="favicon.svg" alt="" width="30" height="30" />OS_Planner</a>
       <span class="grow"></span>
       <a mat-button routerLink="/download">{{ 'nav.getApp' | transloco }}</a>
-      <button mat-button type="button" (click)="toggleLang()" [attr.aria-label]="'settings.language' | transloco">{{ lang.current === 'en' ? 'PT' : 'EN' }}</button>
+      <button mat-button type="button" (click)="toggleLang()" [attr.aria-label]="(lang.current === 'en' ? 'PT' : 'EN') + ' – ' + ('settings.language' | transloco)">{{ lang.current === 'en' ? 'PT' : 'EN' }}</button>
       @if (auth.status() === 'authed') {
         <a mat-flat-button routerLink="/app">{{ 'site.openApp' | transloco }}</a>
       } @else {

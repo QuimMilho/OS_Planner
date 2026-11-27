@@ -4,7 +4,11 @@ import { Injectable, signal } from '@angular/core';
 export interface DesktopBridge {
   isDesktop: true;
   version: string;
+  /** The version this install was updated from; set only on the first page load after an update. */
+  updatedFrom: string | null;
   platform: string;
+  /** Tells the shell that a restart would cost something (a call, an open dialog, unsaved work), so its silent update waits. Absent in older shells. */
+  setBusy?(busy: boolean): void;
   /** Opens the native "Save as" dialog and writes the file. Returns false if the user cancelled. */
   saveFile(data: ArrayBuffer, suggestedName: string): Promise<boolean>;
   onMenuCommand(callback: (command: string) => void): void;

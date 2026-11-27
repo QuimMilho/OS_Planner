@@ -67,9 +67,15 @@ export class Session {
     this.media.forgetUrls();
     try {
       // unsaved editor drafts are notes too
-      for (const key of Object.keys(localStorage)) if (key.startsWith('os_planner.draft.')) localStorage.removeItem(key);
+      for (const key of Object.keys(localStorage)) if (key.startsWith('os_planner.draft.') || key.startsWith('os_planner.collab.')) localStorage.removeItem(key);
     } catch {
       /* storage unavailable */
+    }
+    // the documents of the pages that were open (co-editing keeps one IndexedDB database per page)
+    try {
+      for (const info of (await indexedDB.databases?.()) ?? []) if (info.name?.startsWith('os_planner.collab.')) indexedDB.deleteDatabase(info.name);
+    } catch {
+      /* not supported here */
     }
     await this.auth.logout();
   }

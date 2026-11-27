@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -19,6 +20,8 @@ import {
 import { CHAT_EVENTS, CHAT_LIMITS, UNREAD_CAP } from '@os-planner/shared/chat';
 import { Prisma } from '../generated/prisma/client.js';
 import { newId } from '../common/crypto.js';
+import { ENV, voiceEnabled, type Env } from '../config/env.js';
+import { EventBus } from '../events/event-bus.js';
 import type { Channel } from '../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import { QuotaService } from '../quota/quota.service.js';
@@ -55,6 +58,8 @@ export const toChannelDto = (c: Channel, perms: bigint): ChannelDto => ({
   nsfw: c.nsfw,
   redactPreviews: c.redactPreviews,
   slowmodeSeconds: c.slowmodeSeconds,
+  userLimit: c.userLimit,
+  quality: c.quality as ChannelDto['quality'],
   archived: c.archivedAt !== null,
   permissions: permissionsToString(perms),
   createdAt: c.createdAt.toISOString(),
@@ -74,6 +79,8 @@ export class ChannelsService {
     private readonly storage: StorageService,
     private readonly direct: DirectAccess,
     private readonly notifications: NotificationService,
+    private readonly bus: EventBus,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   // ---------------------------------------------------------------- reading
@@ -227,7 +234,9 @@ export class ChannelsService {
     const chat = await this.chat(userId, spaceId);
     if (!hasPermission(chat.perms, Permission.MANAGE_CHANNELS))
       throw new ForbiddenException('forbidden');
-    if (input.kind === 'voice') throw new UnprocessableEntityException('unsupported_kind');
+    if (input.kind === 'voice' && !voiceEnabled(this.env)) throw new UnprocessableEntityException('voice_unavailable');
+    if (input.kind !== 'voice' && (input.userLimit != null || input.quality != null))
+      throw new UnprocessableEntityException('not_a_voice_channel');
     const id = input.id ?? newId();
 
     const row = await this.prisma.$transaction(async (tx) => {
@@ -260,6 +269,8 @@ export class ChannelsService {
           nsfw: input.nsfw ?? false,
           redactPreviews: input.redactPreviews ?? false,
           slowmodeSeconds: input.slowmodeSeconds ?? 0,
+          userLimit: input.userLimit ?? null,
+          quality: input.quality ?? null,
           createdBy: userId,
         },
       });
@@ -276,6 +287,8 @@ export class ChannelsService {
     const { channel } = access;
     if (input.slowmodeSeconds !== undefined && channel.kind !== 'text')
       throw new UnprocessableEntityException('not_a_text_channel');
+    if ((input.userLimit !== undefined || input.quality !== undefined) && channel.kind !== 'voice')
+      throw new UnprocessableEntityException('not_a_voice_channel');
 
     const row = await this.prisma.$transaction(async (tx) => {
       const data: Prisma.ChannelUncheckedUpdateInput = {};
@@ -284,6 +297,8 @@ export class ChannelsService {
       if (input.nsfw !== undefined) data.nsfw = input.nsfw;
       if (input.redactPreviews !== undefined) data.redactPreviews = input.redactPreviews;
       if (input.slowmodeSeconds !== undefined) data.slowmodeSeconds = input.slowmodeSeconds;
+      if (input.userLimit !== undefined) data.userLimit = input.userLimit;
+      if (input.quality !== undefined) data.quality = input.quality;
       if (input.position !== undefined) data.position = input.position;
       if (input.archived !== undefined)
         data.archivedAt = input.archived ? (channel.archivedAt ?? new Date()) : null;
@@ -296,6 +311,7 @@ export class ChannelsService {
         deleted: false,
       });
       this.events.channelsChanged(tx, spaceIdOf(channel));
+      if (channel.kind === 'voice') this.bus.publishAfterCommit(tx, 'channel.changed', { channelId, deleted: false });
       return updated;
     });
     return toChannelDto(
@@ -353,6 +369,7 @@ export class ChannelsService {
         deleted: true,
       });
       this.events.channelsChanged(tx, spaceIdOf(channel));
+      if (channel.kind === 'voice') this.bus.publishAfterCommit(tx, 'channel.changed', { channelId, deleted: true });
       return media;
     });
     await Promise.all(files.map((m) => this.storage.remove(m.userId, m.id).catch(() => undefined)));

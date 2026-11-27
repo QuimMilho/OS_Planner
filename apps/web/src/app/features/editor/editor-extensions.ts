@@ -2,13 +2,18 @@ import { Injector, type WritableSignal } from '@angular/core';
 import type { Extensions, Node as TipTapNode } from '@tiptap/core';
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import FileHandler from '@tiptap/extension-file-handler';
+import { Collaboration } from '@tiptap/extension-collaboration';
+import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
 import { Mathematics } from '@tiptap/extension-mathematics';
 import { TableOfContents, type TableOfContentData } from '@tiptap/extension-table-of-contents';
 import Typography from '@tiptap/extension-typography';
 import { CharacterCount, Dropcursor, Gapcursor, Placeholder, UndoRedo } from '@tiptap/extensions';
+import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { all, createLowlight } from 'lowlight';
+import type * as Y from 'yjs';
 import { AngularNodeViewRenderer } from 'ngx-tiptap';
 import {
+  COLLAB_FIELD,
   Callout,
   ChartNode,
   FunctionPlotNode,
@@ -30,7 +35,16 @@ import { VideoView } from './views/video-view';
 
 export type OutlineItem = TableOfContentData[number];
 
+/** The shared document the editor is bound to (every page is co-edited, even when only one person is in it). */
+export interface CollabBinding {
+  doc: Y.Doc;
+  provider: HocuspocusProvider;
+  user: { name: string; color: string };
+}
+
 export interface ExtensionHooks {
+  /** Bound to a Yjs document: the editor's content, history and cursors come from it. Without it the editor only shows a document. */
+  collab?: CollabBinding;
   injector: Injector;
   placeholder: string;
   slash: SlashState;
@@ -50,7 +64,18 @@ export function buildExtensions(h: ExtensionHooks): Extensions {
   const schema = schemaWithViews(h.injector, (type, pos, latex) => h.editMath(type, pos, latex));
   return [
     ...schema,
-    UndoRedo,
+    // With a shared document the undo history is the person's own changes (not other people's), kept by the binding.
+    ...(h.collab
+      ? [
+          Collaboration.configure({ document: h.collab.doc, field: COLLAB_FIELD }),
+          CollaborationCaret.configure({
+            provider: h.collab.provider,
+            user: h.collab.user,
+            // The default appends two hex digits to the colour, which is not valid on an hsl() colour.
+            selectionRender: (user) => ({ nodeName: 'span', class: 'collaboration-carets__selection', style: `background-color: color-mix(in srgb, ${String(user['color'])} 30%, transparent)` }),
+          }),
+        ]
+      : [UndoRedo]),
     Dropcursor.configure({ color: 'var(--accent)', width: 2 }),
     Gapcursor,
     Typography,

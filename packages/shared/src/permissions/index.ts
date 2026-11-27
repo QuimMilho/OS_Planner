@@ -33,4 +33,14 @@ export {
   type RoleDenial,
   type RoleTarget,
 } from './hierarchy';
+export {
+  checkModeration,
+  publishSources,
+  voiceGrants,
+  type ModerationAction,
+  type ModerationDenial,
+  type ModerationParty,
+  type VoiceGrants,
+  type VoiceSource,
+} from './voice';
 export { SHARE_EDIT_PERMISSIONS, SHARE_READ_PERMISSIONS, permissionsForShare } from './share';

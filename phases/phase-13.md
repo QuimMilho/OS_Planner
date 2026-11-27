@@ -74,3 +74,42 @@ Events are tiny and counted as documents bytes (size of description + metadata) 
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Server: `apps/server/src/calendar/`.** `EventsService` (create, change, cancel, answer, people, reminders, duplicate), `CalendarViews` (`GET /api/calendar`, who can be named, settings), `RemindersService`
+  (sweeps, nightly clean-up), `EventAccess` (an event + what the caller may do with it), `CalendarEvents` (bus). Models: `Event`, `EventException`, `EventAttendee`, `EventReminder`, `ReminderDelivery`,
+  `UserCalendarSetting`. Bits 29–32 already existed. `PermissionService` gained `calendarSpaces`, `requireCalendarSpace`, `calendarPermissions`, `heldRoleIds` and `spaceViewers` (who holds a bit in a space,
+  in a handful of queries; used to expand roles). `NotificationService.onMeeting` writes the inbox rows (kinds `meeting_invite|updated|cancelled|response|reminder`, `targetKind: 'event'`, opening
+  `/app/calendar?event=<id>`); push uses `meetingPush` in `copy.ts`; `MailService.sendMeetingReminder` for the email option.
+- **Every event has a space.** The plan said `spaceId NULL` for personal events; here a personal event lives in the owner's personal space (so it has a sync cursor and a quota like everything else) and is
+  the owner's alone (no attendees; 422 `no_attendees_in_personal`). Team and project events carry the space's `seq`. The owner is always an attendee row (accepted), so counts and "added by" are uniform.
+- **Who sees an event** (`canSee` in `event-views.ts`): the owner, whoever holds MANAGE_MEETINGS in the space, everybody with VIEW_CALENDAR when `visibility = 'space'`, a user named on it, a holder of a role
+  named on it. Anybody else gets 404. A role member who answers gets a user row of their own (so a declined answer survives leaving the role). Role changes bump the `seq` of the events that name a role
+  (`CalendarModule` listens to `team.audited` for role/member/overwrite actions), which is how `hiddenEvents` reaches a person who left the role.
+- **Sync.** `SpaceChangesDto` gained `events` (as the caller sees them: `me`, counts, the exceptions inside the event row) and `hiddenEvents` (changed rows the caller may not see: drop). A space is asked for when its
+  calendar is visible too. New ops `event.create|update|cancel|rsvp` in `POST /api/sync/batch` (the outbox folds a plain `event.update` into a queued create; `this`/`following` scopes are never folded). The
+  per-space answer of the migration test now carries `events: []`. The client keeps every synced event in Dexie (`events`, v8) and expands repeats itself with the shared code, so the calendar works offline;
+  `GET /api/calendar` is the same expansion on the server (for other programs and ICS in phase 14), capped at 731 days and 5000 entries (`truncated`).
+- **Recurrence** (`@os-planner/shared/calendar`, a fifth entry): an own RRULE subset instead of the `rrule` library (no time-zone support worth having, and the initial bundle is nearly full): FREQ DAILY|WEEKLY|MONTHLY|YEARLY,
+  INTERVAL ≤ 999, COUNT ≤ 3650 or UNTIL, BYDAY (with ordinals in MONTHLY/YEARLY), BYMONTHDAY, BYMONTH, BYSETPOS (MONTHLY/YEARLY), WKST. Anything else (BYSECOND, BYHOUR, BYYEARDAY, RDATE…) is refused with 422, which also bounds
+  expansion (20 000 periods per call). Evaluated on the wall clock of the event's zone: a time in the gap moves forward, a time that happens twice is the first (tested for Lisbon and New York). All-day events are midnight UTC
+  with end exclusive and zone `UTC`. Phase 14 must map unsupported rules on import.
+- **Editing a series.** `scope=this` (needs `occurrence`, validated against the rule) makes or updates an `EventException` (title, description, place, link, start, end only); `all` changes the event and drops exceptions
+  when the start, zone, all-day flag or rule changes; `following` ends the old series (`UNTIL` one second before, `COUNT` turned into the right number for each half), creates a new event with a new id (attendees, reminders and the
+  later exceptions move over) and returns it. Cancelling works the same; cancelling a whole event leaves a tombstone for 30 days (storage refunded at once). Exceptions per event ≤ 500.
+- **Reminders.** `EventReminder` holds a person's own list for one event (no row: their `defaultReminders`, 10 minutes unless changed; `[]` is "none"); `ReminderDelivery` (person, occurrence, lead) is inserted in the same
+  transaction as the notification and its primary key makes it once-only under any number of workers (a duplicate is a `P2002`, skipped). A sweep every minute handles leads up to a day, one at :07 each hour handles up to a week
+  (so those may be up to an hour late); a lead is at most a week (`CALENDAR_LIMITS.reminderMaxMinutes` = 10 080). Muted teams get nothing in the inbox or push; the
+  delivery is recorded anyway. Email goes out when `UserCalendarSetting.emailReminders` is on. `reminder.due` goes to the person's room. Task reminders are not here (tasks keep phase 12's "due soon" notice).
+- **Realtime.** The room of the space hears only `{spaceId, id}`; the people on the event are also told in `user:<id>` (`event.invited`, and `event.updated` with the audience). The client pulls on any of them.
+- **Quota.** Text of the event, its rule and exceptions counts as documents of the space (`eventBytes`); a cancel refunds.
+- **Web.** `data/calendar-store.ts` (Dexie rows, permissions and settings in `meta`, offline create/update/cancel/answer), `features/calendar/` (`calendar-page` with month/week/day/agenda, mini calendar, filters, per-space
+  switches, settings; pointer drag to move, resize and create; `event-dialog` with the repeat builder, people picker, answers, reminders; `cal-util`). Colours come from the space id (no colour column). A "Calendar" link with a badge of pending
+  invitations is in the sidebar footer (not in the team rail); each team's and project's sidebar links to its own calendar (`?space=`). The initial bundle is 2.18 MB of the 2.2 MB limit.
+- **Not done / left for later phases:** an answer is for the whole series only (`scope` other than `all` is 422); no per-person availability hint in the picker (only the overlap warning); no calendar window cache (the whole local
+  copy is used); no linked voice channel in the UI (`linkedChannelId` is accepted and checked; phase 16); the "following" scope and naming people are online-only; per-field merge is phase 15.
+- **Proxy.** No change to `deploy/nginx/os-planner.conf.template`: everything is under `/api/` and uses the existing realtime WebSocket. No new environment variables.
+- **Tests.** shared +31 (`calendar/calendar.test.ts`), server +33 (`calendar.test.ts`) +1 (migration), web e2e +4 (`calendar.e2e.mjs`).

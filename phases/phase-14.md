@@ -75,3 +75,37 @@ Imported `Event`s count as documents bytes for their owner/space; external event
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Shared: `@os-planner/shared/ics`** (a sixth entry; the main entry exports only its types). Own reader and writer instead of a library (the initial bundle is full, and the calendar subset of RRULE is ours): `parseIcs` (tolerant:
+  folded lines, groups such as `item1.URL`, quoted parameters, `VTIMEZONE` with `X-LIC-LOCATION`, Windows zone names (`WINDOWS_ZONES`) and, as the last resort, the offsets of the file's own `VTIMEZONE`; floating times use the
+  person's zone or `X-WR-TIMEZONE`; `DURATION`; `RECURRENCE-ID` overrides folded into their series (`exceptionsOf`), an override without its series stands alone; cancelled events dropped and counted; HTML in descriptions
+  turned into text/Markdown; a deadline, a depth guard and `maxEvents` so a hostile file cannot stall it), `mapRRule` (brings a foreign rule into the supported subset: drops `BYHOUR`/`BYMINUTE`/…, clamps `COUNT` and `INTERVAL`,
+  gives `null` for `HOURLY`/`MINUTELY`/nonsense so the event is kept once) and `buildIcs` (writes the feed and exports: CRLF, folded at 75 octets without cutting a character, a generated `VTIMEZONE` per zone from `Intl`
+  (`zoneTransitions`), `EXDATE`, `RECURRENCE-ID` overrides, `VALARM`, `PARTSTAT`). The same input gives the same bytes, which is what makes `304` possible. Fixtures: `packages/shared/src/ics/fixtures/{google,outlook,apple}.ics`.
+- **Data.** `CalendarFeed`, `ExternalCalendar`, `ExternalEvent` (migrations `ics_feeds` and `ics_attempt`), `Event.icsUid`. Differences from the plan: no `ImportJob` (it was optional), no `ExternalEvent.raw/deletedAt` and no override rows
+  (the series and its exceptions are one row: the `exdates` column holds the exceptions as the calendar stores them, which lets `expandEvent` serve them unchanged), `ExternalCalendar` also has `lastAttemptAt`, `failureCount`,
+  `failingSince`, `nextSyncAt`, `disabledReason`. **No lease table**: a worker claims a calendar with one `updateMany` that moves `nextSyncAt` forward (only one of several servers can win), and a crash only delays it by 15 minutes.
+- **Feeds.** `GET /api/feeds/<secret>.ics` (the plan said `/feeds/…`; it is under `/api` so the prefix, nginx and CORS rules need nothing new, and the address given to people is on the API origin: `OS_PLANNER_API_URL`, else `APP_URL`).
+  Secret = 32 random bytes (43 characters), stored as SHA-256 with the last six characters as a hint; wrong, renewed and deleted addresses answer one identical `404`; one feed answers 60 requests a minute (in memory) and `120`/min per IP; `ETag`
+  (hash of the body), `Last-Modified`, `Cache-Control: private, max-age=300`, `Referrer-Policy: no-referrer`, `X-Robots-Tag`, `REFRESH-INTERVAL`/`X-PUBLISHED-TTL` one hour. The body comes from the same query the calendar uses
+  (`CalendarViews.visibleEvents`, then `IcsExporter`), so the file is exactly what the person's calendar shows at that moment; tasks with dates are `VEVENT`s (no `VTODO` option); the window is the last 90 days and everything after,
+  at most 5000 entries; the day-rounded "now" keeps the file (and the `ETag`) stable between changes. `deploy/nginx/os-planner.conf.template` has a `location ^~ /api/feeds/` with `access_log off`, because the secret is in the path.
+- **Followed calendars.** `apps/server/src/ics/safe-fetch.ts`: only `http`/`https`/`webcal` (`webcal` is https, then http when `ICS_ALLOW_HTTP`, which defaults to "not in production"); no credentials; the name is looked up **once**, every answer must be
+  public (`isBlockedAddress`: IPv4 and IPv6 private, loopback, link-local/metadata, CGNAT, multicast, reserved, IPv4-mapped, NAT64, 6to4, Teredo) and the connection goes to that address with `Host`/SNI kept (`nodeTransport`); redirects re-checked (3);
+  5 MB after decompression, 20 s in all, calendar content types only. `ICS_PRIVATE_ALLOWLIST` (`host`, `host:port` or an IP) is the operator's way to allow a private server (and what the tests and e2e use for their local fixture server).
+  `ExternalCalendarsService`: a calendar is read once when it is added (and refused, nothing saved, when that fails), then by a minute-by-minute scheduler (`@Cron`, at most 4 at a time, ±10 % jitter), with `If-None-Match`/`If-Modified-Since`,
+  backoff `interval × 2^failures` up to a day, switched off after 14 days of failures (inbox notice `calendar_sync_off`, new notification kind), hand refresh once per 5 minutes, 10 per person, storage cap `EXTERNAL_CALENDAR_MAX_MB`
+  (a separate cap, **not** charged to the quota counter: external events are a cache, and a refusal keeps what is stored). The parser runs in the request thread with a deadline (5 s) rather than a worker.
+  Entries reach the calendar as `source: 'external'` in `GET /api/calendar` (`include=external`, also `GET /api/me/external-calendars/:id/events`); the web asks for the window on screen and keeps it in memory only.
+- **Import and export.** `POST /api/calendar/import` (multipart, 5 MB, preview or commit, `uids` to choose, `spaceId` needs `CREATE_MEETINGS`): matched by `Event.icsUid` per space, so a second import makes no copies; attendees become plain names at
+  the end of the description (never users, no address kept), `ATTACH` ignored, at most 1000 events per import; the work is `EventsService.createImported`. `GET /api/events/<id>.ics` and `GET /api/calendar/export?from=&to=` are declared
+  *before* `events/:id` in `CalendarController` (otherwise `<id>.ics` is taken for an id).
+- **Web.** Settings → Calendar sync (`features/calendar/calendar-sync.ts`, `data/ics-store.ts`): addresses (create, what to include, QR code via `qrcode-generator`, loaded on demand, copy, per-app instructions, renew, delete), followed calendars
+  (add, status, refresh, pause, delete) and import (drop or choose a file, preview with checkboxes, destination, result) and export. In the calendar, followed calendars are muted and italic with a lock, each with its own switch in the side bar (their
+  id is stored in `hiddenSpaces`), and open a read-only dialog with *Open in source*. The initial bundle is 2.19 MB of the 2.2 MB limit.
+- **Not done:** the manual check against real Google, Outlook and Apple clients (acceptance 10); `VTODO` in feeds; an offline copy of followed calendars (phase 15); the plan's `ImportJob` audit.
+- **Tests.** shared +23 (`ics/ics.test.ts`), server +69 (`ics-fetch.test.ts`: the SSRF suite, against a fake network and a local server) +26 (`ics.test.ts`) +1 (migration), web e2e +3 (`calendar-sync.e2e.mjs`).

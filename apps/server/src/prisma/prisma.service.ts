@@ -24,7 +24,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         user: decodeURIComponent(url.username),
         password: decodeURIComponent(url.password),
         database: url.pathname.replace(/^\//, ''),
-        connectionLimit: 10,
+        // ?connectionLimit=20 on DATABASE_URL for a busy instance (keep instances × limit under MySQL's max_connections)
+        connectionLimit: Math.max(1, Number(url.searchParams.get('connectionLimit') ?? 10) || 10),
         // MySQL 8 defaults to caching_sha2_password, which needs this over a non-TLS link.
         allowPublicKeyRetrieval: true,
       }),
@@ -55,6 +56,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       );
     };
     Object.defineProperty(this, '$transaction', { value: wrapped, configurable: true, writable: true });
+  }
+
+  /**
+   * A write transaction that reads what other writers committed *after* it started: under the default isolation (REPEATABLE READ)
+   * a transaction keeps reading the snapshot of its first read, so the counts and keys it checks after taking a space lock
+   * (`ChangeSeqService.next`) could be stale. READ COMMITTED makes every statement see the latest committed data, which is what
+   * "check, then write, under the lock" needs (work-in-progress limits, positions in a column).
+   */
+  fresh<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return this.$transaction(fn, { isolationLevel: 'ReadCommitted' });
   }
 
   /**

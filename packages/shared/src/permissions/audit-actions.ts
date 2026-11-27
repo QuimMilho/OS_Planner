@@ -32,5 +32,9 @@ export const AUDIT_ACTIONS = [
   'notebook.link.create',
   'notebook.link.revoke',
   'notebook.move',
+  'voice.mute',
+  'voice.unmute',
+  'voice.move',
+  'voice.disconnect',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

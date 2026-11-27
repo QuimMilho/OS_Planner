@@ -23,8 +23,8 @@ const HIGHLIGHTS = ['#fff3bf', '#ffd8a8', '#ffc9c9', '#d3f9d8', '#c5f6fa', '#d0e
   imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslocoPipe],
   template: `
     <div class="bar" role="toolbar" [attr.aria-label]="'editor.toolbar' | transloco">
-      <button mat-icon-button type="button" (click)="editor().chain().focus().undo().run()" [disabled]="!editor().can().undo()" [matTooltip]="'editor.undo' | transloco"><mat-icon>undo</mat-icon></button>
-      <button mat-icon-button type="button" (click)="editor().chain().focus().redo().run()" [disabled]="!editor().can().redo()" [matTooltip]="'editor.redo' | transloco"><mat-icon>redo</mat-icon></button>
+      <button mat-icon-button type="button" (click)="editor().chain().focus().undo().run()" [disabled]="!editor().can().undo()" [matTooltip]="'editor.undo' | transloco" [attr.aria-label]="'editor.undo' | transloco"><mat-icon>undo</mat-icon></button>
+      <button mat-icon-button type="button" (click)="editor().chain().focus().redo().run()" [disabled]="!editor().can().redo()" [matTooltip]="'editor.redo' | transloco" [attr.aria-label]="'editor.redo' | transloco"><mat-icon>redo</mat-icon></button>
       <span class="sep"></span>
 
       <button mat-button type="button" class="blocktype" [matMenuTriggerFor]="blockMenu">{{ blockLabel() | transloco }}<mat-icon iconPositionEnd>arrow_drop_down</mat-icon></button>
@@ -41,17 +41,17 @@ const HIGHLIGHTS = ['#fff3bf', '#ffd8a8', '#ffc9c9', '#d3f9d8', '#c5f6fa', '#d0e
       <span class="sep"></span>
 
       @for (b of marks; track b.mark) {
-        <button mat-icon-button type="button" [class.on]="on(b.mark)" (click)="b.run(editor())" [matTooltip]="b.label | transloco" [attr.aria-pressed]="on(b.mark)"><mat-icon>{{ b.icon }}</mat-icon></button>
+        <button mat-icon-button type="button" [class.on]="on(b.mark)" (click)="b.run(editor())" [matTooltip]="b.label | transloco" [attr.aria-label]="b.label | transloco" [attr.aria-pressed]="on(b.mark)"><mat-icon>{{ b.icon }}</mat-icon></button>
       }
-      <button mat-icon-button type="button" [class.on]="on('link')" (click)="link.emit()" [matTooltip]="'editor.link' | transloco"><mat-icon>link</mat-icon></button>
-      <button mat-icon-button type="button" [matMenuTriggerFor]="colorMenu" [matTooltip]="'editor.textColor' | transloco"><mat-icon>format_color_text</mat-icon></button>
+      <button mat-icon-button type="button" [class.on]="on('link')" (click)="link.emit()" [matTooltip]="'editor.link' | transloco" [attr.aria-label]="'editor.link' | transloco"><mat-icon>link</mat-icon></button>
+      <button mat-icon-button type="button" [matMenuTriggerFor]="colorMenu" [matTooltip]="'editor.textColor' | transloco" [attr.aria-label]="'editor.textColor' | transloco"><mat-icon>format_color_text</mat-icon></button>
       <mat-menu #colorMenu="matMenu" class="swatch-menu">
         <div class="swatches" (click)="$event.stopPropagation()">
           <button type="button" class="swatch none" (click)="editor().chain().focus().unsetColor().run()" [attr.aria-label]="'editor.defaultColor' | transloco">∅</button>
           @for (c of colors; track c) { <button type="button" class="swatch" [style.background]="c" (click)="editor().chain().focus().setColor(c).run()" [attr.aria-label]="c"></button> }
         </div>
       </mat-menu>
-      <button mat-icon-button type="button" [class.on]="on('highlight')" [matMenuTriggerFor]="highlightMenu" [matTooltip]="'editor.highlight' | transloco"><mat-icon>border_color</mat-icon></button>
+      <button mat-icon-button type="button" [class.on]="on('highlight')" [matMenuTriggerFor]="highlightMenu" [matTooltip]="'editor.highlight' | transloco" [attr.aria-label]="'editor.highlight' | transloco"><mat-icon>border_color</mat-icon></button>
       <mat-menu #highlightMenu="matMenu" class="swatch-menu">
         <div class="swatches" (click)="$event.stopPropagation()">
           <button type="button" class="swatch none" (click)="editor().chain().focus().unsetHighlight().run()" [attr.aria-label]="'editor.noHighlight' | transloco">∅</button>
@@ -61,9 +61,9 @@ const HIGHLIGHTS = ['#fff3bf', '#ffd8a8', '#ffc9c9', '#d3f9d8', '#c5f6fa', '#d0e
       <span class="sep"></span>
 
       @for (b of lists; track b.mark) {
-        <button mat-icon-button type="button" [class.on]="on(b.mark)" (click)="b.run(editor())" [matTooltip]="b.label | transloco"><mat-icon>{{ b.icon }}</mat-icon></button>
+        <button mat-icon-button type="button" [class.on]="on(b.mark)" (click)="b.run(editor())" [matTooltip]="b.label | transloco" [attr.aria-label]="b.label | transloco"><mat-icon>{{ b.icon }}</mat-icon></button>
       }
-      <button mat-icon-button type="button" [matMenuTriggerFor]="alignMenu" [matTooltip]="'editor.align' | transloco"><mat-icon>format_align_left</mat-icon></button>
+      <button mat-icon-button type="button" [matMenuTriggerFor]="alignMenu" [matTooltip]="'editor.align' | transloco" [attr.aria-label]="'editor.align' | transloco"><mat-icon>format_align_left</mat-icon></button>
       <mat-menu #alignMenu="matMenu">
         @for (a of aligns; track a.value) { <button mat-menu-item type="button" (click)="editor().chain().focus().setTextAlign(a.value).run()"><mat-icon>{{ a.icon }}</mat-icon>{{ a.label | transloco }}</button> }
       </mat-menu>

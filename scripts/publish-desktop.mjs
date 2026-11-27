@@ -14,7 +14,7 @@ import { Readable } from 'node:stream';
 
 const root = resolve(import.meta.dirname, '..');
 const releaseDir = resolve(root, 'apps/desktop/release');
-const server = (process.env.OS_PLANNER_SERVER_URL ?? '').replace(/\/+$/, '');
+const server = (process.env.OS_PLANNER_API_URL || process.env.OS_PLANNER_SERVER_URL || '').replace(/\/+$/, '');
 const token = process.env.RELEASE_TOKEN;
 const notes = process.env.RELEASE_NOTES ?? '';
 

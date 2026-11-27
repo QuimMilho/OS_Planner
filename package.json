@@ -1,6 +1,6 @@
 {
   "name": "os-planner",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Rich note-taking website: Angular PWA + NestJS/MySQL server + Electron desktop shell",
   "workspaces": [
@@ -21,7 +21,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:scripts": "node --test \"scripts/lib/*.test.mjs\"",
-    "check:themes": "node scripts/check-theme-contrast.mjs"
+    "check:themes": "node scripts/check-theme-contrast.mjs",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "load": "node scripts/load/run.mjs",
+    "soak": "node scripts/load/soak.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
+    "docs:config": "node scripts/env-doc.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

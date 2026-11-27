@@ -195,7 +195,7 @@ export class MediaService {
 
   /** The row, or 404 when it does not exist or the person cannot see the space it belongs to. */
   async accessible(userId: string, id: string): Promise<Media> {
-    const row = await this.prisma.media.findUnique({ where: { id }, include: { attachment: { select: { channelId: true } } } });
+    const row = await this.prisma.media.findUnique({ where: { id }, include: { attachment: { select: { channelId: true } }, taskAttachment: { select: { task: { select: { boardId: true } } } } } });
     if (!row) throw new NotFoundException();
     // A chat attachment is as visible as its channel (and not more: being in the team is not enough, and leaving it ends access).
     if (row.attachment) {
@@ -209,6 +209,11 @@ export class MediaService {
         return row;
       }
       if (!(await this.perms.channelAccess(userId, row.attachment.channelId))) throw new NotFoundException();
+      return row;
+    }
+    // A file on a task is as visible as the board the task is on.
+    if (row.taskAttachment) {
+      if (!(await this.perms.boardAccess(userId, row.taskAttachment.task.boardId))) throw new NotFoundException();
       return row;
     }
     if (await this.perms.spaceAccess(userId, row.spaceId)) return row;

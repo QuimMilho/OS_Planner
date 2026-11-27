@@ -10,6 +10,7 @@ import {
 } from '@os-planner/shared/lite';
 import type { OverwriteDto, RoleDto } from '@os-planner/shared';
 import type { ApiProblem } from '../../core/auth-store';
+import { AppUpdates } from '../../core/app-updates';
 import { Notify } from '../../core/notify';
 import { RolesStore } from '../../data/roles-store';
 import { TeamStore } from '../../data/team-store';
@@ -293,6 +294,7 @@ export class OverwriteEditor {
   });
 
   constructor() {
+    inject(AppUpdates).holdWhile(this.dirty); // an update's reload would throw the unsaved changes away
     effect(() => {
       const id = this.projectId();
       untracked(() => {

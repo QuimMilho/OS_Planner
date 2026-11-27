@@ -1,6 +1,6 @@
 import { Component, ElementRef, Injectable, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router } from '@angular/router';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -9,10 +9,13 @@ import { TranslocoPipe } from '@jsverse/transloco';
 import { filter, map, startWith } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { Permission, type ExportScope } from '@os-planner/shared';
+import type { ExportScope } from '@os-planner/shared';
+import { Permission } from '@os-planner/shared/lite';
 import { Language } from '../../core/i18n';
 import { Notify } from '../../core/notify';
 import { AccessStore } from '../../data/access-store';
+import { HistoryStore } from '../../data/history-store';
+import { Outbox } from '../../data/outbox';
 import { Sync } from '../../data/sync';
 import { byPosition, TreeStore, type CategoryNode, type NotebookNode } from '../../data/tree-store';
 import { ExportDialog } from '../export/export-dialog';
@@ -28,6 +31,7 @@ const COLLAPSED_KEY = 'os_planner.collapsed';
 @Injectable({ providedIn: 'root' })
 export class TreeUi {
   readonly store = inject(TreeStore);
+  readonly outbox = inject(Outbox);
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(Notify);
@@ -35,6 +39,7 @@ export class TreeUi {
   private readonly http = inject(HttpClient);
   private readonly sync = inject(Sync);
   readonly access = inject(AccessStore);
+  readonly history = inject(HistoryStore);
   readonly P = Permission;
 
   /** Whether the person may do something in a notebook (the server decides again). */
@@ -169,6 +174,7 @@ export class TreeUi {
     }
   `,
   styles: `
+    .unsynced { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--accent); flex: none; }
     :host { display: contents; } .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .untitled { font-style: italic; opacity: 0.7; }
     .edit { flex: 1; min-width: 0; font: inherit; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--surface); color: var(--text); outline: none; }
   `,
@@ -198,7 +204,7 @@ export class InlineName {
 
 @Component({
   selector: 'app-tree-category',
-  imports: [MatIconModule, MatButtonModule, MatMenuModule, TranslocoPipe, InlineName, TreeCategory],
+  imports: [RouterLink, MatIconModule, MatButtonModule, MatMenuModule, TranslocoPipe, InlineName, TreeCategory],
   template: `
     @let c = node().category;
     <div class="row" [style.padding-left.px]="8 + depth() * 14" (contextmenu)="$event.preventDefault(); trigger.openMenu()">
@@ -235,6 +241,7 @@ export class InlineName {
           <a class="link" [href]="'/app/p/' + p.id" (click)="open($event, p.id)">
             <mat-icon class="ic">description</mat-icon>
             <app-inline-name kind="page" [id]="p.id" [value]="p.title" [placeholder]="'page.untitled' | transloco" />
+            @if (ui.outbox.pendingIds().has(p.id)) { <i class="unsynced" data-unsynced [attr.title]="'offline.unsynced' | transloco"></i> }
           </a>
           <span class="actions">
             <button type="button" #pt="matMenuTrigger" [matMenuTriggerFor]="pmenu" [attr.aria-label]="'common.more' | transloco"><mat-icon>more_horiz</mat-icon></button>
@@ -246,6 +253,9 @@ export class InlineName {
             <button mat-menu-item type="button" (click)="ui.moveTo('page', p.id)"><mat-icon>drive_file_move</mat-icon>{{ 'tree.moveTo' | transloco }}</button>
             <button mat-menu-item type="button" (click)="ui.move('page', p, node().pages, -1)"><mat-icon>arrow_upward</mat-icon>{{ 'tree.moveUp' | transloco }}</button>
             <button mat-menu-item type="button" (click)="ui.move('page', p, node().pages, 1)"><mat-icon>arrow_downward</mat-icon>{{ 'tree.moveDown' | transloco }}</button>
+          }
+          @if (ui.history.forEntity(p.id).length) {
+            <a mat-menu-item routerLink="/app/history" [queryParams]="{ entity: p.id }"><mat-icon>history</mat-icon>{{ 'history.showMine' | transloco }}</a>
           }
           <button mat-menu-item type="button" (click)="ui.export('page', p.id, p.title)"><mat-icon>download</mat-icon>{{ 'export.title' | transloco }}</button>
           @if (ui.can(p.notebookId, ui.P.DELETE_PAGES)) {
@@ -276,7 +286,7 @@ export class TreeCategory {
 
 @Component({
   selector: 'app-tree',
-  imports: [MatIconModule, MatButtonModule, MatMenuModule, TranslocoPipe, InlineName, TreeCategory],
+  imports: [RouterLink, MatIconModule, MatButtonModule, MatMenuModule, TranslocoPipe, InlineName, TreeCategory],
   template: `
     @if (!spaceId()) {
       <div class="head" [attr.data-section]="shared() ? 'shared' : 'own'">
@@ -310,6 +320,9 @@ export class TreeCategory {
         </span>
       </div>
       <mat-menu #menu="matMenu">
+        @if (ui.history.forEntity(n.id).length) {
+          <a mat-menu-item routerLink="/app/history" [queryParams]="{ entity: n.id }"><mat-icon>history</mat-icon>{{ 'history.showMine' | transloco }}</a>
+        }
         @if (ui.can(n.id, ui.P.EDIT_PAGES)) {
           <button mat-menu-item type="button" (click)="ui.newCategory(n.id, null)"><mat-icon>create_new_folder</mat-icon>{{ 'tree.newCategory' | transloco }}</button>
         }

@@ -17,6 +17,18 @@
         }
       </nav>
       <span class="grow"></span>
+      @if (peers().length) {
+        <span class="peers" data-peers [attr.aria-label]="'collab.editing' | transloco: { count: peers().length + 1 }">
+          @for (p of peers(); track p.name + p.color) {
+            <span class="peer" [style.background]="p.color" [attr.title]="p.name" data-peer>{{ p.name.slice(0, 1).toUpperCase() }}</span>
+          }
+          <span class="peers-text">{{ 'collab.editing' | transloco: { count: peers().length + 1 } }}</span>
+        </span>
+      }
+      <span class="conn" [attr.data-conn]="connection()" role="status">
+        <span class="dot"></span>
+        @if (pendingOffline()) { {{ 'editor.pendingOffline' | transloco }} } @else { {{ 'collab.' + connection() | transloco }} }
+      </span>
       <span class="state" [class]="saveState()" [attr.aria-live]="'polite'">
         <mat-icon>{{ saveState() === 'saved' ? 'cloud_done' : saveState() === 'saving' ? 'sync' : 'cloud_off' }}</mat-icon>
         {{ 'editor.state.' + saveState() | transloco }}
@@ -26,6 +38,9 @@
       <button mat-icon-button type="button" [matMenuTriggerFor]="more" [attr.aria-label]="'common.more' | transloco"><mat-icon>more_vert</mat-icon></button>
       <mat-menu #more="matMenu">
         <button mat-menu-item type="button" (click)="export()"><mat-icon>download</mat-icon>{{ 'export.title' | transloco }}</button>
+        @if (mayRestore()) {
+          <button mat-menu-item type="button" (click)="versions()"><mat-icon>history</mat-icon>{{ 'collab.snapshots.open' | transloco }}</button>
+        }
         <button mat-menu-item type="button" (click)="trash()" [disabled]="trashed() || !mayDelete()"><mat-icon>delete</mat-icon>{{ 'page.moveToTrash' | transloco }}</button>
       </mat-menu>
     </header>
@@ -37,7 +52,17 @@
       </div>
     } @else if (noWriteAccess()) {
       <div class="banner" data-read-only role="status">
-        <mat-icon>visibility</mat-icon>{{ 'page.readOnly' | transloco }}
+        <mat-icon>visibility</mat-icon>{{ (serverReadOnly() ? 'collab.readOnly' : 'page.readOnly') | transloco }}
+      </div>
+    } @else if (preview()) {
+      <div class="banner" data-preview role="status">
+        <mat-icon>cloud_sync</mat-icon>{{ 'collab.preview' | transloco }}
+        <button mat-button type="button" (click)="reconnect()">{{ 'collab.retry' | transloco }}</button>
+      </div>
+    }
+    @if (refusal(); as why) {
+      <div class="banner warn" data-refused role="alert">
+        <mat-icon>warning</mat-icon>{{ 'collab.refused.' + why | transloco }}
       </div>
     }
 

@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
-import { StandardSchemaValidationPipe, type INestApplication } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { LIMITS } from '@os-planner/shared';
-import { allowedOrigins, isHttps, parseOrigins, type Env } from './config/env.js';
+import { StrictSchemaPipe } from './common/strict-schema.pipe.js';
+import { HttpStats, requestContext } from './ops/http-stats.js';
+import { allowedOrigins, isHttps, parseOrigins, voiceOrigins, type Env } from './config/env.js';
 
 /**
  * The origin the website's API calls go to when it is not this server's own. Taken from OS_PLANNER_API_URL, else from the
@@ -42,6 +44,8 @@ export function configureApp(app: INestApplication, env: Env): void {
 
   if (env.TRUST_PROXY) express.set('trust proxy', 1);
   express.disable('x-powered-by');
+  // A request id on every answer (X-Request-Id), the request counted for /api/metrics and logged without secrets.
+  app.use(requestContext(app.get(HttpStats), env.LOG_REQUESTS));
 
   app.setGlobalPrefix('api');
 
@@ -50,14 +54,16 @@ export function configureApp(app: INestApplication, env: Env): void {
     origin: allowedOrigins(env),
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With'],
-    exposedHeaders: ['Content-Disposition'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With', 'X-Request-Id'],
+    exposedHeaders: ['Content-Disposition', 'X-Request-Id'],
     maxAge: 600,
   });
   const api = apiOrigin(env);
   const apiSources = api && api !== new URL(env.APP_URL).origin ? [api] : [];
   // The realtime socket (path /api/realtime) of an API on another origin; same-origin sockets are covered by 'self'.
   const socketSources = apiSources.map((o) => o.replace(/^http/, 'ws'));
+  // The media server of voice channels (signalling over wss, a small https API on the same host); the audio itself is WebRTC, which the CSP does not govern.
+  const voiceSources = voiceOrigins(env);
 
   app.use(
     helmet({
@@ -69,9 +75,9 @@ export function configureApp(app: INestApplication, env: Env): void {
           // Angular Material and the editor set inline styles at runtime.
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:', 'blob:', ...apiSources],
-          mediaSrc: ["'self'", 'blob:', ...apiSources],
+          mediaSrc: ["'self'", 'blob:', ...apiSources, ...voiceSources],
           fontSrc: ["'self'", 'data:'],
-          connectSrc: ["'self'", ...apiSources, ...socketSources],
+          connectSrc: ["'self'", ...apiSources, ...socketSources, ...voiceSources],
           frameSrc: ['https://www.youtube-nocookie.com'],
           workerSrc: ["'self'", 'blob:'],
           manifestSrc: ["'self'"],
@@ -94,7 +100,7 @@ export function configureApp(app: INestApplication, env: Env): void {
   app.use((req: Request, res: Response, next: NextFunction) => {
     // A shared notebook is for the people who hold its address: keep it out of search engines, and never leak the address
     // through a Referer header (helmet already sends no-referrer; repeated here because this is a promise of the feature).
-    if (req.path.startsWith('/s/') || req.path.startsWith('/api/links/')) {
+    if (req.path.startsWith('/s/') || req.path.startsWith('/api/links/') || req.path.startsWith('/api/feeds/')) {
       res.setHeader('X-Robots-Tag', 'noindex, nofollow');
       res.setHeader('Referrer-Policy', 'no-referrer');
     }
@@ -108,8 +114,11 @@ export function configureApp(app: INestApplication, env: Env): void {
 
   // Pages are sent as one JSON body (documents are capped at LIMITS.docMaxBytes).
   express.useBodyParser('json', { limit: LIMITS.docMaxBytes + 512 * 1024 });
+  // The media server's webhook is signed over the exact bytes it sends (content type application/webhook+json): keep them.
+  express.useBodyParser('raw', { type: 'application/webhook+json', limit: '256kb' });
 
-  app.useGlobalPipes(new StandardSchemaValidationPipe());
+  // Every body and query string is what its zod schema says, and a field the schema does not know is a 400 (mass assignment).
+  app.useGlobalPipes(new StrictSchemaPipe());
   app.enableShutdownHooks();
 
   serveDownloads(express, env);

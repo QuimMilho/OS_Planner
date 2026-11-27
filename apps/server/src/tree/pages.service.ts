@@ -1,19 +1,14 @@
-import { ConflictException, Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
-  collectMediaIds,
   CURRENT_SCHEMA_VERSION,
   EMPTY_DOC,
-  extractText,
   Permission,
-  validateDoc,
   type CreatePageInput,
   type PageDto,
   type PageMetaDto,
-  type PutContentInput,
-  type PutContentOk,
   type UpdatePageInput,
 } from '@os-planner/shared';
-import { jsonEquals } from '../common/stable-json.js';
+import { changedKeys, guardDelete, guardUpdate } from '../common/merge-scope.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { ChangeSeqService } from '../prisma/change-seq.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -80,7 +75,7 @@ export class PagesService {
 
   async create(userId: string, input: CreatePageInput): Promise<PageMetaDto> {
     const inCategory = await this.prisma.category.findUnique({ where: { id: input.categoryId }, select: { spaceId: true, notebookId: true } });
-    if (!inCategory) throw notFound('category');
+    if (!inCategory) throw notFound();
     const spaceId = inCategory.spaceId;
     await this.perms.requireNotebook(userId, inCategory.notebookId, Permission.EDIT_PAGES);
 
@@ -92,7 +87,7 @@ export class PagesService {
         return toPageMetaDto(existing);
       }
       const category = await tx.category.findFirst({ where: { id: input.categoryId, spaceId } });
-      if (!category) throw notFound('category');
+      if (!category) throw notFound();
       if (category.deletedAt) throw parentDeleted();
 
       await this.quota.chargeSpace(tx, spaceId, EMPTY_DOC_BYTES);
@@ -126,11 +121,15 @@ export class PagesService {
       const seq = await this.seq.next(tx, spaceId);
       const current = await tx.page.findFirst({ where: { id, spaceId, deletedAt: null }, select: PAGE_META_SELECT });
       if (!current) throw notFound();
+      // Offline merge: only what nobody else changed since the device saw it (everything, for a plain request).
+      const wanted = changedKeys(patch, current);
+      const guard = wanted.size ? guardUpdate('page', current, wanted, patch, current) : null;
+      const keys = guard?.keys ?? new Set<string>();
 
       let destination: { categoryId: string; notebookId: string } | undefined;
-      if (patch.categoryId !== undefined && patch.categoryId !== current.categoryId) {
+      if (keys.has('categoryId') && patch.categoryId !== undefined && patch.categoryId !== current.categoryId) {
         const category = await tx.category.findUnique({ where: { id: patch.categoryId } });
-        if (!category) throw notFound('category');
+        if (!category) throw notFound();
         // A page and the files it uses live in one space; it does not move between spaces.
         if (category.spaceId !== spaceId) throw invalid('a page cannot be moved to another space');
         if (category.deletedAt) throw parentDeleted();
@@ -142,9 +141,10 @@ export class PagesService {
       const row = await tx.page.update({
         where: { id },
         data: {
-          ...(patch.title !== undefined && { title: patch.title }),
-          ...(patch.position !== undefined && { position: patch.position }),
+          ...(keys.has('title') && { title: patch.title }),
+          ...(keys.has('position') && { position: patch.position }),
           ...destination,
+          ...(guard && { fieldSeq: guard.next(seq) }),
           seq,
         },
         select: PAGE_META_SELECT,
@@ -153,75 +153,13 @@ export class PagesService {
     });
   }
 
-  /**
-   * Saves the document if `baseVersion` is still the stored version (optimistic concurrency).
-   *  - success:        { version }
-   *  - stale version:  409 with the server's version and document, so the client can keep both
-   *  - invalid doc:    422
-   *  - does not fit:   413 quota_exceeded, nothing changed
-   */
-  async putContent(userId: string, id: string, input: PutContentInput): Promise<PutContentOk> {
-    const spaceId = await this.spaceOf(userId, id, Permission.EDIT_PAGES);
-    if (!spaceId) throw notFound();
-    const checked = validateDoc(input.content);
-    if (!checked.ok) throw new UnprocessableEntityException({ message: 'invalid_document', detail: checked.error });
-    const doc = checked.doc;
-    const mediaIds = collectMediaIds(doc);
-    const contentText = extractText(doc);
-    const sizeBytes = docBytes(doc);
-
-    return this.prisma.$transaction(async (tx) => {
-      const seq = await this.seq.next(tx, spaceId);
-
-      if (mediaIds.length) {
-        const owned = await tx.media.findMany({ where: { id: { in: mediaIds }, spaceId }, select: { id: true } });
-        const have = new Set(owned.map((m) => m.id));
-        const missing = mediaIds.filter((m) => !have.has(m));
-        if (missing.length) throw new UnprocessableEntityException({ message: 'unknown_media', missing });
-      }
-
-      const before = await tx.page.findFirst({ where: { id, spaceId, deletedAt: null }, select: { sizeBytes: true } });
-      const res = await tx.page.updateMany({
-        where: { id, spaceId, deletedAt: null, version: input.baseVersion },
-        data: {
-          content: doc as Prisma.InputJsonValue,
-          contentText,
-          sizeBytes,
-          schemaVersion: CURRENT_SCHEMA_VERSION,
-          version: { increment: 1 },
-          seq,
-        },
-      });
-
-      if (res.count === 1) {
-        // Text counts toward the quota: charge growth (refused as a whole when it does not fit), refund shrinkage.
-        await this.quota.chargeSpace(tx, spaceId, sizeBytes - (before?.sizeBytes ?? 0));
-        await tx.pageMedia.deleteMany({ where: { pageId: id, mediaId: { notIn: mediaIds } } });
-        if (mediaIds.length) {
-          await tx.pageMedia.createMany({ data: mediaIds.map((mediaId) => ({ pageId: id, mediaId })), skipDuplicates: true });
-        }
-        return { version: input.baseVersion + 1 };
-      }
-
-      const current = await tx.page.findFirst({ where: { id, spaceId } });
-      if (!current || current.deletedAt) throw notFound();
-      // A retry whose first attempt actually succeeded (lost response) arrives with a stale
-      // baseVersion but identical content: report success instead of a phantom conflict.
-      if (jsonEquals(current.content, doc)) return { version: current.version };
-      throw new ConflictException({
-        statusCode: 409,
-        message: 'version_conflict',
-        version: current.version,
-        content: current.content,
-      });
-    });
-  }
-
   async remove(userId: string, id: string): Promise<void> {
     const spaceId = await this.spaceOf(userId, id, Permission.DELETE_PAGES);
-    if (!spaceId) return; // gone already
+    if (!spaceId) throw notFound(); // a second delete of what is in the trash is fine (it is still there)
     return this.prisma.$transaction(async (tx) => {
       const seq = await this.seq.next(tx, spaceId);
+      const current = await tx.page.findFirst({ where: { id, spaceId }, select: PAGE_META_SELECT });
+      if (!current || !guardDelete(current)) return;
       await tx.page.updateMany({ where: { id, spaceId, deletedAt: null }, data: { deletedAt: new Date(), seq } });
     });
   }

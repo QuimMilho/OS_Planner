@@ -21,6 +21,7 @@ import { publishReleaseSchema, type DownloadsDto, type PublishReleaseInput, type
 import { Public } from '../common/auth.decorators.js';
 import { ENV, type Env } from '../config/env.js';
 import { DownloadsService } from './downloads.service.js';
+import { Authz } from '../common/authz.js';
 
 /**
  * Publishing is for the build pipeline, not for users, so it is guarded by one shared secret
@@ -48,6 +49,7 @@ export class DownloadsController {
 
   /** What the website's download page renders. Public. */
   @Public()
+  @Authz({ scope: 'public' })
   @Get('downloads')
   current(): Promise<DownloadsDto> {
     return this.downloads.current();
@@ -56,6 +58,7 @@ export class DownloadsController {
   /** Raw-body upload of one installer/metadata file. Streams to disk. */
   @Public()
   @UseGuards(ReleaseTokenGuard)
+  @Authz({ scope: 'release' })
   @Put('admin/releases/files/:name')
   upload(@Param('name') name: string, @Req() req: Request) {
     return this.downloads.receiveFile(name, req);
@@ -65,6 +68,7 @@ export class DownloadsController {
   @Public()
   @UseGuards(ReleaseTokenGuard)
   @HttpCode(200)
+  @Authz({ scope: 'release' })
   @Post('admin/releases')
   publish(@Body({ schema: publishReleaseSchema }) body: PublishReleaseInput): Promise<ReleaseManifest> {
     return this.downloads.publish(body);

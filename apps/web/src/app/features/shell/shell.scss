@@ -237,3 +237,15 @@
     flex: 1;
   }
 }
+
+.side-foot a .nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--mat-sys-error);
+  color: var(--mat-sys-on-error);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}

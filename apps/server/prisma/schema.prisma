@@ -35,8 +35,6 @@ model User {
   /// Quiet hours for push and email (see QuietHoursDto), NULL = none.
   quietHours      Json?
   emailVerifiedAt DateTime?
-  /// Mirror of the personal space changeSeq, kept for clients that still sync with `since` (removed in phase 17).
-  changeSeq       BigInt    @default(0)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -47,29 +45,34 @@ model User {
   pages         Page[]
   media         Media[]
 
-  space              Space?
-  ownedTeams         Team[]          @relation("TeamOwner")
-  teamMemberships    TeamMember[]
-  projectMemberships ProjectMember[]
-  memberRoles        MemberRole[]
-  auditEntries       AuditLog[]
-  invitesSent        Invite[]        @relation("InviteInviter")
-  pendingInvites     PendingInvite[]
-  joinRequests       JoinRequest[]   @relation("JoinRequester")
-  bans               Ban[]           @relation("Banned")
-  messages           Message[]       @relation("MessageAuthor")
-  reactions          Reaction[]      @relation("ReactionUser")
-  channelReads       ChannelRead[]   @relation("ChannelReadUser")
-  directStates       DirectState[]
-  directAsA          DirectConversation[] @relation("DirectA")
-  directAsB          DirectConversation[] @relation("DirectB")
-  blocking          UserBlock[]     @relation("Blocker")
-  blockedBy          UserBlock[]     @relation("Blocked")
+  space                Space?
+  ownedTeams           Team[]                @relation("TeamOwner")
+  teamMemberships      TeamMember[]
+  projectMemberships   ProjectMember[]
+  memberRoles          MemberRole[]
+  auditEntries         AuditLog[]
+  invitesSent          Invite[]              @relation("InviteInviter")
+  pendingInvites       PendingInvite[]
+  joinRequests         JoinRequest[]         @relation("JoinRequester")
+  bans                 Ban[]                 @relation("Banned")
+  messages             Message[]             @relation("MessageAuthor")
+  reactions            Reaction[]            @relation("ReactionUser")
+  channelReads         ChannelRead[]         @relation("ChannelReadUser")
+  directStates         DirectState[]
+  voiceParticipations  VoiceParticipant[]
+  directAsA            DirectConversation[]  @relation("DirectA")
+  directAsB            DirectConversation[]  @relation("DirectB")
+  blocking             UserBlock[]           @relation("Blocker")
+  blockedBy            UserBlock[]           @relation("Blocked")
   notificationSettings NotificationSetting[]
-  notifications      Notification[]
-  pushSubscriptions  PushSubscription[]
-  emailDigests       EmailDigestState[]
-  sharedNotebooks    NotebookShare[] @relation("SharedWithUser")
+  notifications        Notification[]
+  pushSubscriptions    PushSubscription[]
+  emailDigests         EmailDigestState[]
+  sharedNotebooks      NotebookShare[]       @relation("SharedWithUser")
+  taskAssignments      TaskAssignee[]        @relation("TaskAssignee")
+  calendarSetting      UserCalendarSetting?
+  calendarFeeds        CalendarFeed[]
+  externalCalendars    ExternalCalendar[]
 }
 
 model RefreshToken {
@@ -118,16 +121,18 @@ model Notebook {
   color     String?   @db.VarChar(7)
   position  String    @db.VarChar(64)
   seq       BigInt
+  /// Merge field -> the seq at which it last changed (offline merge, phase 15); NULL = nothing changed since it was made.
+  fieldSeq  Json?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  space      Space      @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categories Category[]
-  pages      Page[]
-  shares     NotebookShare[]
-  links      ShareLink[]
+  space         Space           @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories    Category[]
+  pages         Page[]
+  shares        NotebookShare[]
+  links         ShareLink[]
   pendingShares PendingShare[]
 
   @@index([userId, seq])
@@ -213,6 +218,8 @@ model Category {
   name       String    @db.VarChar(120)
   position   String    @db.VarChar(64)
   seq        BigInt
+  /// Merge field -> the seq at which it last changed (offline merge, phase 15); NULL = nothing changed since it was made.
+  fieldSeq  Json?
   deletedAt  DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -251,21 +258,51 @@ model Page {
   sizeBytes     Int       @default(0)
   position      String    @db.VarChar(64)
   seq           BigInt
+  /// Merge field -> the seq at which it last changed (offline merge, phase 15); NULL = nothing changed since it was made.
+  fieldSeq  Json?
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  space      Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  notebook   Notebook    @relation(fields: [notebookId], references: [id], onDelete: Cascade)
-  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  space      Space           @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebook   Notebook        @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  category   Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   mediaLinks PageMedia[]
+  yDoc       PageYDoc?
+  snapshots  PageYSnapshot[]
 
   @@index([userId, seq])
   @@index([spaceId, seq])
   @@index([categoryId])
   @@index([notebookId])
   @@fulltext([title, contentText])
+}
+
+/// The Yjs document of a page (phase 11): the source of truth while the page is being edited; `Page.content`, `contentText`,
+/// `sizeBytes` and `version` are derived from it. A page without a row gets one from its JSON the first time it is opened.
+model PageYDoc {
+  pageId      String   @id @db.Char(36)
+  state       Bytes    @db.LongBlob
+  stateVector Bytes    @db.Blob
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+}
+
+/// A saved version of a page's Yjs document: taken when a session ends, hourly while it is active, and before a restore.
+model PageYSnapshot {
+  id        String   @id @db.Char(36)
+  pageId    String   @db.Char(36)
+  state     Bytes    @db.LongBlob
+  byUserId  String?  @db.Char(36)
+  /// session_end | hourly | pre_merge | manual
+  reason    String   @db.VarChar(16)
+  createdAt DateTime @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, createdAt])
 }
 
 model Media {
@@ -283,10 +320,11 @@ model Media {
   durationSec Float?
   createdAt   DateTime @default(now())
 
-  space Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pages      PageMedia[]
-  attachment Attachment?
+  space          Space           @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages          PageMedia[]
+  attachment     Attachment?
+  taskAttachment TaskAttachment?
 
   @@index([userId])
   @@index([spaceId])
@@ -317,6 +355,8 @@ model QuotaOverride {
   maxMembers   Int?
   maxProjects  Int?
   maxFileBytes BigInt?
+  /// Team scope: most people in its voice channels at once (NULL = the instance default).
+  maxVoiceParticipants Int?
   note         String   @default("") @db.VarChar(500)
   updatedBy    String   @db.Char(36)
   updatedAt    DateTime @updatedAt
@@ -347,33 +387,36 @@ model Space {
   pages      Page[]
   media      Media[]
   channels   Channel[]
+  boards     Board[]
+  labels     Label[]
+  events     Event[]
 }
 
 /// A "guild": members, projects and a space of its own. Created by an instance admin.
 model Team {
-  id                  String    @id @db.Char(36)
-  name                String    @db.VarChar(80)
-  slug                String    @unique @db.VarChar(60)
-  icon                String?   @db.VarChar(40)
-  color               String?   @db.VarChar(7)
-  description         String    @default("") @db.VarChar(500)
+  id               String    @id @db.Char(36)
+  name             String    @db.VarChar(80)
+  slug             String    @unique @db.VarChar(60)
+  icon             String?   @db.VarChar(40)
+  color            String?   @db.VarChar(7)
+  description      String    @default("") @db.VarChar(500)
   /// NULL while the person named by the admin has no verified account yet; see PendingOwner.
-  ownerId             String?   @db.Char(36)
-  isPublic            Boolean   @default(false)
+  ownerId          String?   @db.Char(36)
+  isPublic         Boolean   @default(false)
   /// "open" | "request"
-  joinPolicy          String    @default("request") @db.VarChar(10)
+  joinPolicy       String    @default("request") @db.VarChar(10)
   /// Shown on the directory card of a public team.
-  listingBlurb        String    @default("") @db.VarChar(200)
+  listingBlurb     String    @default("") @db.VarChar(200)
   /// JSON array of short lowercase tags for the directory (NULL = none).
-  listingTags         Json?
+  listingTags      Json?
   /// Whether members may start direct messages with each other because of this team.
-  allowMemberDMs      Boolean   @default(true)
+  allowMemberDMs   Boolean   @default(true)
   /// Whether people with SHARE_NOTEBOOKS may create public (read-only) links to the team's notebooks.
-  allowPublicLinks    Boolean   @default(false)
+  allowPublicLinks Boolean   @default(false)
   /// The team own space. A plain pointer (Space.teamId holds the real foreign key).
-  spaceId             String    @unique @db.Char(36)
-  createdAt           DateTime  @default(now())
-  deletedAt           DateTime?
+  spaceId          String    @unique @db.Char(36)
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
 
   owner         User?          @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   space         Space?
@@ -640,19 +683,24 @@ model Channel {
   /// Push and email show a generic text instead of the message.
   redactPreviews  Boolean   @default(false)
   slowmodeSeconds Int       @default(0)
+  /// Voice channels: most people at once (NULL = VOICE_MAX_PARTICIPANTS).
+  userLimit       Int?
+  /// Voice channels: "low" | "normal" | "high" audio quality (NULL = normal).
+  quality         String?   @db.VarChar(10)
   archivedAt      DateTime?
   /// Last change sequence handed out in this channel (every change of a message takes the next one; see MessagesService).
   lastSeq         BigInt    @default(0)
   createdBy       String?   @db.Char(36)
   createdAt       DateTime  @default(now())
 
-  space    Space?        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  parent   Channel?      @relation("ChannelTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children Channel[]     @relation("ChannelTree")
+  space    Space?              @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parent   Channel?            @relation("ChannelTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Channel[]           @relation("ChannelTree")
   messages Message[]
   threads  Thread[]
   reads    ChannelRead[]
   direct   DirectConversation?
+  voice    VoiceParticipant[]
 
   @@index([spaceId])
   @@index([parentId])
@@ -860,6 +908,8 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
+  /// The inbox, newest first (read and unread together): phase 17, found with EXPLAIN.
+  @@index([userId, createdAt])
   @@index([userId, channelId, readAt])
   @@index([messageId])
   @@index([createdAt])
@@ -900,4 +950,438 @@ model EmailDigestState {
 
   @@id([userId, scopeKind, scopeId])
   @@index([pendingCount])
+}
+
+// ---------------------------------------------------------------- boards and tasks (phase 12)
+
+/// A task board of a team, a project or a personal space. Who may see it is the space VIEW_BOARDS plus the board
+/// overwrites (Overwrite rows with targetKind "board"); a personal board is for its owner only.
+model Board {
+  id          String    @id @db.Char(36)
+  spaceId     String    @db.Char(36)
+  name        String    @db.VarChar(80)
+  description String    @default("") @db.VarChar(2000)
+  icon        String?   @db.VarChar(40)
+  color       String?   @db.VarChar(7)
+  /// Fractional-index key among the space boards (sort in application code, never ORDER BY).
+  position    String    @db.VarChar(64)
+  archivedAt  DateTime?
+  seq         BigInt
+  createdBy   String?   @db.Char(36)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  space   Space         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  columns BoardColumn[]
+  tasks   Task[]
+
+  @@index([spaceId, seq])
+}
+
+/// A column of a board. Deleting one moves its tasks elsewhere first and leaves a tombstone.
+model BoardColumn {
+  id        String    @id @db.Char(36)
+  boardId   String    @db.Char(36)
+  /// Same as the board space (every row carries it so sync can filter without a join).
+  spaceId   String    @db.Char(36)
+  name      String    @db.VarChar(80)
+  position  String    @db.VarChar(64)
+  wipLimit  Int?
+  /// "todo" | "doing" | "done" | "custom": tasks in a "done" column are complete.
+  kind      String    @default("custom") @db.VarChar(8)
+  color     String?   @db.VarChar(7)
+  seq       BigInt
+  deletedAt DateTime?
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId])
+  @@index([spaceId, seq])
+}
+
+/// A task, or (with parentTaskId) a subtask. A deleted task is a tombstone until it is purged.
+model Task {
+  id              String    @id @db.Char(36)
+  boardId         String    @db.Char(36)
+  columnId        String    @db.Char(36)
+  spaceId         String    @db.Char(36)
+  parentTaskId    String?   @db.Char(36)
+  title           String    @db.VarChar(200)
+  /// Reduced TipTap document (see validateTaskDescription in @os-planner/shared/boards), NULL = none.
+  description     Json?
+  position        String    @db.VarChar(64)
+  /// "none" | "low" | "medium" | "high" | "urgent"
+  priority        String    @default("none") @db.VarChar(8)
+  startAt         DateTime?
+  dueAt           DateTime?
+  allDay          Boolean   @default(false)
+  completedAt     DateTime?
+  /// UTF-8 size of the title and the description: counts toward the space storage ("documents").
+  sizeBytes       Int       @default(0)
+  commentCount    Int       @default(0)
+  attachmentCount Int       @default(0)
+  /// When the "due soon" notification went out (once per due date).
+  dueNotifiedAt   DateTime?
+  createdBy       String?   @db.Char(36)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  seq             BigInt
+  /// Merge field -> the seq at which it last changed (offline merge, phase 15); NULL = nothing changed since it was made.
+  fieldSeq  Json?
+  deletedAt       DateTime?
+
+  board       Board            @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  parent      Task?            @relation("Subtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks    Task[]           @relation("Subtasks")
+  assignees   TaskAssignee[]
+  labels      TaskLabel[]
+  checklist   ChecklistItem[]
+  comments    TaskComment[]
+  attachments TaskAttachment[]
+  activity    TaskActivity[]
+
+  @@index([boardId, columnId])
+  @@index([spaceId, seq])
+  @@index([parentTaskId])
+  @@index([dueAt])
+}
+
+model TaskAssignee {
+  taskId     String   @db.Char(36)
+  userId     String   @db.Char(36)
+  assignedBy String?  @db.Char(36)
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation("TaskAssignee", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+/// A label of a team, a project or a personal space. An inheritable one is also usable in the projects below.
+model Label {
+  id          String    @id @db.Char(36)
+  spaceId     String    @db.Char(36)
+  name        String    @db.VarChar(40)
+  color       String    @db.VarChar(7)
+  description String    @default("") @db.VarChar(200)
+  inheritable Boolean   @default(true)
+  seq         BigInt
+  deletedAt   DateTime?
+
+  space Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  tasks TaskLabel[]
+
+  @@index([spaceId, seq])
+}
+
+model TaskLabel {
+  taskId  String @db.Char(36)
+  labelId String @db.Char(36)
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+}
+
+/// One item of a task checklist. They travel inside the task (the task seq changes with them).
+model ChecklistItem {
+  id       String  @id @db.Char(36)
+  taskId   String  @db.Char(36)
+  text     String  @db.VarChar(300)
+  done     Boolean @default(false)
+  position String  @db.VarChar(64)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+/// A comment on a task. Markdown with mention tokens like chat. Deleting one removes it (and refunds its bytes).
+model TaskComment {
+  id        String    @id @db.Char(36)
+  taskId    String    @db.Char(36)
+  authorId  String?   @db.Char(36)
+  content   String    @db.Text
+  /// The mentions the server accepted (see MentionsDto).
+  mentions  Json?
+  sizeBytes Int       @default(0)
+  editedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+}
+
+/// A file on a task. The bytes are a Media row of the task space (so they count toward its quota and go with it).
+model TaskAttachment {
+  id         String   @id @db.Char(36)
+  taskId     String   @db.Char(36)
+  mediaId    String   @unique @db.Char(36)
+  uploadedBy String?  @db.Char(36)
+  name       String   @db.VarChar(200)
+  createdAt  DateTime @default(now())
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+/// Append-only history of a task.
+model TaskActivity {
+  id        String   @id @db.Char(36)
+  taskId    String   @db.Char(36)
+  actorId   String?  @db.Char(36)
+  kind      String   @db.VarChar(24)
+  data      Json?
+  createdAt DateTime @default(now()) @db.DateTime(3)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+}
+
+/// A task that left this space for a board of another one: devices that hold it here drop it (the new space sends it as a new row).
+model TaskMove {
+  id      String @id @db.Char(36)
+  spaceId String @db.Char(36)
+  taskId  String @db.Char(36)
+  seq     BigInt
+
+  @@index([spaceId, seq])
+}
+
+// ---------------------------------------------------------------- calendar (phase 13)
+
+/// A meeting or an event of a team, a project or a personal space. A repeating one is a single row with an RRULE, expanded
+/// on read; changed or cancelled occurrences are EventException rows. Who sees it: its attendees (people and roles), or
+/// everybody who sees the space calendar (visibility "space"), plus whoever holds MANAGE_MEETINGS there. A personal event is its owner's alone.
+model Event {
+  id              String    @id @db.Char(36)
+  spaceId         String    @db.Char(36)
+  ownerId         String?   @db.Char(36)
+  /// "meeting" | "event"
+  kind            String    @default("meeting") @db.VarChar(8)
+  title           String    @db.VarChar(200)
+  /// Markdown.
+  description     String    @db.Text
+  location        String?   @db.VarChar(300)
+  videoUrl        String?   @db.VarChar(500)
+  /// A voice channel (phase 16) as the place of the meeting.
+  linkedChannelId String?   @db.Char(36)
+  /// The first occurrence, in UTC; the zone below is what recurrence follows. All-day: midnight UTC, end exclusive.
+  startAt         DateTime
+  endAt           DateTime
+  allDay          Boolean   @default(false)
+  timezone        String    @default("UTC") @db.VarChar(64)
+  /// Canonical RRULE text (see @os-planner/shared/calendar), NULL = once.
+  rrule           String?   @db.VarChar(400)
+  /// When the last occurrence ends (NULL while the series has no end or the event does not repeat: then endAt is the end).
+  rruleUntil      DateTime?
+  /// "attendees" | "space"
+  visibility      String    @default("attendees") @db.VarChar(10)
+  /// UTF-8 size of text fields: counts toward the space storage ("documents").
+  sizeBytes       Int       @default(0)
+  /// The UID of the calendar file the event was imported from (a second import of the same file finds it).
+  icsUid          String?   @db.VarChar(255)
+  seq             BigInt
+  /// Merge field -> the seq at which it last changed (offline merge, phase 15); NULL = nothing changed since it was made.
+  fieldSeq  Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  space      Space              @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  attendees  EventAttendee[]
+  exceptions EventException[]
+  reminders  EventReminder[]
+  deliveries ReminderDelivery[]
+
+  @@index([spaceId, seq])
+  @@index([spaceId, startAt])
+  @@index([ownerId])
+  @@index([spaceId, icsUid])
+}
+
+/// One occurrence of a series that was cancelled or changed, found by the instant it would have started at.
+model EventException {
+  id            String   @id @db.Char(36)
+  eventId       String   @db.Char(36)
+  originalStart DateTime
+  /// "cancelled" | "override"
+  kind          String   @db.VarChar(10)
+  /// The fields an override changes (title, description, location, videoUrl, startAt, endAt).
+  override      Json?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, originalStart])
+}
+
+/// A person or a role named on an event. A person invited through a role who answers gets a row of their own (kind "user").
+model EventAttendee {
+  eventId     String    @db.Char(36)
+  /// "user" | "role"
+  kind        String    @db.VarChar(4)
+  subjectId   String    @db.Char(36)
+  /// "invited" | "accepted" | "declined" | "tentative"
+  status      String    @default("invited") @db.VarChar(10)
+  respondedAt DateTime?
+  addedBy     String?   @db.Char(36)
+  optional    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, kind, subjectId])
+  @@index([kind, subjectId])
+}
+
+/// A person's own reminders on one event (minutes before the start). No row: their defaults apply.
+model EventReminder {
+  eventId String @db.Char(36)
+  userId  String @db.Char(36)
+  /// JSON array of minutes; an empty array means none.
+  minutes Json
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+}
+
+/// A reminder that went out: one row per person, occurrence and lead time. The primary key is what makes it happen once, however many workers run.
+model ReminderDelivery {
+  eventId         String   @db.Char(36)
+  userId          String   @db.Char(36)
+  occurrenceStart DateTime
+  minutesBefore   Int
+  sentAt          DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId, occurrenceStart, minutesBefore])
+  @@index([sentAt])
+}
+
+model UserCalendarSetting {
+  userId           String  @id @db.Char(36)
+  defaultTz        String  @default("UTC") @db.VarChar(64)
+  /// 0 Sunday, 1 Monday, 6 Saturday.
+  weekStart        Int     @default(1)
+  defaultReminders Json
+  hiddenSpaces     Json
+  openInvites      Boolean @default(false)
+  emailReminders   Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// A private address (a secret) that other calendar apps follow to read a person's calendar (phase 14). Only the hash of the secret is kept.
+model CalendarFeed {
+  id            String    @id @db.Char(36)
+  userId        String    @db.Char(36)
+  tokenHash     String    @unique @db.Char(64)
+  /// The last characters of the secret, so the person can tell their feeds apart.
+  tokenHint     String    @db.VarChar(6)
+  name          String    @db.VarChar(80)
+  /// What goes in it: { spaces: string[] | null, tasks, meetings, events, declined }.
+  include       Json
+  createdAt     DateTime  @default(now())
+  rotatedAt     DateTime?
+  lastFetchedAt DateTime?
+  fetchCount    Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Somebody else's calendar (an ICS address) a person follows, read only.
+model ExternalCalendar {
+  id               String    @id @db.Char(36)
+  userId           String    @db.Char(36)
+  name             String    @db.VarChar(80)
+  url              String    @db.Text
+  color            String    @db.VarChar(7)
+  etag             String?   @db.VarChar(255)
+  lastModified     String?   @db.VarChar(64)
+  lastSyncAt       DateTime?
+  /// The last time a refresh was tried (by hand or by the scheduler); a hand refresh waits five minutes after it.
+  lastAttemptAt    DateTime?
+  /// The `ics_*` code of the last refusal.
+  lastError        String?   @db.VarChar(40)
+  failureCount     Int       @default(0)
+  /// Since when it has failed without a success in between.
+  failingSince     DateTime?
+  /// When the scheduler looks at it next (it is also how a worker claims it).
+  nextSyncAt       DateTime
+  syncEveryMinutes Int       @default(60)
+  enabled          Boolean   @default(true)
+  /// Why the server switched it off ("failing_too_long"), NULL when the person did or it is on.
+  disabledReason   String?   @db.VarChar(30)
+  createdAt        DateTime  @default(now())
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events ExternalEvent[]
+
+  @@index([userId])
+  @@index([enabled, nextSyncAt])
+}
+
+/// An event of an external calendar. Never edited here; replaced as a whole at each refresh.
+model ExternalEvent {
+  id           String    @id @db.Char(36)
+  calendarId   String    @db.Char(36)
+  uid          String    @db.VarChar(255)
+  /// The instant (ISO) of the occurrence this row replaces; empty for a series or a single event.
+  recurrenceId String    @default("") @db.VarChar(30)
+  startAt      DateTime
+  endAt        DateTime
+  allDay       Boolean   @default(false)
+  timezone     String    @default("UTC") @db.VarChar(64)
+  title        String    @db.VarChar(200)
+  description  String    @db.Text
+  location     String?   @db.VarChar(300)
+  url          String?   @db.VarChar(500)
+  rrule        String?   @db.VarChar(400)
+  /// When the last occurrence ends (NULL: no end, or it does not repeat).
+  rruleUntil   DateTime?
+  /// The exceptions of the series: [{ originalStart, kind: "cancelled"|"override", override? }].
+  exdates      Json?
+  status       String    @default("confirmed") @db.VarChar(10)
+  sequence     Int       @default(0)
+  sizeBytes    Int       @default(0)
+
+  calendar ExternalCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, uid, recurrenceId])
+  @@index([calendarId, startAt])
+}
+
+/// Who is in a voice channel right now, as the media server reported it (webhooks, then a periodic check against its API).
+/// A projection: rows are pruned when the person leaves and when the server finds the room empty.
+model VoiceParticipant {
+  channelId        String   @db.Char(36)
+  userId           String   @db.Char(36)
+  /// The media server's id of this connection: a reconnect has a new one, so a late "left" of the old one is ignored.
+  sid              String   @db.VarChar(64)
+  joinedAt         DateTime @default(now())
+  /// A moderator keeps the microphone off until someone with MUTE_MEMBERS says otherwise.
+  mutedByModerator Boolean  @default(false)
+  /// What the media server was told the person may publish: 1 microphone, 2 camera, 4 screen. Compared when permissions change.
+  grants           Int      @default(0)
+  /// When the last event that touched the row was created (unix ms, from the media server's clock): older ones are ignored.
+  eventAt          BigInt   @default(0)
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+  @@index([userId])
 }

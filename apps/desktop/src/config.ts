@@ -14,6 +14,10 @@ interface Config {
   /** The website the window shows. Self-hosters change it from the menu. */
   serverUrl?: string;
   window?: WindowState;
+  /** The version that last ran, to tell the person "updated to x" once after an update. */
+  lastVersion?: string;
+  /** Set right before a silent update restarts the app, so it comes back where the person was. */
+  resume?: { url: string; minimized: boolean };
 }
 
 const file = () => join(app.getPath('userData'), 'config.json');
@@ -65,5 +69,24 @@ export function setServerUrl(url: string): string | null {
   return normalised;
 }
 
-export const getWindowState = (): WindowState => read().window ?? { width: 1280, height: 860, maximized: false };
+export const getLastVersion = (): string | null => read().lastVersion ?? null;
+export const setLastVersion = (lastVersion: string): void => write({ ...read(), lastVersion });
+
+/** Reads and clears the "come back here" note a silent update leaves; only an address on the server's origin is honoured. */
+export function takeResume(serverOrigin: string | null): { url: string; minimized: boolean } | null {
+  const config = read();
+  if (!config.resume) return null;
+  const { resume, ...rest } = config;
+  write(rest);
+  try {
+    const url = new URL(resume.url);
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.origin !== serverOrigin) return null;
+    return { url: url.href, minimized: !!resume.minimized };
+  } catch {
+    return null;
+  }
+}
+export const saveResume = (resume: { url: string; minimized: boolean }): void => write({ ...read(), resume });
+
+export const getWindowState =(): WindowState => read().window ?? { width: 1280, height: 860, maximized: false };
 export const saveWindowState = (window: WindowState): void => write({ ...read(), window });

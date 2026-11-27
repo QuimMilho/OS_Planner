@@ -15,3 +15,5 @@ data
 *.log
 .codegraph
 deploy
+apps/server/.load-data/
+/backups/

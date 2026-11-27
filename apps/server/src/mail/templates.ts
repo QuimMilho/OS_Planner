@@ -303,6 +303,29 @@ export function digestMail(locale: Locale, name: string, d: DigestMail): MailCon
   return { subject, text, html, headers: { 'List-Unsubscribe': `<${d.unsubscribeUrl}>` } };
 }
 
+// ---------------------------------------------------------------- meeting reminder (phase 13)
+
+const REMINDER_COPY: Record<Locale, { subject: (title: string) => string; body: (title: string, when: string) => string; button: string; ignore: string }> = {
+  en: {
+    subject: (t) => `Starting soon: ${t}`,
+    body: (t, when) => `"${t}" starts ${when}.`,
+    button: 'Open the calendar',
+    ignore: 'You get this email because you turned on email reminders in your calendar settings.',
+  },
+  pt: {
+    subject: (t) => `Começa em breve: ${t}`,
+    body: (t, when) => `"${t}" começa ${when}.`,
+    button: 'Abrir o calendário',
+    ignore: 'Recebe este email porque ativou os lembretes por email nas definições do calendário.',
+  },
+};
+
+/** The reminder of a meeting or event for somebody who asked for reminders by email. `when` is already written for them ("on 5 Jan, 09:00"). */
+export function meetingReminderMail(locale: Locale, name: string, title: string, when: string, url: string): MailContent {
+  const c = REMINDER_COPY[locale];
+  return render(locale, { name, subject: c.subject(title), body: c.body(title, when), button: c.button, ignore: c.ignore, url, validity: '' });
+}
+
 // ---------------------------------------------------------------- notebook shared with you (phase 10)
 
 const SHARE_COPY: Record<Locale, {

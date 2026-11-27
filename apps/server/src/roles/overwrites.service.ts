@@ -45,11 +45,10 @@ interface Target {
 }
 
 /**
- * Allow/deny overwrites on a project, a channel (or category) or a notebook, for a role or a member. The board kind is
- * accepted by the schema so the data model does not change when boards arrive, and is refused here until then.
+ * Allow/deny overwrites on a project, a channel (or category), a notebook or a board, for a role or a member.
  *
  * Rules: seeing the target comes first (404); changing its overwrites needs MANAGE_PROJECTS in the project,
- * MANAGE_CHANNELS in the channel or MANAGE_NOTEBOOKS in the notebook (403); and a person can only allow or deny permissions they hold there themselves.
+ * MANAGE_CHANNELS in the channel, MANAGE_NOTEBOOKS in the notebook or MANAGE_BOARDS on the board (403); and a person can only allow or deny permissions they hold there themselves.
  */
 @Injectable()
 export class OverwritesService {
@@ -76,6 +75,13 @@ export class OverwritesService {
       if (!access) throw new NotFoundException();
       if (!access.chat) throw new UnprocessableEntityException('unsupported_target');
       return { team: access.chat.team, perms: access.perms, manage: Permission.MANAGE_NOTEBOOKS, chain: access.chat.levels.map((l) => l.id) };
+    }
+    if (kind === 'board') {
+      // Only a board of a team or project has overwrites; a personal board is its owner's alone.
+      const access = await this.perms.boardAccess(userId, id);
+      if (!access) throw new NotFoundException();
+      if (!access.chat) throw new UnprocessableEntityException('unsupported_target');
+      return { team: access.chat.team, perms: access.perms, manage: Permission.MANAGE_BOARDS, chain: access.chat.levels.map((l) => l.id) };
     }
     throw new UnprocessableEntityException('unsupported_target');
   }
