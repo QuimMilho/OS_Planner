@@ -414,7 +414,166 @@ describe('migrating a database that holds data from before', () => {
     expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `PendingShare` WHERE notebookId = ?', [nb]))[0]!.n)).toBe(0);
   });
 
-  it('sync returns identical data before and after, through the old cursor and through per-space cursors', async () => {
+  it('phase 11: existing pages keep their content and have no Yjs state yet; the state and its snapshots go with the page', async () => {
+    const before = await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Page`');
+    await apply(only('page_yjs'));
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `PageYDoc`'))[0]!.n)).toBe(0);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Page`'))[0]!.n)).toBe(Number(before[0]!.n));
+
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const nb = randomUUID();
+    const cat = randomUUID();
+    const page = randomUUID();
+    await conn.query("INSERT INTO `Notebook` (id, spaceId, userId, name, position, seq, updatedAt) VALUES (?, ?, ?, 'Y', 'a0', 1, NOW(3))", [nb, space!.id, alice.id]);
+    await conn.query("INSERT INTO `Category` (id, spaceId, userId, notebookId, name, position, seq, updatedAt) VALUES (?, ?, ?, ?, 'c', 'a0', 1, NOW(3))", [cat, space!.id, alice.id, nb]);
+    await conn.query("INSERT INTO `Page` (id, spaceId, userId, notebookId, categoryId, title, content, contentText, position, seq, updatedAt) VALUES (?, ?, ?, ?, ?, 'p', ?, '', 'a0', 1, NOW(3))", [page, space!.id, alice.id, nb, cat, doc('x')]);
+    await conn.query('INSERT INTO `PageYDoc` (pageId, state, stateVector) VALUES (?, ?, ?)', [page, Buffer.from([1, 2, 3]), Buffer.from([0])]);
+    await conn.query("INSERT INTO `PageYSnapshot` (id, pageId, state, reason) VALUES (?, ?, ?, 'hourly')", [randomUUID(), page, Buffer.from([1])]);
+    await conn.query('DELETE FROM `Notebook` WHERE id = ?', [nb]);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `PageYDoc` WHERE pageId = ?', [page]))[0]!.n)).toBe(0);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `PageYSnapshot` WHERE pageId = ?', [page]))[0]!.n)).toBe(0);
+  });
+
+  it('phase 12: the board tables start empty, existing spaces and media are untouched, and what hangs off a task goes with it', async () => {
+    const spaces = Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Space`'))[0]!.n);
+    const media = Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Media`'))[0]!.n);
+    await apply(only('boards_tasks'));
+    for (const table of ['Board', 'BoardColumn', 'Task', 'TaskAssignee', 'Label', 'TaskLabel', 'ChecklistItem', 'TaskComment', 'TaskAttachment', 'TaskActivity', 'TaskMove'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Space`'))[0]!.n)).toBe(spaces);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Media`'))[0]!.n)).toBe(media);
+
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const board = randomUUID();
+    const col = randomUUID();
+    const task = randomUUID();
+    await conn.query("INSERT INTO `Board` (id, spaceId, name, position, seq, updatedAt) VALUES (?, ?, 'B', 'a0', 1, NOW(3))", [board, space!.id]);
+    await conn.query("INSERT INTO `BoardColumn` (id, boardId, spaceId, name, position, seq) VALUES (?, ?, ?, 'To do', 'a0', 1)", [col, board, space!.id]);
+    await conn.query("INSERT INTO `Task` (id, boardId, columnId, spaceId, title, position, seq, updatedAt) VALUES (?, ?, ?, ?, 'T', 'a0', 1, NOW(3))", [task, board, col, space!.id]);
+    await conn.query('INSERT INTO `TaskAssignee` (taskId, userId) VALUES (?, ?)', [task, alice.id]);
+    await conn.query("INSERT INTO `ChecklistItem` (id, taskId, text, position) VALUES (?, ?, 'x', 'a0')", [randomUUID(), task]);
+    await conn.query("INSERT INTO `TaskComment` (id, taskId, content) VALUES (?, ?, 'hi')", [randomUUID(), task]);
+    await conn.query("INSERT INTO `TaskActivity` (id, taskId, kind) VALUES (?, ?, 'created')", [randomUUID(), task]);
+    // deleting the board takes its columns and tasks, and what hangs off them
+    await conn.query('DELETE FROM `Board` WHERE id = ?', [board]);
+    for (const table of ['BoardColumn', 'Task', 'TaskAssignee', 'ChecklistItem', 'TaskComment', 'TaskActivity'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+  });
+
+  it('phase 13: the calendar tables start empty, existing data is untouched, and what hangs off an event goes with it', async () => {
+    const spaces = Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Space`'))[0]!.n);
+    const users = Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `User`'))[0]!.n);
+    await apply(only('calendar'));
+    for (const table of ['Event', 'EventException', 'EventAttendee', 'EventReminder', 'ReminderDelivery', 'UserCalendarSetting'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Space`'))[0]!.n)).toBe(spaces);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `User`'))[0]!.n)).toBe(users);
+
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const event = randomUUID();
+    await conn.query("INSERT INTO `Event` (id, spaceId, ownerId, title, description, startAt, endAt, seq, updatedAt) VALUES (?, ?, ?, 'E', '', NOW(3), NOW(3), 1, NOW(3))", [event, space!.id, alice.id]);
+    await conn.query("INSERT INTO `EventAttendee` (eventId, kind, subjectId) VALUES (?, 'user', ?)", [event, alice.id]);
+    await conn.query("INSERT INTO `EventException` (id, eventId, originalStart, kind) VALUES (?, ?, NOW(3), 'cancelled')", [randomUUID(), event]);
+    await conn.query("INSERT INTO `EventReminder` (eventId, userId, minutes) VALUES (?, ?, '[10]')", [event, alice.id]);
+    await conn.query('INSERT INTO `ReminderDelivery` (eventId, userId, occurrenceStart, minutesBefore) VALUES (?, ?, NOW(3), 10)', [event, alice.id]);
+    await conn.query("INSERT INTO `UserCalendarSetting` (userId, defaultReminders, hiddenSpaces) VALUES (?, '[10]', '[]')", [alice.id]);
+    // an event takes its people, exceptions, reminders and records with it
+    await conn.query('DELETE FROM `Event` WHERE id = ?', [event]);
+    for (const table of ['EventAttendee', 'EventException', 'EventReminder', 'ReminderDelivery'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+    // a person's settings go with the person only
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `UserCalendarSetting` WHERE userId = ?', [alice.id]))[0]!.n)).toBe(1);
+  });
+
+  it('phase 14: the feed and followed-calendar tables start empty, events keep their data, and what hangs off a person goes with them', async () => {
+    const events = Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Event`'))[0]!.n);
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const old = randomUUID();
+    await conn.query("INSERT INTO `Event` (id, spaceId, ownerId, title, description, startAt, endAt, seq, updatedAt) VALUES (?, ?, ?, 'Old', '', NOW(3), NOW(3), 1, NOW(3))", [old, space!.id, alice.id]);
+    await apply(only('ics_feeds'));
+    await apply(only('ics_attempt'));
+    for (const table of ['CalendarFeed', 'ExternalCalendar', 'ExternalEvent'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n), table).toBe(0);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Event`'))[0]!.n)).toBe(events + 1);
+    expect((await rows<{ icsUid: string | null }>('SELECT icsUid FROM `Event` WHERE id = ?', [old]))[0]!.icsUid).toBeNull();
+
+    const cal = randomUUID();
+    await conn.query("INSERT INTO `CalendarFeed` (id, userId, tokenHash, tokenHint, name, `include`) VALUES (?, ?, ?, 'abc123', 'Phone', '{}')", [randomUUID(), bob.id, 'a'.repeat(64)]);
+    await conn.query("INSERT INTO `ExternalCalendar` (id, userId, name, url, color, nextSyncAt) VALUES (?, ?, 'Work', 'https://x.test/a.ics', '#112233', NOW(3))", [cal, bob.id]);
+    await conn.query("INSERT INTO `ExternalEvent` (id, calendarId, uid, startAt, endAt, title, description) VALUES (?, ?, 'u1', NOW(3), NOW(3), 'T', '')", [randomUUID(), cal]);
+    // the same event twice in one calendar is refused
+    await expect(
+      conn.query("INSERT INTO `ExternalEvent` (id, calendarId, uid, startAt, endAt, title, description) VALUES (?, ?, 'u1', NOW(3), NOW(3), 'T', '')", [randomUUID(), cal]),
+    ).rejects.toThrow();
+    // a calendar takes its events with it
+    await conn.query('DELETE FROM `ExternalCalendar` WHERE id = ?', [cal]);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `ExternalEvent`'))[0]!.n)).toBe(0);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `CalendarFeed` WHERE userId = ?', [bob.id]))[0]!.n)).toBe(1);
+    await conn.query('DELETE FROM `Event` WHERE id = ?', [old]);
+  });
+
+  it('phase 15: rows that exist keep everything and have no field versions (nothing changed since they were made); new rows can carry them', async () => {
+    const count = async (table: string) => Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n);
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const event = randomUUID();
+    await conn.query("INSERT INTO `Event` (id, spaceId, ownerId, title, description, startAt, endAt, seq, updatedAt) VALUES (?, ?, ?, 'Before', '', NOW(3), NOW(3), 7, NOW(3))", [event, space!.id, alice.id]);
+    const before = { notebooks: await count('Notebook'), categories: await count('Category'), pages: await count('Page'), events: await count('Event') };
+    await apply(only('field_seq'));
+    expect({ notebooks: await count('Notebook'), categories: await count('Category'), pages: await count('Page'), events: await count('Event') }).toEqual(before);
+    for (const table of ['Notebook', 'Category', 'Page', 'Task', 'Event'])
+      expect(Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\` WHERE fieldSeq IS NOT NULL`))[0]!.n), table).toBe(0);
+    expect((await rows<{ title: string; seq: bigint }>('SELECT title, seq FROM `Event` WHERE id = ?', [event]))[0]).toMatchObject({ title: 'Before', seq: 7n });
+    await conn.query('UPDATE `Event` SET fieldSeq = ? WHERE id = ?', [JSON.stringify({ title: 9 }), event]);
+    const stored = (await rows<{ fieldSeq: unknown }>('SELECT fieldSeq FROM `Event` WHERE id = ?', [event]))[0]!.fieldSeq;
+    expect(typeof stored === 'string' ? JSON.parse(stored) : stored).toEqual({ title: 9 });
+    await conn.query('DELETE FROM `Event` WHERE id = ?', [event]);
+  });
+
+  it('phase 16: channels keep their data (no limit, no quality), the presence table starts empty and goes with its channel or person', async () => {
+    const count = async (table: string) => Number((await rows<{ n: bigint }>(`SELECT COUNT(*) AS n FROM \`${table}\``))[0]!.n);
+    const [space] = await rows<{ id: string }>('SELECT id FROM `Space` WHERE userId = ?', [alice.id]);
+    const old = randomUUID();
+    await conn.query("INSERT INTO `Channel` (id, spaceId, kind, name, position) VALUES (?, ?, 'text', 'general', 'a0')", [old, space!.id]);
+    const channels = await count('Channel');
+    await apply(only('voice'));
+    expect(await count('Channel')).toBe(channels);
+    expect(await count('VoiceParticipant')).toBe(0);
+    expect((await rows<{ userLimit: number | null; quality: string | null }>('SELECT userLimit, quality FROM `Channel` WHERE id = ?', [old]))[0]).toEqual({ userLimit: null, quality: null });
+
+    const voice = randomUUID();
+    await conn.query("INSERT INTO `Channel` (id, spaceId, kind, name, position, userLimit, quality) VALUES (?, ?, 'voice', 'Lounge', 'a1', 4, 'high')", [voice, space!.id]);
+    await conn.query("INSERT INTO `VoiceParticipant` (channelId, userId, sid) VALUES (?, ?, 'PA_1')", [voice, alice.id]);
+    // one connection of a person per channel
+    await expect(conn.query("INSERT INTO `VoiceParticipant` (channelId, userId, sid) VALUES (?, ?, 'PA_2')", [voice, alice.id])).rejects.toThrow();
+    expect((await rows<{ grants: number; mutedByModerator: number }>('SELECT grants, mutedByModerator FROM `VoiceParticipant`'))[0]).toMatchObject({ grants: 0, mutedByModerator: 0 });
+    await conn.query('DELETE FROM `Channel` WHERE id = ?', [voice]);
+    expect(await count('VoiceParticipant')).toBe(0);
+    await conn.query('DELETE FROM `Channel` WHERE id = ?', [old]);
+  });
+
+  it('phase 17: the copy of the change sequence on the user goes, the personal space keeps the counter', async () => {
+    const [before] = await rows<{ changeSeq: bigint }>('SELECT changeSeq FROM `Space` WHERE userId = ?', [alice.id]);
+    const users = Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `User`'))[0]!.n);
+    await apply(only('drop_user_change_seq'));
+    const cols = (await rows<{ COLUMN_NAME: string }>('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [DB, 'User'])).map((c) => c.COLUMN_NAME);
+    expect(cols).not.toContain('changeSeq');
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `User`'))[0]!.n)).toBe(users);
+    const [after] = await rows<{ changeSeq: bigint }>('SELECT changeSeq FROM `Space` WHERE userId = ?', [alice.id]);
+    expect(Number(after!.changeSeq)).toBe(Number(before!.changeSeq));
+  });
+
+  it('phase 17: the inbox gets an index that orders it newest first; notifications stay as they were', async () => {
+    const before = Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Notification`'))[0]!.n);
+    await apply(only('inbox_index'));
+    const idx = await rows<{ INDEX_NAME: string; COLUMN_NAME: string; SEQ_IN_INDEX: number }>(
+      "SELECT INDEX_NAME, COLUMN_NAME, SEQ_IN_INDEX FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'Notification' AND INDEX_NAME = 'Notification_userId_createdAt_idx' ORDER BY SEQ_IN_INDEX",
+      [DB],
+    );
+    expect(idx.map((c) => c.COLUMN_NAME)).toEqual(['userId', 'createdAt']);
+    expect(Number((await rows<{ n: bigint }>('SELECT COUNT(*) AS n FROM `Notification`'))[0]!.n)).toBe(before);
+  });
+
+  it('upgrading from the single-user release: sync returns the same data through per-space cursors, and writing goes on', async () => {
     const url = new URL(savedUrl!);
     url.pathname = `/${DB}`;
     process.env.DATABASE_URL = url.toString();
@@ -428,8 +587,12 @@ describe('migrating a database that holds data from before', () => {
       const personalSpaceId: string = login.body.user.personalSpaceId;
       expect(login.body.user.quota.used).toBeGreaterThan(4000); // media 4000 + documents
 
-      const legacy = await t.http.get('/api/sync/changes').query({ since: 0 }).set(auth);
-      expect(legacy.status).toBe(200);
+      const first = await t.http
+        .get('/api/sync/changes')
+        .query({ cursors: JSON.stringify({ [personalSpaceId]: 0 }) })
+        .set(auth);
+      expect(first.status).toBe(200);
+      const legacy = { body: first.body.spaces[personalSpaceId] };
       expect(legacy.body.cursor).toBe(alice.seq);
       expect(legacy.body.notebooks.map((n: { id: string }) => n.id).sort()).toEqual(
         [ids.nb, ids.nbTrash].sort(),
@@ -459,6 +622,13 @@ describe('migrating a database that holds data from before', () => {
         notebooks: legacy.body.notebooks,
         categories: legacy.body.categories,
         pages: legacy.body.pages,
+        // phase 12: the board tables are part of every space's answer (empty here)
+        boards: [],
+        columns: [],
+        tasks: [],
+        labels: [],
+        // phase 13: and so are the events the person may see (none here)
+        events: [],
       });
 
       // the content still opens, and writing continues the old sequence without a gap
@@ -466,26 +636,33 @@ describe('migrating a database that holds data from before', () => {
       expect(page.status).toBe(200);
       expect(JSON.stringify(page.body.content)).toContain('café com leite');
       const save = await t.http
-        .put(`/api/pages/${ids.page}/content`)
+        .post(`/api/pages/${ids.page}/snapshots/replace`)
         .set(auth)
         .send({ content: JSON.parse(doc('after migration')), baseVersion: 3 });
       expect(save.status).toBe(200);
-      const next = await t.http.get('/api/sync/changes').query({ since: alice.seq }).set(auth);
-      expect(next.body.cursor).toBe(alice.seq + 1);
-      expect(next.body.pages.map((p: { id: string }) => p.id)).toEqual([ids.page]);
+      const next = (
+        await t.http
+          .get('/api/sync/changes')
+          .query({ cursors: JSON.stringify({ [personalSpaceId]: alice.seq }) })
+          .set(auth)
+      ).body.spaces[personalSpaceId];
+      expect(next.cursor).toBe(alice.seq + 1);
+      expect(next.pages.map((p: { id: string }) => p.id)).toEqual([ids.page]);
       expect(
-        Number((await t.prisma.user.findUniqueOrThrow({ where: { id: alice.id } })).changeSeq),
-      ).toBe(alice.seq + 1); // mirrored for old clients
+        Number((await t.prisma.space.findUniqueOrThrow({ where: { id: personalSpaceId } })).changeSeq),
+      ).toBe(alice.seq + 1);
 
       // nothing leaks between the two accounts
       const bobLogin = await t.http
         .post('/api/auth/login')
         .send({ email: bob.email, password: GOOD_PASSWORD });
+      const bobSpace: string = bobLogin.body.user.personalSpaceId;
       const bobChanges = await t.http
         .get('/api/sync/changes')
-        .query({ since: 0 })
+        .query({ cursors: JSON.stringify({ [bobSpace]: 0, [personalSpaceId]: 0 }) })
         .set({ Authorization: `Bearer ${bobLogin.body.accessToken}` });
-      expect(bobChanges.body.notebooks.map((n: { id: string }) => n.id)).toEqual([ids.bobNb]);
+      expect(bobChanges.body.spaces[bobSpace].notebooks.map((n: { id: string }) => n.id)).toEqual([ids.bobNb]);
+      expect(bobChanges.body.revokedSpaces).toEqual([personalSpaceId]);
     } finally {
       await t.close();
     }

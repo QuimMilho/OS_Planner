@@ -1,10 +1,8 @@
 import { Component, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { SwUpdate, type VersionReadyEvent } from '@angular/service-worker';
-import { filter } from 'rxjs';
+import { AppUpdates } from './core/app-updates';
 import { AuthStore } from './core/auth-store';
 import { Language } from './core/i18n';
-import { Notify } from './core/notify';
 import { Platform } from './core/platform';
 import { Session } from './core/session';
 import { ThemeService } from './core/theme';
@@ -21,7 +19,6 @@ export class App {
     inject(Session);
     const auth = inject(AuthStore);
     const lang = inject(Language);
-    const notify = inject(Notify);
 
     // The signed-in user's language wins over the browser's.
     effect(() => {
@@ -36,15 +33,7 @@ export class App {
       else if (command === 'search') void router.navigate(['/app/search']);
     });
 
-    // A new version was downloaded in the background: offer to switch to it.
-    const updates = inject(SwUpdate, { optional: true });
-    if (updates?.isEnabled) {
-      updates.versionUpdates
-        .pipe(filter((e): e is VersionReadyEvent => e.type === 'VERSION_READY'))
-        .subscribe(() => notify.info('app.updateReady', {}, { key: 'app.reload', run: () => location.reload() }));
-      const check = () => void updates.checkForUpdate().catch(() => undefined);
-      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
-      setInterval(check, 30 * 60_000);
-    }
+    // New versions are downloaded in the background and switched to when nothing would be lost.
+    inject(AppUpdates);
   }
 }

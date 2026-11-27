@@ -385,52 +385,8 @@ describe('working offline', () => {
     void email;
     await close();
   });
-
-  test('two devices edit the same page offline: nothing is lost, the second one gets a conflict copy', T, async () => {
-    const a = await device();
-    const { email } = await register(a.page, base);
-    await createNotebookAndPage(a.page, 'Shared');
-    await writePage(a.page, 'Meeting', 'Original text.');
-    await waitSaved(a.page);
-
-    const b = await device();
-    await login(b.page, base, email);
-    await treeItem(b.page, 'Meeting').click();
-    await b.page.waitForFunction(() => /Original text\./.test(document.querySelector('.ProseMirror')?.textContent ?? ''), null, { timeout: 30_000 });
-
-    // both go offline and edit
-    await a.ctx.setOffline(true);
-    await b.ctx.setOffline(true);
-    await endOfDoc(a.page);
-    await a.page.keyboard.type(' Edit from A.');
-    await endOfDoc(b.page);
-    await b.page.keyboard.type(' Edit from B.');
-    await a.page.waitForTimeout(1500);
-    await b.page.waitForTimeout(1500);
-
-    // A reconnects first and wins
-    await a.ctx.setOffline(false);
-    await a.page.waitForFunction(async () => {
-      const r = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'X-Requested-With': 'os_planner' } });
-      const { accessToken } = await r.json();
-      const pages = await (await fetch('/api/pages', { headers: { Authorization: `Bearer ${accessToken}` } })).json();
-      const full = await (await fetch(`/api/pages/${pages[0].id}`, { headers: { Authorization: `Bearer ${accessToken}` } })).json();
-      return JSON.stringify(full.content).includes('Edit from A.');
-    }, null, { timeout: 60_000, polling: 1500 });
-
-    // B reconnects: its save is refused (the page moved on), so its text becomes a separate page
-    await b.ctx.setOffline(false);
-    await b.page.waitForSelector('app-tree-category .row.page:has-text("conflict copy")', { timeout: 60_000 });
-    await b.page.waitForSelector('text=changed on another device');
-
-    await b.page.locator('app-tree-category .row.page:has-text("conflict copy") a').click();
-    await b.page.waitForFunction(() => /Edit from B\./.test(document.querySelector('.ProseMirror')?.textContent ?? ''));
-    await treeItem(b.page, 'Meeting').first().click();
-    await b.page.waitForFunction(() => /Edit from A\./.test(document.querySelector('.ProseMirror')?.textContent ?? ''), null, { timeout: 30_000 });
-    assert.equal(await b.page.locator('.ProseMirror', { hasText: 'Edit from B.' }).count(), 0, 'the original page now shows A, not B');
-    await a.close();
-    await b.close();
-  });
+  // Two devices editing the same page offline used to end in a "conflict copy". Pages are co-edited now: both edits are merged and
+  // no copy is made (see collab.e2e.mjs, "both edit the same paragraph offline").
 });
 
 describe('exporting', () => {

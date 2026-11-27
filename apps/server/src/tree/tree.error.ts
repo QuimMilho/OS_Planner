@@ -16,7 +16,7 @@ import type { SyncErrorCode } from '@os-planner/shared';
  */
 export class TreeError extends Error {
   constructor(
-    readonly code: Exclude<SyncErrorCode, 'internal' | 'quota_exceeded'>,
+    readonly code: Exclude<SyncErrorCode, 'internal' | 'quota_exceeded' | 'conflict' | 'target_deleted' | 'deleted_but_changed'>,
     message?: string,
   ) {
     super(message ?? code);
@@ -28,6 +28,8 @@ export const forbidden = () => new TreeError('forbidden');
 export const parentDeleted = () => new TreeError('parent_deleted');
 export const invalid = (message: string) => new TreeError('invalid', message);
 export const idTaken = () => new TreeError('id_taken');
+/** The column a task was moved into is full. */
+export const wipLimit = () => new TreeError('wip_limit');
 
 function toHttp(err: TreeError): HttpException {
   switch (err.code) {
@@ -37,6 +39,7 @@ function toHttp(err: TreeError): HttpException {
       return new ForbiddenException('forbidden');
     case 'parent_deleted':
     case 'id_taken':
+    case 'wip_limit':
       return new ConflictException(err.code);
     case 'invalid':
       return new UnprocessableEntityException(err.message);

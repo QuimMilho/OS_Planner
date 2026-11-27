@@ -34,6 +34,8 @@ export function channelRowOf(dm: DmDto, name: string): ChannelRow {
     nsfw: false,
     redactPreviews: false,
     slowmodeSeconds: 0,
+    userLimit: null,
+    quality: null,
     archived: false,
     permissions: DM_PERMISSIONS,
     createdAt: dm.createdAt,

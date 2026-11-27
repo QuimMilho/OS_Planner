@@ -21,6 +21,7 @@ import {
   permissionsToString,
 } from '@os-planner/shared/lite';
 import { AuthStore, type ApiProblem } from '../../core/auth-store';
+import { AppUpdates } from '../../core/app-updates';
 import { Notify } from '../../core/notify';
 import { RolesStore, type RoleScope } from '../../data/roles-store';
 import { Dialogs } from '../../shared/dialogs';
@@ -481,6 +482,7 @@ export class RolesEditor {
   });
 
   constructor() {
+    inject(AppUpdates).holdWhile(this.dirty); // an update's reload would throw the unsaved changes away
     effect(() => {
       const s = this.scope();
       untracked(() => void this.load(s));

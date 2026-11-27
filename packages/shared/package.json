@@ -1,6 +1,6 @@
 {
   "name": "@os-planner/shared",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Document schema, validation, Markdown interop, print renderer and DTOs shared by server and web",
   "type": "module",
@@ -22,6 +22,26 @@
       "types": "./dist/chat.d.ts",
       "import": "./dist/chat.js",
       "require": "./dist/chat.cjs"
+    },
+    "./boards": {
+      "types": "./dist/boards.d.ts",
+      "import": "./dist/boards.js",
+      "require": "./dist/boards.cjs"
+    },
+    "./calendar": {
+      "types": "./dist/calendar.d.ts",
+      "import": "./dist/calendar.js",
+      "require": "./dist/calendar.cjs"
+    },
+    "./ics": {
+      "types": "./dist/ics.d.ts",
+      "import": "./dist/ics.js",
+      "require": "./dist/ics.cjs"
+    },
+    "./collab": {
+      "types": "./dist/collab.d.ts",
+      "import": "./dist/collab.js",
+      "require": "./dist/collab.cjs"
     }
   },
   "files": [
@@ -51,10 +71,12 @@
     "@tiptap/markdown": "^3.35.0",
     "@tiptap/pm": "^3.35.0",
     "@tiptap/starter-kit": "^3.35.0",
+    "@tiptap/y-tiptap": "^3.3.1",
     "fractional-indexing": "^4.0.0",
     "happy-dom": "^21.0.4",
     "katex": "0.18.10",
     "lowlight": "^3.3.0",
+    "yjs": "^13.6.33",
     "zod": "^4.6.7"
   },
   "devDependencies": {

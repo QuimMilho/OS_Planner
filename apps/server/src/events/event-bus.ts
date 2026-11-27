@@ -30,6 +30,10 @@ export interface DomainEventMap {
   'presence.mode': { userId: string };
   /** A person leaves or gains a team: their socket must join or leave its rooms. */
   'membership.changed': { userId: string };
+  /** A page's document was stored from its co-editing session (the stored JSON, text, size and version changed). */
+  'page.updated': { pageId: string; spaceId: string; version: number };
+  /** A voice channel was archived, changed or deleted (the media server must hear about it). */
+  'channel.changed': { channelId: string; deleted: boolean };
   /** Anything else a feature wants delivered to rooms: `name` goes to every room in `rooms`. */
   'room.event': { rooms: string[]; name: string; payload: unknown; except?: string[] };
 }

@@ -19,6 +19,15 @@ const ICONS: Record<string, string> = {
   mention_here: 'campaign',
   reply: 'reply',
   dm: 'chat',
+  task_assigned: 'assignment_ind',
+  task_due: 'event',
+  task_comment: 'chat_bubble_outline',
+  meeting_invite: 'event_available',
+  meeting_reminder: 'alarm',
+  meeting_updated: 'edit_calendar',
+  meeting_cancelled: 'event_busy',
+  meeting_response: 'how_to_reg',
+  calendar_sync_off: 'sync_problem',
 };
 
 /**
@@ -44,6 +53,7 @@ const ICONS: Record<string, string> = {
         }}</span>
       }
     </button>
+    <span class="sr-only" aria-live="polite" aria-atomic="true" data-live-notifications>{{ announcement() }}</span>
     @if (store.panelOpen()) {
       <div class="backdrop" (click)="store.panelOpen.set(false)"></div>
       <section
@@ -304,6 +314,11 @@ export class Bell {
   private readonly router = inject(Router);
   private readonly lang = inject(Language);
   protected readonly filter = signal<'all' | 'mentions'>('all');
+  /** What a screen reader says when notifications arrive (phase 17): politely, and at most every ten seconds. */
+  protected readonly announcement = signal('');
+  private lastUnread: number | null = null;
+  private announceTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastAnnounced = 0;
 
   protected readonly groups = computed<Group[]>(() => {
     const out: Group[] = [];
@@ -330,6 +345,10 @@ export class Bell {
   });
 
   constructor() {
+    effect(() => {
+      const unread = this.store.count().unread;
+      untracked(() => this.announceNew(unread));
+    });
     // Opening the panel loads the inbox; so does a change of filter.
     effect(() => {
       if (this.store.panelOpen())
@@ -339,6 +358,18 @@ export class Bell {
 
   protected toggle(): void {
     this.store.panelOpen.set(!this.store.panelOpen());
+  }
+
+  private announceNew(unread: number): void {
+    const before = this.lastUnread;
+    this.lastUnread = unread;
+    if (before === null || unread <= before) return; // the first count, or notifications read: nothing to say
+    clearTimeout(this.announceTimer);
+    const wait = Math.max(0, this.lastAnnounced + 10_000 - Date.now());
+    this.announceTimer = setTimeout(() => {
+      this.lastAnnounced = Date.now();
+      this.announcement.set(this.lang.t('inbox.announce', { n: this.lastUnread ?? unread }));
+    }, wait);
   }
 
   protected setFilter(f: 'all' | 'mentions'): void {
@@ -353,7 +384,10 @@ export class Bell {
   protected async open(n: NotificationDto): Promise<void> {
     this.store.panelOpen.set(false);
     void this.store.markRead([n.id]);
-    if (n.targetKind === 'dm' && n.targetId) await this.router.navigate(['/app/dm', n.targetId]);
+    if (n.targetKind === 'task' && n.targetId) await this.router.navigate(['/app/task', n.targetId]);
+    else if (n.targetKind === 'event' && n.targetId) await this.router.navigate(['/app/calendar'], { queryParams: { event: n.targetId } });
+    else if (n.targetKind === 'ext_calendar') await this.router.navigate(['/app/settings'], { fragment: 'calendar-sync' });
+    else if (n.targetKind === 'dm' && n.targetId) await this.router.navigate(['/app/dm', n.targetId]);
     else if (n.channelId)
       await this.router.navigate(['/app/c', n.channelId], {
         queryParams: n.messageId ? { m: n.messageId } : {},

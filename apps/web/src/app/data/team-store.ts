@@ -207,8 +207,13 @@ export class TeamStore {
     const db = this.dbs.db;
     await db.transaction(
       'rw',
-      [db.notebooks, db.categories, db.pages, db.contents, db.meta],
+      [db.notebooks, db.categories, db.pages, db.contents, db.meta, db.boards, db.columns, db.tasks, db.labels, db.events],
       async () => {
+        await db.tasks.where('spaceId').anyOf(spaceIds).delete();
+        await db.events.where('spaceId').anyOf(spaceIds).delete();
+        await db.columns.where('spaceId').anyOf(spaceIds).delete();
+        await db.boards.where('spaceId').anyOf(spaceIds).delete();
+        await db.labels.where('spaceId').anyOf(spaceIds).delete();
         const pageIds = (await db.pages.where('spaceId').anyOf(spaceIds).primaryKeys()) as string[];
         await db.contents.bulkDelete(pageIds);
         await db.pages.where('spaceId').anyOf(spaceIds).delete();

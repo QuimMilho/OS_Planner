@@ -87,3 +87,34 @@ Merges that store bytes (task text, attachments, event text) charge the space at
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Merge rules** are one pure module, `packages/shared/src/dto/merge.ts` (in the main *and* the `lite` entry, no dependencies, so the server and the web run the same code): `mergeUpdate` (per field: applied / merged / rejected / `target_deleted`),
+  `mergeDelete` (`apply` / `already` / `deleted_but_changed`), `baseOf`, `nextFieldSeq`, `patchFromFields`. Differences from the plan: the **merge fields are groups** where the values must stay consistent — a task's `dates` (start, due, all day),
+  `place` (column, position, board; a move is one field), an event's `timing` (start, end, all day, zone, repeat rule) — and a task's `completed`; the plan listed them as single fields. `fieldSeq` is a sparse JSON (`NULL` = nothing changed since it was
+  made = every field at 0), so the migration (`field_seq`: `Notebook`, `Category`, `Page`, `Task`, `Event`) needs no backfill and is forward-only. Boards, columns, labels, `ChecklistItem` (it travels inside the task's `checklist` field),
+  `EventException` and attendee answers are **not** merged field by field (no offline ops exist for the first three; occurrence changes and RSVPs keep "later request wins"; see the README "Known limitations").
+- **Where the decision is taken.** `apps/server/src/common/merge-scope.ts`: `SyncService.batch` runs each op inside an `AsyncLocalStorage` scope (`base` of the op, what this push already wrote, the result). The services call `guardUpdate`/`guardDelete`
+  **inside their own write transaction, after taking the space lock** (`ChangeSeqService.next`), so deciding and writing cannot be separated by another writer (a test pushes two batches at once). Outside a scope (REST, collaboration) the guards allow everything
+  and only keep `fieldSeq` up to date, so *every* change path that writes a tracked field must go through them — **a new writer of `title`/`name`/… on these five tables must call the guard (or bump `fieldSeq`) or later offline pushes will not notice it**.
+  A change of which nothing may be applied throws `MergeRejected`, the transaction rolls back (rows *and* the `Space.changeSeq` counter are as before), and the result is `ok:false` with `conflict`, `target_deleted` or `deleted_but_changed`
+  (+ `rejected` = per field `{mine, server, serverSeq}` and `entity` = the row as it is online). Some fields applied: `ok:true, status:'merged'`. Ops of one push never conflict with each other (`own`), and the client rebases the ops still queued
+  after each answer (`Sync.rebase`). An update that finds the entity deleted or purged, or not visible, answers `target_deleted` for ops that carry `base` (the same answer for all three: nothing leaks); old clients (no `base`) get the old answers.
+- **Delete vs edit** looks at the entity's own fields only: a notebook deleted offline does not check pages edited in it online. A recurring event's `this`/`following` scopes are not merged (they only check the event exists).
+- **Client.** `Outbox.enqueue` adds `base` (from the cached row's `fieldSeq`) to every update, move, delete and cancel — stores did not change — and keeps the *first* base of a folded burst. `Sync.pushOperations` handles the answers: merged / refused
+  ops are written to the Local history (`HistoryStore.record`), the local copy is refreshed from the answer's `entity` (events and tasks are read again), a refused delete or an edit of something gone is undone locally, and one toast per push tells how many
+  changes were not applied (`sync.rejected`, with a link to the history). Dexie v9: `localHistory` has the full shape of the plan (`at, device, entity, entityId, entityTitle, spaceId, op, fieldsRejected, patch, snapshot, reason, resolved, expiresAt, bytes`)
+  and the phase 11 rows were upgraded to it; the pre-merge copy of a page (`pageId`, `state`) is an entry of reason `pre_merge`.
+- **History screen** `/app/history` (`features/history/history-page.ts`), the header button (badge = entries that need a decision; the page copies kept before a merge are listed but do not count, they are a safety net and exist after *every* offline edit of
+  a page), *Show my changes* in the task, page and event menus (`?entity=<id>`). Replace = the store's own update (task, event, notebook, category, page title/place, or the delete again) with a fresh base, plus an entry for what it overwrote;
+  for a page copy it is `POST /api/pages/:id/snapshots/replace` (EDIT_PAGES; saves the page first). Add as new: task (same column, `(my version)`, checklist items get new ids), event, notebook, category, page (with the text kept). Bulk actions act on what is shown.
+  **Settings → Offline** (`features/history/offline-settings.ts`): days (1–90), entries and size used, clear, which spaces keep page *texts* on the device (`OfflineScope`: notebooks, boards and the calendar are always kept; a space left out is fetched on open),
+  and the browser's storage estimate with a warning. Retention (`expiresAt`), 5000 entries and 50 MB are enforced by `HistoryStore.purge` after every sync cycle and every new entry; a lost space purges its entries and tells the person (`sync.spaceRevoked`).
+- **The initial bundle** went over the 2.2 MB limit with this phase's texts, so the **Portuguese texts are now a lazy chunk** (`InlineTranslationLoader`, preloaded by an app initializer for the active language; the service worker prefetches every chunk):
+  2.15 MB of 2.2 MB. (The plan had this for phase 17.)
+- **Not done:** an offline copy of *followed* calendars (they are fetched by the server and still show only online); a manual diff of text blocks (out of scope); the per-device "which spaces to keep" does not delete what is already stored for a space that is left out
+  (it only stops downloading page texts). Acceptance 8 (create/edit/delete across boards, calendar and notebooks offline) is one e2e covering create and edit in all three and a delete of a task is covered by the server tests, not by the browser.
+- **Tests.** shared +22 (`dto/merge.test.ts`), server +21 (`sync-merge.test.ts`) +1 (migration), web e2e +6 (`offline-merge.e2e.mjs`) and an assertion in `collab.e2e.mjs`.

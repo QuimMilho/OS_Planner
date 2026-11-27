@@ -53,8 +53,9 @@ VOLUME /data
 USER node
 EXPOSE 3000
 
+# Healthy = the database, the storage folder and the realtime socket server answer (?strict=1); mail or Redis trouble is reported, not fatal.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD node -e "fetch('http://localhost:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://localhost:'+process.env.PORT+'/api/health?strict=1').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Apply database migrations, then start. (prisma.config.ts lives in apps/server.)
 WORKDIR /app/apps/server

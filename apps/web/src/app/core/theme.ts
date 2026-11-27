@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import type { Theme } from '@os-planner/shared';
-import { THEMES } from '@os-planner/shared';
+import { THEMES } from '@os-planner/shared/lite';
 import { AuthStore, isUnreachable } from './auth-store';
 
 /** What the last chosen theme is remembered as on this device (also read by `public/theme-boot.js` before the first paint). */

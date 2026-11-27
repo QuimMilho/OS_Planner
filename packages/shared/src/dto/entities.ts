@@ -13,6 +13,8 @@ export interface NotebookDto {
   color: string | null;
   position: string;
   seq: number;
+  /** Merge field → seq at which it last changed (phase 15); absent for an entity nobody changed since it was made. */
+  fieldSeq?: Record<string, number>;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -26,6 +28,8 @@ export interface CategoryDto {
   name: string;
   position: string;
   seq: number;
+  /** Merge field → seq at which it last changed (phase 15); absent for an entity nobody changed since it was made. */
+  fieldSeq?: Record<string, number>;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -41,6 +45,8 @@ export interface PageMetaDto {
   position: string;
   version: number;
   seq: number;
+  /** Merge field → seq at which it last changed (phase 15); absent for an entity nobody changed since it was made. */
+  fieldSeq?: Record<string, number>;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -92,23 +98,28 @@ export const createPageSchema = z.object({
 });
 export type CreatePageInput = z.infer<typeof createPageSchema>;
 
-/** Rename and/or move (change category) and/or reorder. Content goes through putContentSchema. */
+/** Rename and/or move (change category) and/or reorder. The text itself is a co-edited document (phase 11). */
 export const updatePageSchema = z
   .object({ title: titleSchema, categoryId: idSchema, position: positionSchema })
   .partial();
 export type UpdatePageInput = z.infer<typeof updatePageSchema>;
 
-export const putContentSchema = z.object({
+/**
+ * `POST /pages/:id/snapshots/replace`: the page's text becomes this document, as one change on top of what is there (the people
+ * in the page see it appear). What a device kept and the server does not have: the Local history's "Replace", a copy it made.
+ */
+export const replaceContentSchema = z.object({
   content: z.custom<JSONContent>((v) => !!v && typeof v === 'object', 'content must be an object'),
-  /** The version the client last saw; the server rejects the write with 409 if it moved on. */
-  baseVersion: z.number().int().min(0),
+  /** The version the device last saw; with it, a page that changed since answers 409 (with the server's version and text). */
+  baseVersion: z.number().int().min(0).optional(),
 });
-export type PutContentInput = z.infer<typeof putContentSchema>;
+export type ReplaceContentInput = z.infer<typeof replaceContentSchema>;
 
-export interface PutContentOk {
+export interface ReplaceContentOk {
+  ok: true;
   version: number;
 }
-export interface PutContentConflict {
+export interface ReplaceContentConflict {
   version: number;
   content: JSONContent;
 }

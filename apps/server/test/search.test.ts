@@ -67,7 +67,7 @@ describe('GET /api/search (full-text, MySQL)', () => {
   });
 
   const write = async (pageId: string, text: string) => {
-    const res = await t.http.put(`/api/pages/${pageId}/content`).set(me.auth).send({
+    const res = await t.http.post(`/api/pages/${pageId}/snapshots/replace`).set(me.auth).send({
       content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
       baseVersion: 0,
     });
@@ -132,7 +132,7 @@ describe('GET /api/search (full-text, MySQL)', () => {
   it('finds words that only appear inside math, diagrams and chart labels', async () => {
     const cat = await b.category((await b.notebook()).id);
     const page = await b.page(cat.id, 'Mixed');
-    const res = await t.http.put(`/api/pages/${page.id}/content`).set(me.auth).send({
+    const res = await t.http.post(`/api/pages/${page.id}/snapshots/replace`).set(me.auth).send({
       baseVersion: 0,
       content: {
         type: 'doc',

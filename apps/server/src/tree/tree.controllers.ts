@@ -1,11 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   createCategorySchema,
   createNotebookSchema,
   createPageSchema,
   idSchema,
   moveNotebookSchema,
-  putContentSchema,
   syncBatchSchema,
   syncChangesQuerySchema,
   updateCategorySchema,
@@ -19,8 +18,6 @@ import {
   type NotebookDto,
   type PageDto,
   type PageMetaDto,
-  type PutContentInput,
-  type PutContentOk,
   type SyncBatchInput,
   type SyncBatchResponse,
   type SyncChangesDto,
@@ -34,6 +31,7 @@ import { CategoriesService } from './categories.service.js';
 import { NotebooksService } from './notebooks.service.js';
 import { PagesService } from './pages.service.js';
 import { SyncService } from './sync.service.js';
+import { Authz } from '../common/authz.js';
 
 const Id = () => Param('id', { schema: idSchema });
 
@@ -42,22 +40,26 @@ export class NotebooksController {
   constructor(private readonly notebooks: NotebooksService) {}
 
   /** The person's own notebooks (or those of another space they can see, with ?spaceId=). */
+  @Authz({ scope: 'self', note: 'with spaceId: a space the person can see' })
   @Get()
   list(@CurrentUser() u: AuthUser, @Query({ schema: z.object({ spaceId: idSchema.optional() }) }) q: { spaceId?: string }): Promise<NotebookDto[]> {
     return this.notebooks.list(u.id, q.spaceId);
   }
 
+  @Authz({ scope: 'notebook' })
   @Get(':id/tree')
   tree(@CurrentUser() u: AuthUser, @Id() id: string) {
     return this.notebooks.tree(u.id, id);
   }
 
   /** REST callers get a default "General" category; sync clients create their own. */
+  @Authz({ scope: 'self', note: 'in another space (spaceId): CREATE_NOTEBOOKS there' })
   @Post()
   create(@CurrentUser() u: AuthUser, @Body({ schema: createNotebookSchema }) body: CreateNotebookInput): Promise<NotebookDto> {
     return this.notebooks.create(u.id, body, true);
   }
 
+  @Authz({ scope: 'notebook', needs: ['MANAGE_NOTEBOOKS'] })
   @Patch(':id')
   update(
     @CurrentUser() u: AuthUser,
@@ -68,12 +70,14 @@ export class NotebooksController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'notebook', needs: ['MANAGE_NOTEBOOKS'] })
   @Delete(':id')
   remove(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     return this.notebooks.remove(u.id, id);
   }
 
   @HttpCode(200)
+  @Authz({ scope: 'notebook', needs: ['MANAGE_NOTEBOOKS'] })
   @Post(':id/restore')
   restore(@CurrentUser() u: AuthUser, @Id() id: string): Promise<NotebookDto> {
     return this.notebooks.restore(u.id, id);
@@ -81,6 +85,7 @@ export class NotebooksController {
 
   /** To another space (personal, team or project): see NotebooksService.move. */
   @HttpCode(200)
+  @Authz({ scope: 'notebook', needs: ['MANAGE_NOTEBOOKS'], note: 'CREATE_NOTEBOOKS in the destination' })
   @Post(':id/move')
   move(@CurrentUser() u: AuthUser, @Id() id: string, @Body({ schema: moveNotebookSchema }) body: MoveNotebookInput): Promise<NotebookDto> {
     return this.notebooks.move(u.id, id, body.spaceId);
@@ -91,11 +96,13 @@ export class NotebooksController {
 export class CategoriesController {
   constructor(private readonly categories: CategoriesService) {}
 
+  @Authz({ scope: 'notebook', needs: ['EDIT_PAGES'], note: 'the notebook is in the body' })
   @Post()
   create(@CurrentUser() u: AuthUser, @Body({ schema: createCategorySchema }) body: CreateCategoryInput): Promise<CategoryDto> {
     return this.categories.create(u.id, body);
   }
 
+  @Authz({ scope: 'notebook', needs: ['EDIT_PAGES'] })
   @Patch(':id')
   update(
     @CurrentUser() u: AuthUser,
@@ -106,12 +113,14 @@ export class CategoriesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'notebook', needs: ['DELETE_PAGES'] })
   @Delete(':id')
   remove(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     return this.categories.remove(u.id, id);
   }
 
   @HttpCode(200)
+  @Authz({ scope: 'notebook', needs: ['DELETE_PAGES'] })
   @Post(':id/restore')
   restore(@CurrentUser() u: AuthUser, @Id() id: string): Promise<CategoryDto> {
     return this.categories.restore(u.id, id);
@@ -124,6 +133,7 @@ const pageListQuerySchema = z.object({ categoryId: idSchema.optional(), notebook
 export class PagesController {
   constructor(private readonly pages: PagesService) {}
 
+  @Authz({ scope: 'notebook', note: 'the pages of the notebook or category in the query' })
   @Get()
   list(
     @CurrentUser() u: AuthUser,
@@ -132,16 +142,19 @@ export class PagesController {
     return this.pages.list(u.id, q);
   }
 
+  @Authz({ scope: 'notebook' })
   @Get(':id')
   get(@CurrentUser() u: AuthUser, @Id() id: string): Promise<PageDto> {
     return this.pages.get(u.id, id);
   }
 
+  @Authz({ scope: 'notebook', needs: ['EDIT_PAGES'], note: 'the category is in the body' })
   @Post()
   create(@CurrentUser() u: AuthUser, @Body({ schema: createPageSchema }) body: CreatePageInput): Promise<PageMetaDto> {
     return this.pages.create(u.id, body);
   }
 
+  @Authz({ scope: 'notebook', needs: ['EDIT_PAGES'] })
   @Patch(':id')
   update(
     @CurrentUser() u: AuthUser,
@@ -151,22 +164,15 @@ export class PagesController {
     return this.pages.update(u.id, id, body);
   }
 
-  @Put(':id/content')
-  putContent(
-    @CurrentUser() u: AuthUser,
-    @Id() id: string,
-    @Body({ schema: putContentSchema }) body: PutContentInput,
-  ): Promise<PutContentOk> {
-    return this.pages.putContent(u.id, id, body);
-  }
-
   @HttpCode(204)
+  @Authz({ scope: 'notebook', needs: ['DELETE_PAGES'] })
   @Delete(':id')
   remove(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     return this.pages.remove(u.id, id);
   }
 
   @HttpCode(200)
+  @Authz({ scope: 'notebook', needs: ['DELETE_PAGES'] })
   @Post(':id/restore')
   restore(@CurrentUser() u: AuthUser, @Id() id: string): Promise<PageMetaDto> {
     return this.pages.restore(u.id, id);
@@ -177,6 +183,7 @@ export class PagesController {
 export class SyncController {
   constructor(private readonly sync: SyncService) {}
 
+  @Authz({ scope: 'self' })
   @Get('changes')
   changes(
     @CurrentUser() u: AuthUser,
@@ -186,6 +193,7 @@ export class SyncController {
   }
 
   @HttpCode(200)
+  @Authz({ scope: 'self', note: 'each operation is checked like its REST route' })
   @Post('batch')
   batch(@CurrentUser() u: AuthUser, @Body({ schema: syncBatchSchema }) body: SyncBatchInput): Promise<SyncBatchResponse> {
     return this.sync.batch(u.id, body.ops);
@@ -197,6 +205,7 @@ export class SpacesController {
   constructor(private readonly notebooks: NotebooksService) {}
 
   /** Notebooks of a personal, team or project space the person can see (404 for anything else). */
+  @Authz({ scope: 'notebook', note: 'the notebooks of a space the person can see' })
   @Get(':id/notebooks')
   list(@CurrentUser() u: AuthUser, @Id() id: string): Promise<NotebookDto[]> {
     return this.notebooks.list(u.id, id);

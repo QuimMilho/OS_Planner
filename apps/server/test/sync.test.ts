@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SYNC_PAGE } from '../src/tree/sync.service.js';
 import { createTestApp, type TestApp } from './app.js';
-import { builders, signup, uuid, type Account } from './helpers.js';
+import { builders, personalSpaceId, signup, uuid, type Account } from './helpers.js';
 
 let t: TestApp;
 let me: Account;
@@ -30,11 +30,15 @@ interface Changes {
   pages: { id: string; seq: number; deletedAt: string | null; content?: unknown; title: string }[];
 }
 
+/** What changed in the person's own space after `since` (one cursor of the per-space cursors every client sends). */
 const changes = async (since: number, who = me): Promise<Changes> => {
-  const res = await t.http.get(`/api/sync/changes?since=${since}`).set(who.auth);
+  const space = await personalSpaceId(t, who.id);
+  const res = await t.http.get('/api/sync/changes').query({ cursors: JSON.stringify({ [space]: since }) }).set(who.auth);
   expect(res.status).toBe(200);
-  return res.body;
+  return res.body.spaces[space];
 };
+const spaceSeq = async (who = me): Promise<number> =>
+  Number((await t.prisma.space.findUniqueOrThrow({ where: { id: await personalSpaceId(t, who.id) } })).changeSeq);
 
 /** Follows `hasMore` like the client does and returns everything delivered. */
 async function pullAll(since = 0) {
@@ -69,8 +73,7 @@ describe('GET /sync/changes', () => {
     expect(c.pages.map((p) => p.id).sort()).toEqual([pg.id, gone.id].sort());
     expect(c.pages.find((p) => p.id === gone.id)!.deletedAt).not.toBeNull();
     for (const p of c.pages) expect(p.content).toBeUndefined();
-    const user = await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    expect(c.cursor).toBe(Number(user.changeSeq));
+    expect(c.cursor).toBe(await spaceSeq());
   });
 
   it('is incremental: only what changed after the cursor', async () => {
@@ -96,7 +99,7 @@ describe('GET /sync/changes', () => {
   it('a content save is announced so other devices know to refetch', async () => {
     const pg = await b.page((await b.category((await b.notebook()).id)).id);
     const before = (await changes(0)).cursor;
-    await t.http.put(`/api/pages/${pg.id}/content`).set(me.auth).send({
+    await t.http.post(`/api/pages/${pg.id}/snapshots/replace`).set(me.auth).send({
       content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'edited' }] }] },
       baseVersion: 0,
     });
@@ -119,9 +122,12 @@ describe('GET /sync/changes', () => {
     expect(c.notebooks).toHaveLength(0);
   });
 
-  it('rejects a malformed cursor', async () => {
-    expect((await t.http.get('/api/sync/changes?since=-1').set(me.auth)).status).toBe(400);
-    expect((await t.http.get('/api/sync/changes?since=abc').set(me.auth)).status).toBe(400);
+  it('rejects a malformed cursor, and the single `since` cursor of old clients (removed in phase 17)', async () => {
+    const space = await personalSpaceId(t, me.id);
+    expect((await t.http.get('/api/sync/changes').query({ cursors: JSON.stringify({ [space]: -1 }) }).set(me.auth)).status).toBe(400);
+    expect((await t.http.get('/api/sync/changes').query({ cursors: '{"x": 1}' }).set(me.auth)).status).toBe(400);
+    expect((await t.http.get('/api/sync/changes').query({ cursors: 'not json' }).set(me.auth)).status).toBe(400);
+    expect((await t.http.get('/api/sync/changes?since=0').set(me.auth)).status).toBe(400);
   });
 
   describe('pagination', () => {
@@ -160,7 +166,7 @@ describe('GET /sync/changes', () => {
 describe('change sequence under concurrency', () => {
   it('gives parallel writers distinct, gap-free, ordered seq values', async () => {
     const cat = await b.category((await b.notebook()).id);
-    const base = Number((await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } })).changeSeq);
+    const base = await spaceSeq();
 
     const N = 25;
     const results = await Promise.all(
@@ -174,8 +180,7 @@ describe('change sequence under concurrency', () => {
     expect(new Set(seqs).size).toBe(N); // distinct
     expect(seqs[0]).toBe(base + 1); // gap-free
     expect(seqs[N - 1]).toBe(base + N);
-    const user = await t.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    expect(Number(user.changeSeq)).toBe(base + N);
+    expect(await spaceSeq()).toBe(base + N);
   });
 
   it('a pull running during writes never skips a row', async () => {

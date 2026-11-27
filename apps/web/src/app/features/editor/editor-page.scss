@@ -66,6 +66,66 @@
     color: #e8590c;
   }
 }
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 0 4px;
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+  &[data-conn='live'] .dot {
+    background: #2f9e44;
+  }
+  &[data-conn='reconnecting'] .dot,
+  &[data-conn='connecting'] .dot {
+    background: #f08c00;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  &[data-conn='offline'] .dot {
+    background: #e8590c;
+  }
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.peers {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 4px;
+  .peer {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: -4px;
+    border: 2px solid var(--surface);
+    box-sizing: content-box;
+  }
+  .peers-text {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: 6px;
+  }
+  @media (max-width: 720px) {
+    .peers-text {
+      display: none;
+    }
+  }
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);

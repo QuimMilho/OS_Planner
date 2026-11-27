@@ -50,6 +50,8 @@ export const quotaOverrideSchema = z.object({
   maxMembers: z.number().int().min(0).max(1_000_000).nullable().optional(),
   maxProjects: z.number().int().min(0).max(1_000_000).nullable().optional(),
   maxFileBytes: limit,
+  /** Most people in the team's voice channels at the same time (null = the instance default VOICE_TEAM_MAX_PARTICIPANTS). */
+  maxVoiceParticipants: z.number().int().min(0).max(100_000).nullable().optional(),
   note: z.string().trim().max(500).default(''),
 });
 export type QuotaOverrideInput = z.infer<typeof quotaOverrideSchema>;
@@ -59,6 +61,7 @@ export interface QuotaOverrideDto {
   maxMembers: number | null;
   maxProjects: number | null;
   maxFileBytes: number | null;
+  maxVoiceParticipants: number | null;
   note: string;
   updatedBy: string;
   updatedAt: string;

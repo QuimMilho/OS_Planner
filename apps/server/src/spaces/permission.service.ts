@@ -13,7 +13,7 @@ import {
   type PermissionInput,
   type RoleActor,
 } from '@os-planner/shared';
-import type { Channel, Notebook, NotebookShare, Overwrite, Project, Role, Space, Team } from '../generated/prisma/client.js';
+import type { Board, Channel, Notebook, NotebookShare, Overwrite, Project, Role, Space, Team } from '../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import { forbidden, notFound } from '../tree/tree.error.js';
 
@@ -88,6 +88,15 @@ export interface NotebookAccess {
   chat: ChatSpace | null;
 }
 
+/** What a person may do on one board, and where it lives. */
+export interface BoardAccess {
+  board: Board;
+  /** Permissions on the board: the space's (with the board's overwrites). A personal board's owner holds everything. */
+  perms: bigint;
+  /** Set for boards of a team or project; null for a personal board. */
+  chat: ChatSpace | null;
+}
+
 export interface VisibleProject {
   project: Project & { space: Space | null };
   isMember: boolean;
@@ -152,7 +161,7 @@ export class PermissionService {
   }
 
   /** The overwrites of these projects (or channels, with `kind`), by target id. One query. */
-  async overwritesOf(db: Db, projectIds: readonly string[], kind: 'project' | 'channel' | 'notebook' = 'project'): Promise<Map<string, Overwrite[]>> {
+  async overwritesOf(db: Db, projectIds: readonly string[], kind: 'project' | 'channel' | 'notebook' | 'board' = 'project'): Promise<Map<string, Overwrite[]>> {
     const out = new Map<string, Overwrite[]>();
     if (!projectIds.length) return out;
     const rows = await db.overwrite.findMany({ where: { targetKind: kind, targetId: { in: [...projectIds] } } });
@@ -495,8 +504,238 @@ export class PermissionService {
     return db.notebookShare.findMany({ where: { userId, notebook: { deletedAt: null } }, include: { notebook: true } });
   }
 
+  // ---------------------------------------------------------------- boards
+
+  /** Permissions on a board of a team or project: the container's, then the board's own overwrites. */
+  boardPerms(userId: string, chat: ChatSpace, boardId: string, overwrites: ReadonlyMap<string, Overwrite[]>): bigint {
+    const levels: ChainLevel[] = [...chat.levels, { id: boardId, overwrites: overwrites.get(boardId) ?? [] }];
+    return computePermissions(this.buildInput(chat.team.team, chat.team.roles, chat.team.held, userId, levels));
+  }
+
+  /**
+   * The board, if the person can see it (VIEW_BOARDS there), with what they may do on it. Null otherwise, which every caller
+   * answers with 404: a board that is hidden looks exactly like one that does not exist. A personal board is its owner's alone.
+   * Trashed boards are included: callers decide.
+   */
+  async boardAccess(userId: string, boardId: string, db: Db = this.prisma): Promise<BoardAccess | null> {
+    const board = await db.board.findUnique({ where: { id: boardId } });
+    if (!board) return null;
+    const space = await db.space.findUnique({ where: { id: board.spaceId } });
+    if (!space) return null;
+    if (space.kind === 'personal')
+      return space.userId === userId ? { board, perms: computePermissions({ userId, ownerId: userId, everyone: 0n }), chat: null } : null;
+    const chat = await this.chatSpace(userId, space.id, db);
+    if (!chat) return null;
+    const perms = this.boardPerms(userId, chat, boardId, await this.overwritesOf(db, [boardId], 'board'));
+    return hasPermission(perms, Permission.VIEW_BOARDS) ? { board, perms, chat } : null;
+  }
+
+  /** The person's access to a board, or an error: 404 when they cannot see it, 403 when they can but lack `needed`. */
+  async requireBoard(userId: string, boardId: string, needed: bigint = Permission.VIEW_BOARDS, db: Db = this.prisma): Promise<BoardAccess> {
+    const access = await this.boardAccess(userId, boardId, db);
+    if (!access) throw notFound();
+    if (!hasPermission(access.perms, needed)) throw forbidden();
+    return access;
+  }
+
+  /**
+   * The person's access to a space's boards and labels, or an error: 404 when they cannot see boards there at all, 403 when
+   * they can but lack `needed` (MANAGE_BOARDS to create a board, MANAGE_LABELS for labels, CREATE_TASKS to add a task).
+   */
+  async requireBoardSpace(userId: string, spaceId: string, needed: bigint = Permission.VIEW_BOARDS, db: Db = this.prisma): Promise<SpaceAccess> {
+    const access = await this.spaceAccess(userId, spaceId, db);
+    if (!access || !hasPermission(access.perms, Permission.VIEW_BOARDS)) throw notFound();
+    if (!hasPermission(access.perms, needed)) throw forbidden();
+    return access;
+  }
+
+  /** The boards of a team or project space the person may not see (a board overwrite denies VIEW_BOARDS). Sync leaves these out. */
+  async hiddenBoards(userId: string, spaceId: string, db: Db = this.prisma): Promise<Set<string>> {
+    const hidden = new Set<string>();
+    const chat = await this.chatSpace(userId, spaceId, db);
+    if (!chat) return hidden;
+    const boards = await db.board.findMany({ where: { spaceId }, select: { id: true } });
+    if (!boards.length) return hidden;
+    const overwrites = await this.overwritesOf(db, boards.map((b) => b.id), 'board');
+    if (!overwrites.size) return hidden;
+    for (const b of boards) {
+      if (!overwrites.has(b.id)) continue;
+      if (!hasPermission(this.boardPerms(userId, chat, b.id, overwrites), Permission.VIEW_BOARDS)) hidden.add(b.id);
+    }
+    return hidden;
+  }
+
+  /**
+   * What the person may do on each board they can see and in each space whose boards they can see, as decimal strings. The web
+   * app keeps this next to the boards so controls show or hide without asking, also offline.
+   */
+  async boardPermissions(userId: string, db: Db = this.prisma): Promise<{ boards: Record<string, string>; spaces: Record<string, string> }> {
+    const out = { boards: {} as Record<string, string>, spaces: {} as Record<string, string> };
+    for (const [spaceId, access] of await this.boardSpaces(userId, db)) {
+      out.spaces[spaceId] = permissionsToString(access.perms);
+      const ids = (await db.board.findMany({ where: { spaceId }, select: { id: true } })).map((b) => b.id);
+      if (access.space.kind === 'personal') {
+        for (const id of ids) out.boards[id] = permissionsToString(access.perms);
+        continue;
+      }
+      const chat = await this.chatSpace(userId, spaceId, db);
+      if (!chat) continue;
+      const overwrites = await this.overwritesOf(db, ids, 'board');
+      for (const id of ids) {
+        const perms = this.boardPerms(userId, chat, id, overwrites);
+        if (hasPermission(perms, Permission.VIEW_BOARDS)) out.boards[id] = permissionsToString(perms);
+      }
+    }
+    return out;
+  }
+
+  /** Every space whose boards the person may see (VIEW_BOARDS in it), with their permissions there. */
+  boardSpaces(userId: string, db: Db = this.prisma): Promise<Map<string, SpaceAccess>> {
+    return this.notebookSpaces(userId, db, Permission.VIEW_BOARDS);
+  }
+
+  /**
+   * Which of these people can see the board (VIEW_BOARDS), worked out for all of them with a handful of queries. Used to decide
+   * who may be assigned a task or told about a comment, so it must agree with `boardAccess` for every single person.
+   */
+  async boardViewers(board: Pick<Board, 'id' | 'spaceId'>, candidateIds: readonly string[], db: Db = this.prisma): Promise<Set<string>> {
+    const viewers = new Set<string>();
+    if (!candidateIds.length) return viewers;
+    const space = await db.space.findUnique({ where: { id: board.spaceId } });
+    if (!space) return viewers;
+    if (space.kind === 'personal') {
+      if (space.userId && candidateIds.includes(space.userId)) viewers.add(space.userId);
+      return viewers;
+    }
+    let project: Project | null = null;
+    let teamId = space.teamId;
+    if (space.kind === 'project' && space.projectId) {
+      project = await db.project.findFirst({ where: { id: space.projectId, deletedAt: null } });
+      if (!project) return viewers;
+      teamId = project.teamId;
+    }
+    if (!teamId) return viewers;
+    const team = await db.team.findFirst({ where: { id: teamId, deletedAt: null } });
+    if (!team) return viewers;
+
+    const ids = [...new Set(candidateIds)];
+    const members = new Set((await db.teamMember.findMany({ where: { teamId, userId: { in: ids } }, select: { userId: true } })).map((m) => m.userId));
+    if (!members.size) return viewers;
+    const memberIds = [...members];
+    const [roles, held, projectMembers, chain, overwrites] = await Promise.all([
+      db.role.findMany({ where: { teamId } }),
+      db.memberRole.findMany({ where: { userId: { in: memberIds }, role: { teamId } }, select: { userId: true, roleId: true } }),
+      project ? db.projectMember.findMany({ where: { projectId: project.id, userId: { in: memberIds } }, select: { userId: true } }) : [],
+      project ? this.chainLevels(db, project.path) : [],
+      this.overwritesOf(db, [board.id], 'board'),
+    ]);
+    const heldBy = new Map<string, Set<string>>();
+    for (const h of held) (heldBy.get(h.userId) ?? heldBy.set(h.userId, new Set()).get(h.userId)!).add(h.roleId);
+    const inProject = new Set(projectMembers.map((m) => m.userId));
+
+    for (const userId of memberIds) {
+      const heldIds = heldBy.get(userId) ?? new Set<string>();
+      const teamPerms = computePermissions(this.buildInput(team, roles, heldIds, userId));
+      let perms = teamPerms;
+      if (project) {
+        const canManage = hasPermission(teamPerms, Permission.MANAGE_PROJECTS);
+        if (!inProject.has(userId) && !canManage) continue;
+        perms = computePermissions(this.buildInput(team, roles, heldIds, userId, chain));
+        if (!canManage && !canViewAnything(perms)) continue;
+      }
+      const levels: ChainLevel[] = [...chain, { id: board.id, overwrites: overwrites.get(board.id) ?? [] }];
+      const final = computePermissions(this.buildInput(team, roles, heldIds, userId, levels));
+      if (hasPermission(final, Permission.VIEW_BOARDS)) viewers.add(userId);
+    }
+    return viewers;
+  }
+
+  // ---------------------------------------------------------------- calendar
+
+  /** Every space whose calendar the person may see (VIEW_CALENDAR in it), with their permissions there. Personal space included. */
+  calendarSpaces(userId: string, db: Db = this.prisma): Promise<Map<string, SpaceAccess>> {
+    return this.notebookSpaces(userId, db, Permission.VIEW_CALENDAR);
+  }
+
+  /**
+   * The person's access to a space's calendar, or an error: 404 when they cannot see it at all, 403 when they can but lack `needed`
+   * (CREATE_MEETINGS to make one, MANAGE_MEETINGS to change other people's, ADD_TO_MEMBER_CALENDARS to name others).
+   */
+  async requireCalendarSpace(userId: string, spaceId: string, needed: bigint = Permission.VIEW_CALENDAR, db: Db = this.prisma): Promise<SpaceAccess> {
+    const access = await this.spaceAccess(userId, spaceId, db);
+    if (!access || !hasPermission(access.perms, Permission.VIEW_CALENDAR)) throw notFound();
+    if (!hasPermission(access.perms, needed)) throw forbidden();
+    return access;
+  }
+
+  /** What the person may do in each space whose calendar they can see, as decimal strings (the web keeps it for offline use). */
+  async calendarPermissions(userId: string, db: Db = this.prisma): Promise<Record<string, string>> {
+    const out: Record<string, string> = {};
+    for (const [spaceId, access] of await this.calendarSpaces(userId, db)) out[spaceId] = permissionsToString(access.perms);
+    return out;
+  }
+
+  /** Ids of every role (of every team) the person holds. Role ids are unique, so one set serves all their teams. */
+  async heldRoleIds(userId: string, db: Db = this.prisma): Promise<Set<string>> {
+    return new Set((await db.memberRole.findMany({ where: { userId }, select: { roleId: true } })).map((r) => r.roleId));
+  }
+
+  /**
+   * Which of these people hold `bit` in a space, worked out for all of them with a handful of queries (the container's roles and
+   * overwrites, no deeper level). Used to expand a role on an event into the people who can see it, so it must agree with
+   * `spaceAccess` for every single person.
+   */
+  async spaceViewers(spaceId: string, candidateIds: readonly string[], bit: bigint, db: Db = this.prisma): Promise<Set<string>> {
+    const viewers = new Set<string>();
+    if (!candidateIds.length) return viewers;
+    const space = await db.space.findUnique({ where: { id: spaceId } });
+    if (!space) return viewers;
+    if (space.kind === 'personal') {
+      if (space.userId && candidateIds.includes(space.userId)) viewers.add(space.userId);
+      return viewers;
+    }
+    let project: Project | null = null;
+    let teamId = space.teamId;
+    if (space.kind === 'project' && space.projectId) {
+      project = await db.project.findFirst({ where: { id: space.projectId, deletedAt: null } });
+      if (!project) return viewers;
+      teamId = project.teamId;
+    }
+    if (!teamId) return viewers;
+    const team = await db.team.findFirst({ where: { id: teamId, deletedAt: null } });
+    if (!team) return viewers;
+
+    const ids = [...new Set(candidateIds)];
+    const members = new Set((await db.teamMember.findMany({ where: { teamId, userId: { in: ids } }, select: { userId: true } })).map((m) => m.userId));
+    if (!members.size) return viewers;
+    const memberIds = [...members];
+    const [roles, held, projectMembers, chain] = await Promise.all([
+      db.role.findMany({ where: { teamId } }),
+      db.memberRole.findMany({ where: { userId: { in: memberIds }, role: { teamId } }, select: { userId: true, roleId: true } }),
+      project ? db.projectMember.findMany({ where: { projectId: project.id, userId: { in: memberIds } }, select: { userId: true } }) : [],
+      project ? this.chainLevels(db, project.path) : [],
+    ]);
+    const heldBy = new Map<string, Set<string>>();
+    for (const h of held) (heldBy.get(h.userId) ?? heldBy.set(h.userId, new Set()).get(h.userId)!).add(h.roleId);
+    const inProject = new Set(projectMembers.map((m) => m.userId));
+
+    for (const userId of memberIds) {
+      const heldIds = heldBy.get(userId) ?? new Set<string>();
+      const teamPerms = computePermissions(this.buildInput(team, roles, heldIds, userId));
+      let perms = teamPerms;
+      if (project) {
+        const canManage = hasPermission(teamPerms, Permission.MANAGE_PROJECTS);
+        if (!inProject.has(userId) && !canManage) continue;
+        perms = computePermissions(this.buildInput(team, roles, heldIds, userId, chain));
+        if (!canManage && !canViewAnything(perms)) continue;
+      }
+      if (hasPermission(perms, bit)) viewers.add(userId);
+    }
+    return viewers;
+  }
+
   /** Every space whose notebooks the person may see, with their permissions there: personal, teams, projects. */
-  async notebookSpaces(userId: string, db: Db = this.prisma): Promise<Map<string, SpaceAccess>> {
+  async notebookSpaces(userId: string, db: Db = this.prisma, bit: bigint = Permission.VIEW_NOTEBOOKS): Promise<Map<string, SpaceAccess>> {
     const out = new Map<string, SpaceAccess>();
     const personal = await db.space.findUnique({ where: { userId } });
     if (personal)
@@ -513,7 +752,7 @@ export class PermissionService {
     });
     for (const m of memberships) {
       const team = await this.teamFromRow(m.team, userId, db);
-      if (m.team.space && hasPermission(team.perms, Permission.VIEW_NOTEBOOKS))
+      if (m.team.space && hasPermission(team.perms, bit))
         out.set(m.team.space.id, {
           space: m.team.space,
           perms: team.perms,
@@ -521,7 +760,7 @@ export class PermissionService {
           projectId: null,
         });
       for (const v of await this.visibleProjects(userId, team, db)) {
-        if (v.project.space && hasPermission(v.perms, Permission.VIEW_NOTEBOOKS))
+        if (v.project.space && hasPermission(v.perms, bit))
           out.set(v.project.space.id, {
             space: v.project.space,
             perms: v.perms,

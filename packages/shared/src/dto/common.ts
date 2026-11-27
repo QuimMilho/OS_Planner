@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LIMITS } from '../schema/specs';
+import { THEMES } from './themes';
 
 export const idSchema = z.uuid();
 
@@ -19,7 +20,7 @@ export const localeSchema = z.enum(['en', 'pt']);
 export type Locale = z.infer<typeof localeSchema>;
 
 /** `system` follows the operating system (light or dark); the others are fixed. Coloured themes are dark schemes. */
-export const THEMES = ['system', 'light', 'dark', 'purple', 'red', 'green', 'blue', 'darkblue'] as const;
+export { THEMES };
 export const themeSchema = z.enum(THEMES);
 export type Theme = z.infer<typeof themeSchema>;
 

@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell, type MenuItemConstructorOptions } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, Menu, session, shell, type MenuItemConstructorOptions } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { getServerUrl, getWindowState, normaliseServerUrl, saveWindowState, setServerUrl } from './config';
+import { getLastVersion, getServerUrl, getWindowState, normaliseServerUrl, saveWindowState, setLastVersion, setServerUrl, takeResume } from './config';
+import { mayUse } from './permissions';
+import { startUpdater } from './updater';
 
 /**
  * The desktop app is a native window around the OS_Planner website. It adds only what a browser tab cannot
@@ -15,6 +16,10 @@ const RESOURCES = join(__dirname, '..', 'resources');
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
+/** The website's report of a call, an open dialog or unsaved work: a silent update waits while this is true. */
+let webBusy = false;
+/** The version this install ran before an update, handed to the page once so it can say "updated". */
+let updatedFrom: string | null = null;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -40,19 +45,57 @@ const serverOrigin = () => origin(getServerUrl());
 const isHttp = (url: string) => /^https?:\/\//i.test(url);
 
 function start(): void {
+  const previous = getLastVersion();
+  if (previous !== app.getVersion()) {
+    if (previous) updatedFrom = previous;
+    setLastVersion(app.getVersion());
+  }
   hardenSession();
   registerIpc();
   Menu.setApplicationMenu(buildMenu());
   createMainWindow();
-  checkForUpdates();
+  startUpdater({ window: () => mainWindow, webBusy: () => webBusy });
 }
 
-/** The page may use the clipboard and fullscreen; camera, microphone, location and the rest stay off. */
+/**
+ * The page may use the clipboard and fullscreen, and (only the OS_Planner site itself, for voice and video channels) the microphone,
+ * the camera and the screen; location and the rest stay off. See permissions.ts. Sharing the screen asks the person which screen or
+ * window, every time (a small menu), and nothing is captured without that choice.
+ */
 function hardenSession(): void {
   const ses = session.fromPartition(PARTITION);
-  const allowed = new Set(['clipboard-sanitized-write', 'fullscreen']);
-  ses.setPermissionRequestHandler((_wc, permission, callback) => callback(allowed.has(permission)));
-  ses.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+  ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(mayUse(permission, details.requestingUrl, serverOrigin())));
+  ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) => mayUse(permission, requestingOrigin, serverOrigin()));
+  ses.setDisplayMediaRequestHandler((request, callback) => {
+    if (!mayUse('display-capture', request.frame?.url, serverOrigin())) return callback({});
+    void chooseScreen(callback);
+  }, { useSystemPicker: false });
+}
+
+/** A menu of the screens and windows that can be shared; closing it without a choice refuses. */
+async function chooseScreen(callback: (streams: { video?: Electron.DesktopCapturerSource; audio?: 'loopback' }) => void): Promise<void> {
+  let answered = false;
+  const answer = (streams: Parameters<typeof callback>[0]) => {
+    if (answered) return;
+    answered = true;
+    callback(streams);
+  };
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } });
+    if (!sources.length || !mainWindow) return answer({});
+    const menu = Menu.buildFromTemplate([
+      { label: 'Share…', enabled: false },
+      { type: 'separator' },
+      ...sources.map((source): MenuItemConstructorOptions => ({
+        label: source.name || source.id,
+        // the sound of the whole screen is shared with a screen, not with a single window
+        click: () => answer({ video: source, ...(source.id.startsWith('screen:') ? { audio: 'loopback' as const } : {}) }),
+      })),
+    ]);
+    menu.popup({ window: mainWindow, callback: () => setTimeout(() => answer({}), 0) });
+  } catch {
+    answer({});
+  }
 }
 
 function createMainWindow(): void {
@@ -79,7 +122,14 @@ function createMainWindow(): void {
   });
   mainWindow = win;
   if (state.maximized) win.maximize();
-  win.once('ready-to-show', () => win.show());
+  // After a silent update the app comes back on the same page, and stays out of the way if it was minimised.
+  const resume = takeResume(serverOrigin());
+  win.once('ready-to-show', () => {
+    if (resume?.minimized) {
+      win.showInactive();
+      win.minimize();
+    } else win.show();
+  });
 
   const remember = () => {
     if (win.isDestroyed()) return;
@@ -104,6 +154,11 @@ function createMainWindow(): void {
     }
   });
 
+  // A page that is going away can no longer say it is busy; the next one reports for itself.
+  win.webContents.on('did-start-navigation', (_e, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) webBusy = false;
+  });
+
   // No connection and nothing cached yet: show a friendly page with a retry button instead of a blank window.
   win.webContents.on('did-fail-load', (_e, code, _description, url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* aborted: a redirect or a newer navigation */) return;
@@ -112,7 +167,7 @@ function createMainWindow(): void {
     void win.loadFile(join(RESOURCES, 'offline.html'), { search: query });
   });
 
-  void win.loadURL(getServerUrl());
+  void win.loadURL(resume?.url ?? getServerUrl());
 }
 
 function buildMenu(): Menu {
@@ -190,6 +245,18 @@ function registerIpc(): void {
     return true;
   });
 
+  // The website tells the shell when a restart would cost the person something (a call, a dialog, unsaved work).
+  ipcMain.on('app:busy', (event, busy: unknown) => {
+    if (origin(event.senderFrame?.url ?? '') !== serverOrigin()) return;
+    webBusy = busy === true;
+  });
+  // Read by the preload script at start-up: the real version (a packaged app has no npm_package_version) and, once, what it was updated from.
+  ipcMain.on('desktop:info', (event) => {
+    const info = { version: app.getVersion(), updatedFrom };
+    if (origin(event.senderFrame?.url ?? '') === serverOrigin()) updatedFrom = null; // our own local pages must not use it up
+    event.returnValue = info;
+  });
+
   // Settings and the offline page are our own local files; nothing from the web may read or change the server address.
   const fromLocalPage = (url: string | undefined) => !!url && url.startsWith('file:');
   ipcMain.handle('config:get', (event) => {
@@ -211,38 +278,3 @@ function registerIpc(): void {
   });
 }
 
-/**
- * Installed builds (Windows installer, AppImage) update themselves from the server's /downloads feed.
- * The website itself is never "installed": the window always loads the current one.
- */
-function checkForUpdates(): void {
-  if (!app.isPackaged) return;
-  void (async () => {
-    try {
-      autoUpdater.autoDownload = true;
-      autoUpdater.setFeedURL({ provider: 'generic', url: await updateFeedUrl() });
-      await autoUpdater.checkForUpdatesAndNotify(); // offline, or a package type that cannot self-update, ends up in the catch
-    } catch {
-      /* no update feed configured: harmless */
-    }
-  })();
-}
-
-/**
- * The website may call an API on another origin (its config.json says where), and that API is what serves /downloads.
- * Without a config.json, or when it names no API, the website itself serves them.
- */
-export async function updateFeedUrl(): Promise<string> {
-  const site = getServerUrl();
-  try {
-    const res = await net.fetch(`${site}/config.json`, { signal: AbortSignal.timeout(3000) });
-    if (res.ok) {
-      const { apiUrl } = (await res.json()) as { apiUrl?: unknown };
-      const api = typeof apiUrl === 'string' ? normaliseServerUrl(apiUrl) : null;
-      if (api) return `${api}/downloads/`;
-    }
-  } catch {
-    /* offline or no config.json: use the website */
-  }
-  return `${site}/downloads/`;
-}

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Permission, positionBetween, type CreateNotebookInput, type NotebookDto, type UpdateNotebookInput } from '@os-planner/shared';
 import { ConflictException } from '@nestjs/common';
 import { newId } from '../common/crypto.js';
+import { changedKeys, guardDelete, guardUpdate } from '../common/merge-scope.js';
 import { ChangeSeqService } from '../prisma/change-seq.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { QuotaService } from '../quota/quota.service.js';
@@ -110,13 +111,18 @@ export class NotebooksService {
       const seq = await this.seq.next(tx, spaceId);
       const current = await tx.notebook.findFirst({ where: { id, spaceId, deletedAt: null } });
       if (!current) throw notFound();
+      // Offline merge: only what nobody else changed since the device saw it (everything, for a plain request).
+      const wanted = changedKeys(patch, current);
+      const guard = wanted.size ? guardUpdate('notebook', current, wanted, patch, current) : null;
+      const keys = guard?.keys ?? new Set<string>();
       const row = await tx.notebook.update({
         where: { id },
         data: {
-          ...(patch.name !== undefined && { name: patch.name }),
-          ...(patch.icon !== undefined && { icon: patch.icon }),
-          ...(patch.color !== undefined && { color: patch.color }),
-          ...(patch.position !== undefined && { position: patch.position }),
+          ...(keys.has('name') && { name: patch.name }),
+          ...(keys.has('icon') && { icon: patch.icon }),
+          ...(keys.has('color') && { color: patch.color }),
+          ...(keys.has('position') && { position: patch.position }),
+          ...(guard && { fieldSeq: guard.next(seq) }),
           seq,
         },
       });
@@ -126,12 +132,11 @@ export class NotebooksService {
 
   /** Moves the notebook and everything in it to the trash under one timestamp (so restore can undo exactly that). */
   async remove(userId: string, id: string): Promise<void> {
-    if (!(await this.prisma.notebook.findUnique({ where: { id }, select: { id: true } }))) return; // gone already: deleting twice is fine
     const { notebook: nb } = await this.perms.requireNotebook(userId, id, Permission.MANAGE_NOTEBOOKS);
     return this.prisma.$transaction(async (tx) => {
       const seq = await this.seq.next(tx, nb.spaceId);
       const current = await tx.notebook.findFirst({ where: { id } });
-      if (!current || current.deletedAt) return;
+      if (!current || !guardDelete(current)) return;
       const deletedAt = new Date();
       await tx.notebook.update({ where: { id }, data: { deletedAt, seq } });
       await tx.category.updateMany({ where: { notebookId: id, deletedAt: null }, data: { deletedAt, seq } });

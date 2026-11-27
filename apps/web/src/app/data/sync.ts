@@ -2,8 +2,8 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom, Subject, debounceTime } from 'rxjs';
 import type { JSONContent } from '@tiptap/core';
-import { collectMediaIds, EMPTY_DOC, isSharedCursorKey, notebookOfSharedKey, positionBetween } from '@os-planner/shared/lite';
-import type { SpaceChangesDto, SyncBatchResponse, SyncChangesDto, SyncOp } from '@os-planner/shared';
+import { collectMediaIds, EMPTY_DOC, isSharedCursorKey, lastFieldChange, notebookOfSharedKey, positionBetween } from '@os-planner/shared/lite';
+import type { MergeEntity, SpaceChangesDto, SyncBatchResponse, SyncChangesDto, SyncEntityDto, SyncOp, SyncOpResult } from '@os-planner/shared';
 import { AuthStore, isUnreachable } from '../core/auth-store';
 import { Language } from '../core/i18n';
 import { uuidv7 } from '../core/ids';
@@ -11,9 +11,13 @@ import { Online } from '../core/online';
 import { Platform } from '../core/platform';
 import { QuotaStore } from '../core/quota';
 import { AccessStore } from './access-store';
+import { BoardStore } from './board-store';
+import { CalendarStore } from './calendar-store';
 import { Db, type MediaRow, type PageContentRow } from './db';
+import { HistoryStore } from './history-store';
 import { liveSignal } from './live';
-import { Outbox } from './outbox';
+import { OfflineScope } from './offline-scope';
+import { mergeKindOf, Outbox } from './outbox';
 import { PageStore } from './page-store';
 import { TeamStore } from './team-store';
 
@@ -26,6 +30,8 @@ export interface SyncIssue {
   params?: Record<string, unknown>;
   /** A page the user can open to see the outcome (e.g. the conflict copy). */
   pageId?: string;
+  /** An address in the app that shows the outcome (the Local history). */
+  link?: string;
   at: number;
 }
 
@@ -72,6 +78,10 @@ export class Sync {
   private readonly quota = inject(QuotaStore);
   private readonly teamStore = inject(TeamStore);
   private readonly access = inject(AccessStore);
+  private readonly boards = inject(BoardStore);
+  private readonly calendar = inject(CalendarStore);
+  private readonly history = inject(HistoryStore);
+  private readonly scope = inject(OfflineScope);
 
   readonly state = signal<SyncState>('idle');
   readonly lastSyncAt = signal<Date | null>(null);
@@ -104,6 +114,7 @@ export class Sync {
   start(): void {
     if (this.started) return;
     this.started = true;
+    void this.history.load().then(() => this.history.purge());
     this.kick$.pipe(debounceTime(1500)).subscribe(() => void this.run());
     this.outbox.changed.subscribe(() => {
       this.kick$.next();
@@ -181,8 +192,11 @@ export class Sync {
     await this.pushContents();
     await this.teamStore.refreshAll(); // teams, projects, members: also tells which spaces to ask for
     await this.access.refresh(); // what the person may do in each team, project and shared notebook
+    await this.boards.refreshPermissions(); // ... and on each board
+    await this.calendar.refresh(); // ... and in each calendar, with the person's calendar settings
     await this.pull();
     await this.prefetch();
+    await this.history.purge();
     if (!this.refusedThisCycle) {
       // Everything that was held back for lack of room has gone through.
       this.quotaNotified = false;
@@ -194,27 +208,123 @@ export class Sync {
 
   private async pushOperations(): Promise<void> {
     const db = this.dbs.db;
-    for (;;) {
-      const rows = await db.outbox.orderBy('n').limit(BATCH).toArray();
-      if (!rows.length) return;
-      const res = await firstValueFrom(this.http.post<SyncBatchResponse>('/api/sync/batch', { ops: rows.map((r) => r.op) }));
+    // Changes the server did not take over as they were (kept in the Local history): told once per push, not per change.
+    let notApplied = 0;
+    try {
+      for (;;) {
+        const rows = await db.outbox.orderBy('n').limit(BATCH).toArray();
+        if (!rows.length) return;
+        const res = await firstValueFrom(this.http.post<SyncBatchResponse>('/api/sync/batch', { ops: rows.map((r) => r.op) }));
 
-      const byOp = new Map(res.results.map((r) => [r.opId, r]));
-      const done: number[] = [];
-      let blocked = false;
-      for (const row of rows) {
-        const result = byOp.get(row.op.opId);
-        if (!result || (!result.ok && (result.error === 'internal' || result.error === 'quota_exceeded'))) {
-          if (result && !result.ok && result.error === 'quota_exceeded') this.quotaRefused();
-          blocked = true; // retry later (for a full quota: once space is freed); keep order
-          break;
+        const byOp = new Map(res.results.map((r) => [r.opId, r]));
+        const done: number[] = [];
+        let blocked = false;
+        for (const row of rows) {
+          const result = byOp.get(row.op.opId);
+          if (!result || (!result.ok && (result.error === 'internal' || result.error === 'quota_exceeded'))) {
+            if (result && !result.ok && result.error === 'quota_exceeded') this.quotaRefused();
+            blocked = true; // retry later (for a full quota: once space is freed); keep order
+            break;
+          }
+          done.push(row.n!);
+          if (result.ok) notApplied += await this.afterApplied(row.op, result);
+          else notApplied += await this.afterRefused(row.op, result);
         }
-        done.push(row.n!);
-        if (!result.ok) this.dropped(row.op, result.error);
+        await db.outbox.bulkDelete(done);
+        if (blocked || rows.length < BATCH) return;
       }
-      await db.outbox.bulkDelete(done);
-      if (blocked || rows.length < BATCH) return;
+    } finally {
+      if (notApplied) this.addIssue({ messageKey: 'sync.rejected', params: { count: notApplied }, link: '/app/history' });
     }
+  }
+
+  private tableOf(entity: MergeEntity) {
+    const db = this.dbs.db;
+    return { notebook: db.notebooks, category: db.categories, page: db.pages, task: db.tasks, event: db.events }[entity] as unknown as {
+      get(id: string): Promise<(Record<string, unknown> & { spaceId?: string }) | undefined>;
+      put(row: unknown): Promise<unknown>;
+      update(id: string, changes: Record<string, unknown>): Promise<number>;
+    };
+  }
+
+  /** What an op carried, without what only says where it goes. */
+  private patchOf(op: SyncOp): Record<string, unknown> {
+    const { opId: _o, type: _t, id: _i, base: _b, scope: _s, occurrence: _c, ...patch } = op as unknown as Record<string, unknown>;
+    return patch;
+  }
+
+  /** The op went through (all of it, or all but some fields). */
+  private async afterApplied(op: SyncOp, result: Extract<SyncOpResult, { ok: true }>): Promise<number> {
+    const kind = mergeKindOf(op);
+    if (!kind || !('id' in op)) return 0;
+    await this.rebase(op.id, result);
+    if (result.status !== 'merged' || !result.rejected) return 0;
+    // Some fields lost: the entity as it is online (with this device's other fields applied) replaces the local copy, and what lost is kept.
+    const local = await this.tableOf(kind.entity).get(op.id);
+    await this.history.record({
+      entity: kind.entity,
+      entityId: op.id,
+      spaceId: local?.spaceId ?? result.entity?.row.spaceId ?? '',
+      op: op.type,
+      reason: 'conflict',
+      fieldsRejected: result.rejected,
+      patch: this.patchOf(op),
+      snapshot: local ?? result.entity?.row ?? null,
+    });
+    await this.refreshFrom(kind.entity, op.id, result.entity);
+    return 1;
+  }
+
+  /** Later changes of the same thing that are still queued are based on what this one wrote. */
+  private async rebase(id: string, result: Extract<SyncOpResult, { ok: true }>): Promise<void> {
+    const written = result.applied ?? [];
+    const fieldSeq = (result.entity?.row as { fieldSeq?: Record<string, number> } | undefined)?.fieldSeq;
+    if (!written.length || !fieldSeq) return;
+    await this.dbs.db.outbox
+      .filter((o) => 'id' in o.op && o.op.id === id && 'base' in o.op && !!o.op.base)
+      .modify((o) => {
+        const base = (o.op as { base: Record<string, number> }).base;
+        for (const f of written) if (f in base) base[f] = Math.max(base[f]!, fieldSeq[f] ?? 0);
+        if ('*' in base) base['*'] = Math.max(base['*']!, lastFieldChange(fieldSeq));
+      });
+  }
+
+  /** Puts the entity as the server has it in the local database (events are read again: the server's answer for them is per person). */
+  private async refreshFrom(entity: MergeEntity, id: string, from: SyncEntityDto | undefined): Promise<void> {
+    if (from && from.kind === entity) return void (await this.tableOf(entity).put(from.row));
+    if (entity === 'task') await this.boards.reloadTask(id);
+    if (entity === 'event') await this.calendar.reloadEvent(id);
+  }
+
+  /** The op was refused. Changes that lost a merge (or may not be made any more) are kept in the Local history; the rest is dropped as before. */
+  private async afterRefused(op: SyncOp, result: Extract<SyncOpResult, { ok: false }>): Promise<number> {
+    const kind = mergeKindOf(op);
+    const merge = result.error === 'conflict' || result.error === 'target_deleted' || result.error === 'deleted_but_changed';
+    if (!kind || !('id' in op) || !(merge || result.error === 'forbidden')) {
+      this.dropped(op, result.error);
+      return 0;
+    }
+    const table = this.tableOf(kind.entity);
+    const local = await table.get(op.id);
+    await this.history.record({
+      entity: kind.entity,
+      entityId: op.id,
+      spaceId: local?.spaceId ?? result.entity?.row.spaceId ?? '',
+      op: op.type,
+      reason: result.error === 'forbidden' ? 'forbidden' : result.error === 'target_deleted' ? 'target_deleted' : 'conflict',
+      fieldsRejected: result.rejected ?? {},
+      patch: this.patchOf(op),
+      snapshot: local ?? null,
+    });
+    if (result.error === 'target_deleted') {
+      // It is gone online: it goes here too (the copy of this device's version is in the history).
+      if (local) await table.update(op.id, { deletedAt: new Date().toISOString() });
+    } else {
+      // The online version stays: show it as it is.
+      await this.refreshFrom(kind.entity, op.id, result.entity);
+      if (result.error === 'deleted_but_changed' && local?.['deletedAt'] && !result.entity) await table.update(op.id, { deletedAt: null });
+    }
+    return 1;
   }
 
   /** Tells the person once (not every minute) that storage is full and that nothing is lost. */
@@ -226,7 +336,19 @@ export class Sync {
   }
 
   private dropped(op: SyncOp, reason: string): void {
+    // A task change the server refused: show the task as the server has it (a move into a full column puts it back).
+    if (op.type.startsWith('task.')) {
+      const id = op.type === 'task.create' ? op.id : (op as { id: string }).id;
+      void this.boards.reloadTask(id);
+      if (reason === 'wip_limit') return this.addIssue({ messageKey: 'board.wipRefused' });
+    }
+    // An event change the server refused: show the event as the server has it.
+    if (op.type.startsWith('event.')) {
+      void this.calendar.reloadEvent((op as { id: string }).id);
+      if (reason === 'forbidden' || reason === 'not_found') return this.addIssue({ messageKey: 'calendar.changeRefused' });
+    }
     // not_found for a delete/restore is normal after another device purged the item; everything else the user should hear about.
+    if (reason === 'not_found' && /\.(delete|restore)$/.test(op.type)) return;
     this.addIssue({ messageKey: 'sync.opDropped', params: { type: op.type, reason } });
   }
 
@@ -312,7 +434,7 @@ export class Sync {
     }
 
     try {
-      const res = await firstValueFrom(this.http.put<{ version: number }>(`/api/pages/${row.id}/content`, { content, baseVersion: row.baseVersion }));
+      const res = await firstValueFrom(this.http.post<{ ok: true; version: number }>(`/api/pages/${row.id}/snapshots/replace`, { content, baseVersion: row.baseVersion }));
       await db.transaction('rw', db.contents, async () => {
         const now = await db.contents.get(row.id);
         if (!now) return;
@@ -404,7 +526,7 @@ export class Sync {
   private async pull(): Promise<void> {
     const db = this.dbs.db;
     const personal = this.auth.user()?.personalSpaceId;
-    if (!personal) return this.pullLegacy(); // an offline session restored from before spaces existed: one cursor, personal data
+    if (!personal) return; // a session restored from before spaces existed: the account is read again first, then this runs
 
     const stored = ((await db.meta.get('cursors'))?.value as Record<string, number> | undefined) ?? {};
     const cursors: Record<string, number> = { ...stored };
@@ -414,6 +536,8 @@ export class Sync {
     for (const id of spaces) cursors[id] ??= 0;
     // Notebooks of a space the person may not see (a notebook overwrite hides them), as of the last answer.
     const hiddenBefore = ((await db.meta.get('hidden'))?.value as Record<string, string[]> | undefined) ?? {};
+    // Boards of a space the person may not see (a board overwrite hides them), as of the last answer.
+    const hiddenBoardsBefore = ((await db.meta.get('hiddenBoards'))?.value as Record<string, string[]> | undefined) ?? {};
 
     for (;;) {
       const res = await firstValueFrom(this.http.get<SyncChangesDto>('/api/sync/changes', { params: { cursors: JSON.stringify(cursors) } }));
@@ -433,6 +557,16 @@ export class Sync {
         }
         if (hidden.length) hiddenBefore[key] = hidden;
         else delete hiddenBefore[key];
+        // Boards: the same, and tasks that went to another space are dropped here.
+        const hiddenBoards = changes.hiddenBoards ?? [];
+        await this.boards.dropBoards(hiddenBoards);
+        await this.boards.dropTasks(changes.movedOutTasks ?? [], key);
+        if ((hiddenBoardsBefore[key] ?? []).some((id) => !hiddenBoards.includes(id))) {
+          cursors[key] = 0;
+          more = true;
+        }
+        if (hiddenBoards.length) hiddenBoardsBefore[key] = hiddenBoards;
+        else delete hiddenBoardsBefore[key];
       }
       if (res.sharedNotebooks) {
         await db.transaction('rw', db.shared, async () => {
@@ -441,7 +575,12 @@ export class Sync {
         });
       }
       const revoked = res.revokedSpaces.filter((id) => !isSharedCursorKey(id));
-      if (revoked.length) await this.teamStore.purgeSpaces(revoked);
+      if (revoked.length) {
+        await this.teamStore.purgeSpaces(revoked);
+        // What this device kept of changes and pages in those spaces (the Local history) may hold data the person may no longer see.
+        await this.history.purgeSpaces(revoked);
+        this.addIssue({ messageKey: 'sync.spaceRevoked' });
+      }
       for (const key of res.revokedSpaces) {
         delete cursors[key];
         if (isSharedCursorKey(key)) await this.dropNotebooks([notebookOfSharedKey(key)], null);
@@ -450,6 +589,7 @@ export class Sync {
       await db.transaction('rw', db.meta, async () => {
         await db.meta.put({ key: 'cursors', value: cursors });
         await db.meta.put({ key: 'hidden', value: hiddenBefore });
+        await db.meta.put({ key: 'hiddenBoards', value: hiddenBoardsBefore });
       });
       if (!more) return;
     }
@@ -475,23 +615,20 @@ export class Sync {
     });
   }
 
-  private async pullLegacy(): Promise<void> {
-    const db = this.dbs.db;
-    let cursor = ((await db.meta.get('cursor'))?.value as number | undefined) ?? 0;
-    for (;;) {
-      const changes = await firstValueFrom(this.http.get<SyncChangesDto>('/api/sync/changes', { params: { since: cursor } }));
-      await this.apply(changes);
-      cursor = changes.cursor;
-      await db.meta.put({ key: 'cursor', value: cursor });
-      if (!changes.hasMore) return;
-    }
-  }
-
   /** Writes server changes locally, except for things with queued local changes (those are sent first and win). */
   private async apply(changes: SpaceChangesDto): Promise<void> {
     const db = this.dbs.db;
-    await db.transaction('rw', db.notebooks, db.categories, db.pages, db.contents, db.outbox, async () => {
+    const leftOut = await this.scope.excludedNow();
+    await db.transaction('rw', [db.notebooks, db.categories, db.pages, db.contents, db.outbox, db.boards, db.columns, db.tasks, db.labels, db.events], async () => {
       const protectedIds = new Set((await db.outbox.toArray()).map((o) => ('id' in o.op ? o.op.id : '')));
+      // events (one with changes waiting to be sent keeps them until they have gone); the ones the person may not see (any more) are dropped
+      if (changes.events?.length) await db.events.bulkPut(changes.events.filter((e) => !protectedIds.has(e.id)));
+      if (changes.hiddenEvents?.length) await db.events.bulkDelete(changes.hiddenEvents.filter((id) => !protectedIds.has(id)));
+      // boards, columns, tasks and labels (a task with changes waiting to be sent keeps them until they have gone)
+      if (changes.boards?.length) await db.boards.bulkPut(changes.boards);
+      if (changes.columns?.length) await db.columns.bulkPut(changes.columns);
+      if (changes.labels?.length) await db.labels.bulkPut(changes.labels);
+      if (changes.tasks?.length) await db.tasks.bulkPut(changes.tasks.filter((t) => !protectedIds.has(t.id)));
       const keep = <T extends { id: string }>(rows: T[]) => rows.filter((r) => !protectedIds.has(r.id));
       await db.notebooks.bulkPut(keep(changes.notebooks));
       await db.categories.bulkPut(keep(changes.categories));
@@ -499,7 +636,7 @@ export class Sync {
       await db.pages.bulkPut(pages);
 
       for (const p of pages) {
-        if (p.deletedAt) continue;
+        if (p.deletedAt || leftOut.has(p.spaceId)) continue; // a space that does not keep page texts offline: they are fetched when opened
         const content = await db.contents.get(p.id);
         if (!content || (!content.dirty && content.baseVersion < p.version)) this.toFetch.add(p.id);
       }

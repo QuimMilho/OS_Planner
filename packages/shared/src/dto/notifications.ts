@@ -46,7 +46,11 @@ export const NOTIFICATION_KINDS = [
   'task_comment',
   'meeting_invite',
   'meeting_reminder',
+  'meeting_updated',
+  'meeting_cancelled',
+  'meeting_response',
   'join_request',
+  'calendar_sync_off',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 /** The kinds that count as "mentions" in the inbox filter and the badges. */

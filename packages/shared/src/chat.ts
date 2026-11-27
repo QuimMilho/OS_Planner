@@ -4,6 +4,7 @@
 export * from './dto/chat';
 export * from './chat/markdown';
 export * from './dto/dm';
+export * from './dto/voice';
 export * from './chat/mentions';
 export * from './dto/notifications';
 export * from './chat/notify';

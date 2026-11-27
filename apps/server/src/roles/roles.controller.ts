@@ -36,6 +36,7 @@ import { AuditService } from './audit.service.js';
 import { OverwritesService } from './overwrites.service.js';
 import { PreviewService } from './preview.service.js';
 import { RolesService } from './roles.service.js';
+import { Authz } from '../common/authz.js';
 
 const Id = () => Param('id', { schema: idSchema });
 const UserParam = () => Param('userId', { schema: idSchema });
@@ -49,11 +50,13 @@ export class TeamRolesController {
     private readonly audit: AuditService,
   ) {}
 
+  @Authz({ scope: 'team' })
   @Get(':id/roles')
   list(@CurrentUser() u: AuthUser, @Id() id: string): Promise<RoleDto[]> {
     return this.roles.list(u.id, { teamId: id });
   }
 
+  @Authz({ scope: 'team', needs: ['MANAGE_ROLES'], note: 'cannot grant what the caller lacks' })
   @Post(':id/roles')
   create(
     @CurrentUser() u: AuthUser,
@@ -63,6 +66,7 @@ export class TeamRolesController {
     return this.roles.create(u.id, { teamId: id }, body);
   }
 
+  @Authz({ scope: 'team', needs: ['MANAGE_ROLES'], note: 'only roles below the caller' })
   @Put(':id/roles/order')
   reorder(
     @CurrentUser() u: AuthUser,
@@ -73,6 +77,7 @@ export class TeamRolesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'team', needs: ['MANAGE_ROLES'], note: 'only roles below the caller' })
   @Put(':id/members/:userId/roles/:roleId')
   async assign(
     @CurrentUser() u: AuthUser,
@@ -84,6 +89,7 @@ export class TeamRolesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'team', needs: ['MANAGE_ROLES'], note: 'only roles below the caller' })
   @Delete(':id/members/:userId/roles/:roleId')
   async unassign(
     @CurrentUser() u: AuthUser,
@@ -94,6 +100,7 @@ export class TeamRolesController {
     await this.roles.unassign(u.id, { teamId: id }, userId, roleId);
   }
 
+  @Authz({ scope: 'team', needs: ['VIEW_AUDIT_LOG'] })
   @Get(':id/audit')
   auditLog(
     @CurrentUser() u: AuthUser,
@@ -109,11 +116,13 @@ export class TeamRolesController {
 export class ProjectRolesController {
   constructor(private readonly roles: RolesService) {}
 
+  @Authz({ scope: 'project' })
   @Get(':id/roles')
   list(@CurrentUser() u: AuthUser, @Id() id: string): Promise<RoleDto[]> {
     return this.roles.list(u.id, { projectId: id });
   }
 
+  @Authz({ scope: 'project', needs: ['MANAGE_ROLES'] })
   @Post(':id/roles')
   create(
     @CurrentUser() u: AuthUser,
@@ -123,6 +132,7 @@ export class ProjectRolesController {
     return this.roles.create(u.id, { projectId: id }, body);
   }
 
+  @Authz({ scope: 'project', needs: ['MANAGE_ROLES'] })
   @Put(':id/roles/order')
   reorder(
     @CurrentUser() u: AuthUser,
@@ -133,6 +143,7 @@ export class ProjectRolesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'project', needs: ['MANAGE_ROLES'] })
   @Put(':id/members/:userId/roles/:roleId')
   async assign(
     @CurrentUser() u: AuthUser,
@@ -144,6 +155,7 @@ export class ProjectRolesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'project', needs: ['MANAGE_ROLES'] })
   @Delete(':id/members/:userId/roles/:roleId')
   async unassign(
     @CurrentUser() u: AuthUser,
@@ -160,6 +172,7 @@ export class ProjectRolesController {
 export class RolesController {
   constructor(private readonly roles: RolesService) {}
 
+  @Authz({ scope: 'team', needs: ['MANAGE_ROLES'], note: 'only roles below the caller' })
   @Patch(':id')
   update(
     @CurrentUser() u: AuthUser,
@@ -170,6 +183,7 @@ export class RolesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'team', needs: ['MANAGE_ROLES'], note: 'only roles below the caller' })
   @Delete(':id')
   async remove(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     await this.roles.remove(u.id, id);
@@ -180,6 +194,7 @@ export class RolesController {
 export class OverwritesController {
   constructor(private readonly overwrites: OverwritesService) {}
 
+  @Authz({ scope: 'project', needs: ['MANAGE_ROLES'], note: 'the target (project, channel, notebook, board) is in the query' })
   @Get()
   list(
     @CurrentUser() u: AuthUser,
@@ -189,6 +204,7 @@ export class OverwritesController {
   }
 
   /** Upsert. Allowing and denying nothing removes the overwrite (the answer is then empty). */
+  @Authz({ scope: 'project', needs: ['MANAGE_ROLES'], note: 'the target is in the body; never more than the caller holds' })
   @Put()
   set(
     @CurrentUser() u: AuthUser,
@@ -198,6 +214,7 @@ export class OverwritesController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'project', needs: ['MANAGE_ROLES'] })
   @Delete(':id')
   async clear(@CurrentUser() u: AuthUser, @Id() id: string): Promise<void> {
     await this.overwrites.clear(u.id, id);
@@ -208,6 +225,7 @@ export class OverwritesController {
 export class PermissionsController {
   constructor(private readonly preview: PreviewService) {}
 
+  @Authz({ scope: 'team', needs: ['MANAGE_ROLES'], note: 'the place is in the query' })
   @Get('preview')
   view(
     @CurrentUser() u: AuthUser,

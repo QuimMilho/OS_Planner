@@ -37,7 +37,7 @@ services:
       - '127.0.0.1:1025:1025'
       - '127.0.0.1:8025:8025'
 
-  # Shares realtime events between several server instances (set REDIS_URL=redis://redis:6379 on each of them).
+  # Shares realtime events and co-editing between several server instances (set REDIS_URL=redis://redis:6379 on each of them).
   #   docker compose --profile scale up -d redis
   # One instance needs no Redis. Only realtime delivery lives here, so it needs no volume.
   redis:
@@ -52,6 +52,33 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # Voice and video channels: a LiveKit media server (Apache-2.0). Optional; without it the website shows no voice option.
+  #   docker compose --profile voice up -d livekit      (and set LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET for the server, see .env.example)
+  # Ports: 7880/tcp signalling (put TLS in front of it: see "Voice and video" in the README), 7881/tcp and 7882/udp media. The media ports must be
+  # reachable by the people who talk (open them in the firewall / forward them on the router); behind NAT set LIVEKIT_USE_EXTERNAL_IP=true.
+  # The webhook tells the OS_Planner server who is in which channel; LIVEKIT_WEBHOOK_URL must reach it from inside this container.
+  livekit:
+    profiles: ['voice']
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    ports:
+      - '${LIVEKIT_BIND:-127.0.0.1}:7880:7880'
+      - '7881:7881'
+      - '7882:7882/udp'
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-false}
+        keys:
+          ${LIVEKIT_API_KEY:-unset}: ${LIVEKIT_API_SECRET:-unset}
+        webhook:
+          api_key: ${LIVEKIT_API_KEY:-unset}
+          urls:
+            - ${LIVEKIT_WEBHOOK_URL:-http://server:3000/api/voice/webhook}
 
   # The whole app: API + website + downloads + PDF export.   docker compose --profile prod up -d --build
   server:
@@ -95,19 +122,38 @@ services:
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       REDIS_URL: ${REDIS_URL:-}
+      COLLAB_DEBOUNCE_MS: ${COLLAB_DEBOUNCE_MS:-2000}
+      COLLAB_MAX_DEBOUNCE_MS: ${COLLAB_MAX_DEBOUNCE_MS:-10000}
+      COLLAB_RECHECK_MS: ${COLLAB_RECHECK_MS:-20000}
+      COLLAB_MIGRATE_ON_START: ${COLLAB_MIGRATE_ON_START:-true}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       PUSH_EXTRA_ENDPOINTS: ${PUSH_EXTRA_ENDPOINTS:-}
+      ICS_ALLOW_HTTP: ${ICS_ALLOW_HTTP:-}
+      ICS_PRIVATE_ALLOWLIST: ${ICS_PRIVATE_ALLOWLIST:-}
+      EXTERNAL_CALENDAR_MAX_MB: ${EXTERNAL_CALENDAR_MAX_MB:-5}
       NOTIFY_AWAY_SECONDS: ${NOTIFY_AWAY_SECONDS:-600}
       NOTIFY_EMAIL_INTERVAL_MINUTES: ${NOTIFY_EMAIL_INTERVAL_MINUTES:-15}
       NOTIFY_PUSH_COALESCE_SECONDS: ${NOTIFY_PUSH_COALESCE_SECONDS:-10}
       NOTIFY_SWEEP_SECONDS: ${NOTIFY_SWEEP_SECONDS:-30}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_URL: ${LIVEKIT_API_URL:-http://livekit:7880}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      VOICE_MAX_PARTICIPANTS: ${VOICE_MAX_PARTICIPANTS:-25}
+      VOICE_TEAM_MAX_PARTICIPANTS: ${VOICE_TEAM_MAX_PARTICIPANTS:-100}
+      VOICE_CHECK_SECONDS: ${VOICE_CHECK_SECONDS:-30}
+      RATE_LIMIT_FACTOR: ${RATE_LIMIT_FACTOR:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-log}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_REQUESTS: ${LOG_REQUESTS:-true}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     volumes:
       - notes-data:/data
 
   # HTTPS reverse proxy (nginx) in front of `server`.   docker compose --profile prod --profile proxy up -d --build
-  # Needs OS_PLANNER_DOMAIN and a certificate (fullchain.pem + privkey.pem) in TLS_CERT_DIR; see the README, "HTTPS reverse proxy".
+  # Needs OS_PLANNER_DOMAIN (left empty by default: compose reads every service even with its profile off, so a required-variable check here would break `db:up`) and a certificate (fullchain.pem + privkey.pem) in TLS_CERT_DIR; see the README, "HTTPS reverse proxy".
   # Keep deploy/nginx/os-planner.conf.template in step with the app's routes, WebSockets and upload limits.
   proxy:
     profiles: ['proxy']
@@ -119,11 +165,15 @@ services:
       - '${HTTP_PORT:-80}:80'
       - '${HTTPS_PORT:-443}:443'
     environment:
-      OS_PLANNER_DOMAIN: ${OS_PLANNER_DOMAIN:?set OS_PLANNER_DOMAIN in .env to the host name people use, e.g. planner.example.com}
+      OS_PLANNER_DOMAIN: ${OS_PLANNER_DOMAIN:-}
       OS_PLANNER_UPSTREAM: server:3000
+      # The host name people use for the media server (its own certificate, or one that covers both names). The default matches nothing.
+      OS_PLANNER_LIVEKIT_DOMAIN: ${OS_PLANNER_LIVEKIT_DOMAIN:-voice.invalid}
+      OS_PLANNER_LIVEKIT_UPSTREAM: livekit:7880
       NGINX_ENVSUBST_FILTER: ^OS_PLANNER_
     volumes:
       - ./deploy/nginx/os-planner.conf.template:/etc/nginx/templates/os-planner.conf.template:ro
+      - ./deploy/nginx/os-planner-voice.conf.template:/etc/nginx/templates/os-planner-voice.conf.template:ro
       - ${TLS_CERT_DIR:-./deploy/certs}:/etc/nginx/certs:ro
       - ${ACME_DIR:-./deploy/acme}:/var/www/certbot:ro
 

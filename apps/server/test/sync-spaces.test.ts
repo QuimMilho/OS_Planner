@@ -126,15 +126,10 @@ describe('sync by space', () => {
     expect(res.spaces).toEqual({});
   });
 
-  it('still accepts the single `since` cursor of older clients (the personal space)', async () => {
-    const nb = (await notebook(owner)).body;
-    await notebook(owner, teamSpace, 'Not in the personal feed');
-    const legacy = await t.http.get('/api/sync/changes').query({ since: 0 }).set(owner.auth);
-    expect(legacy.status).toBe(200);
-    expect(legacy.body.notebooks.map((n: { id: string }) => n.id)).toEqual([nb.id]);
-    expect(legacy.body.cursor).toBe(1);
-    expect(legacy.body.revokedSpaces).toEqual([]);
-    expect((await t.http.get('/api/sync/changes').set(owner.auth)).body.cursor).toBe(1); // no cursor at all means from the start
+  it('no longer accepts the single `since` cursor of old clients, or no cursors at all (phase 17)', async () => {
+    await notebook(owner);
+    expect((await t.http.get('/api/sync/changes').query({ since: 0 }).set(owner.auth)).status).toBe(400);
+    expect((await t.http.get('/api/sync/changes').set(owner.auth)).status).toBe(400);
   });
 
   it('rejects cursors that are not JSON, or not space ids', async () => {
@@ -203,15 +198,13 @@ describe('sync by space', () => {
     expect((await waiting).status).toBe(201);
   });
 
-  it('mirrors the personal sequence to the user row for clients that still read it', async () => {
+  it('counts personal writes on the personal space only (the copy on the user row is gone)', async () => {
+    const personal = await personalSpaceId(t, owner.id);
     await notebook(owner);
     await notebook(owner);
-    expect(
-      Number((await t.prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).changeSeq),
-    ).toBe(2);
+    expect(Number((await t.prisma.space.findUniqueOrThrow({ where: { id: personal } })).changeSeq)).toBe(2);
     await notebook(owner, teamSpace);
-    expect(
-      Number((await t.prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).changeSeq),
-    ).toBe(2); // team writes are not personal
+    expect(Number((await t.prisma.space.findUniqueOrThrow({ where: { id: personal } })).changeSeq)).toBe(2); // team writes are not personal
+    expect(Object.keys(await t.prisma.user.findUniqueOrThrow({ where: { id: owner.id } }))).not.toContain('changeSeq');
   });
 });

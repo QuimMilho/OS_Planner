@@ -10,7 +10,7 @@ import * as sass from 'sass';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const THEMES_SCSS = resolve(ROOT, 'apps/web/src/themes.scss');
 export const THEME_BOOT = resolve(ROOT, 'apps/web/public/theme-boot.js');
-const SHARED_THEMES = resolve(ROOT, 'packages/shared/src/dto/common.ts');
+const SHARED_THEMES = resolve(ROOT, 'packages/shared/src/dto/themes.ts');
 
 /** What each pair of colours has to reach. Body text 4.5:1 (WCAG AA), graphics and the accent 3:1, borders 1.5:1. */
 export const THRESHOLDS = { text: 4.5, accent: 3, border: 1.5, button: 4.5 };
@@ -258,7 +258,7 @@ export function checkParity(themes) {
     .exec(readFileSync(SHARED_THEMES, 'utf8'))?.[1]
     .match(/'([\w]+)'/g)
     ?.map((s) => s.slice(1, -1));
-  if (!shared) return ['packages/shared/src/dto/common.ts: THEMES list not found'];
+  if (!shared) return ['packages/shared/src/dto/themes.ts: THEMES list not found'];
   const styled = Object.keys(themes).sort();
   const named = shared.filter((t) => t !== 'system').sort();
   if (styled.join() !== named.join())

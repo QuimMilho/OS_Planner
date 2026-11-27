@@ -11,6 +11,7 @@ import { dmPeopleQuerySchema, dmQuerySchema, startDmSchema } from '@os-planner/s
 import type { z } from 'zod';
 import { CurrentUser, RequireVerified, type AuthUser } from '../common/auth.decorators.js';
 import { DirectService } from './direct.service.js';
+import { Authz } from '../common/authz.js';
 
 const Id = () => Param('id', { schema: idSchema });
 
@@ -22,6 +23,7 @@ const Id = () => Param('id', { schema: idSchema });
 export class DirectController {
   constructor(private readonly direct: DirectService) {}
 
+  @Authz({ scope: 'self' })
   @Get('dms')
   list(
     @CurrentUser() u: AuthUser,
@@ -31,6 +33,8 @@ export class DirectController {
   }
 
   /** People from the person's teams to start a conversation with. */
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Authz({ scope: 'self' })
   @Get('dms/people')
   people(
     @CurrentUser() u: AuthUser,
@@ -42,6 +46,7 @@ export class DirectController {
   /** The conversation with that person, made if needed. A refusal never says why: `403 dm_not_allowed`. */
   @RequireVerified()
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Authz({ scope: 'self', verified: true, note: 'only with somebody who shares a team and allows it: 403 dm_not_allowed, never why' })
   @Post('dms')
   start(
     @CurrentUser() u: AuthUser,
@@ -50,29 +55,34 @@ export class DirectController {
     return this.direct.start(u.id, body.userId);
   }
 
+  @Authz({ scope: 'dm' })
   @Get('dms/:id')
   one(@CurrentUser() u: AuthUser, @Id() id: string): Promise<DmDto> {
     return this.direct.get(u.id, id);
   }
 
   @HttpCode(200)
+  @Authz({ scope: 'dm' })
   @Post('dms/:id/close')
   close(@CurrentUser() u: AuthUser, @Id() id: string): Promise<DmDto> {
     return this.direct.close(u.id, id, true);
   }
 
   @HttpCode(200)
+  @Authz({ scope: 'dm' })
   @Post('dms/:id/open')
   open(@CurrentUser() u: AuthUser, @Id() id: string): Promise<DmDto> {
     return this.direct.close(u.id, id, false);
   }
 
+  @Authz({ scope: 'self' })
   @Get('blocks')
   blocks(@CurrentUser() u: AuthUser): Promise<BlockDto[]> {
     return this.direct.blocks(u.id);
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'self' })
   @Put('blocks/:userId')
   async block(
     @CurrentUser() u: AuthUser,
@@ -82,6 +92,7 @@ export class DirectController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'self' })
   @Delete('blocks/:userId')
   async unblock(
     @CurrentUser() u: AuthUser,

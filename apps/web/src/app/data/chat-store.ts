@@ -59,12 +59,12 @@ export class ChatStore {
       if (team) void this.refreshTeam(team);
     });
 
-    // Be in the room of every text channel of the active team.
+    // Be in the room of every text channel of the active team (and of its voice channels: that is where who is talking is announced).
     const held = new Map<string, () => void>();
     effect(() => {
       const team = this.activeTeam();
       const want = new Set(
-        (team ? this.rows().filter((c) => c.teamId === team && c.kind === 'text') : [])
+        (team ? this.rows().filter((c) => c.teamId === team && (c.kind === 'text' || c.kind === 'voice')) : [])
           .slice(0, MAX_CHANNEL_ROOMS)
           .map((c) => c.id),
       );

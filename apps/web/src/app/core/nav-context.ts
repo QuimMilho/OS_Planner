@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { TeamStore, type Place } from '../data/team-store';
+import { BoardStore } from '../data/board-store';
 import { TreeStore } from '../data/tree-store';
 
 export interface Crumb {
@@ -21,6 +22,7 @@ export class NavContext {
   private readonly router = inject(Router);
   private readonly teams = inject(TeamStore);
   private readonly tree = inject(TreeStore);
+  private readonly boards = inject(BoardStore);
 
   readonly url = toSignal(
     this.router.events.pipe(
@@ -44,7 +46,9 @@ export class NavContext {
   /** On a conversation (or the list of them): the sidebar shows the conversations. */
   readonly inDms = computed(() => /^\/app\/dm(?:[/?#]|$)/.test(this.url()));
 
-  private readonly channelId = computed(() => new RegExp(`^/app/c/(${UUID})`, 'i').exec(this.url())?.[1] ?? null);
+  private readonly channelId = computed(
+    () => new RegExp(`^/app/[cv]/(${UUID})`, 'i').exec(this.url())?.[1] ?? null,
+  );
 
   /** The team (and projects) the current view sits in, if any. */
   readonly place = computed<Place | null>(() => {
@@ -56,6 +60,13 @@ export class NavContext {
       };
     const channelId = this.channelId();
     if (channelId) return this.teams.placeOfSpace(this.teams.channelSpaceId(channelId));
+    const boardId = new RegExp(`^/app/b/(${UUID})`, 'i').exec(this.url())?.[1];
+    if (boardId) return this.teams.placeOfSpace(this.boards.boardById().get(boardId)?.spaceId);
+    // a team's or project's own calendar (`/app/calendar?space=<space id>`)
+    const calendarSpace = /^\/app\/calendar\?(?:[^#]*&)?space=([0-9a-f-]{36})/i.exec(
+      this.url(),
+    )?.[1];
+    if (calendarSpace) return this.teams.placeOfSpace(calendarSpace);
     const pageId = this.pageId();
     return pageId ? this.teams.placeOfSpace(this.tree.pageById().get(pageId)?.spaceId) : null;
   });

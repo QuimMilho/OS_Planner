@@ -96,6 +96,8 @@ export class MaintenanceService {
       // Overwrites on channels are not tied to them by a foreign key: they go with the channels (which go with their spaces).
       const channels = await tx.channel.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true } });
       if (channels.length) await tx.overwrite.deleteMany({ where: { targetKind: 'channel', targetId: { in: channels.map((c) => c.id) } } });
+      const boards = await tx.board.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true } });
+      if (boards.length) await tx.overwrite.deleteMany({ where: { targetKind: 'board', targetId: { in: boards.map((b) => b.id) } } });
       const notebooks = await tx.notebook.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true } });
       if (notebooks.length) await tx.overwrite.deleteMany({ where: { targetKind: 'notebook', targetId: { in: notebooks.map((n) => n.id) } } });
       // A project that goes while its team stays gives its bytes back to the team's total.
@@ -122,7 +124,7 @@ export class MaintenanceService {
     let removed = 0;
     for (;;) {
       const batch = await this.prisma.media.findMany({
-        where: { createdAt: { lt: cutoff }, pages: { none: {} }, attachment: { is: null } }, // chat attachments live as long as their message
+        where: { createdAt: { lt: cutoff }, pages: { none: {} }, attachment: { is: null }, taskAttachment: { is: null } }, // chat and task files live as long as what they belong to
         take: 200,
       });
       if (!batch.length) return removed;

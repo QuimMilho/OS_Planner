@@ -563,14 +563,14 @@ describe('overwrites', () => {
     expect(await t.prisma.overwrite.count({ where: { targetId: proj.id } })).toBe(0);
   });
 
-  it('boards have no overwrites yet; the subject must exist in the project', async () => {
+  it('a board overwrite needs a board (see boards.test.ts); the subject must exist in the project', async () => {
     const team = await newTeam();
     const proj = await project(owner, team);
     const channel = {
       ...overwrite(proj.id, 'member', plain.id, '0', bits(P.EDIT_PAGES)),
-      targetKind: 'board', // notebooks have overwrites since phase 10 (see sharing.test.ts)
+      targetKind: 'board', // notebooks have overwrites since phase 10 (see sharing.test.ts), boards since phase 12
     };
-    expect((await setOverwrite(owner, channel)).status).toBe(422);
+    expect((await setOverwrite(owner, channel)).status).toBe(404); // a project id is not a board
     expect(
       (
         await setOverwrite(

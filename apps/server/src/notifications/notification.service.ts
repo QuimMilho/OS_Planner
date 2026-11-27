@@ -205,6 +205,202 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Something happened to a task that these people should hear about (it was assigned to them, it is due soon, somebody commented
+   * or mentioned them). The inbox rows are written in the caller's transaction; the live event goes out when it commits and the
+   * push after that. Whoever muted the team or project of the task hears nothing; the author of the change is never told.
+   */
+  async onTask(
+    tx: Tx,
+    p: {
+      kind: 'task_assigned' | 'task_due' | 'task_comment' | 'mention_user';
+      recipients: readonly string[];
+      actorId: string | null;
+      spaceId: string;
+      boardId: string;
+      taskId: string;
+      title: string;
+      /** One short line: the comment, or the task title. */
+      summary: string;
+    },
+  ): Promise<void> {
+    const people = [...new Set(p.recipients)].filter((id) => id !== p.actorId);
+    if (!people.length) return;
+    const chain = await this.settings.chainOfSpace(p.spaceId);
+    const rules = await this.settings.rulesFor(people, chain);
+    const now = Date.now();
+    const actor = p.actorId
+      ? ((await tx.user.findUnique({ where: { id: p.actorId }, select: { displayName: true } }))?.displayName ?? null)
+      : null;
+    const team = await this.teamOfSpace(tx, p.spaceId);
+    const summary = (p.summary || p.title).replace(/\s+/g, ' ').trim().slice(0, SUMMARY_MAX);
+
+    for (const userId of people) {
+      const eff = resolveSetting(rules.get(userId) ?? [], now, defaultsFor('channel'));
+      if (eff.muted) continue;
+      const row = await tx.notification.create({
+        data: {
+          id: newId(),
+          userId,
+          kind: p.kind,
+          actorId: p.actorId,
+          spaceId: p.spaceId,
+          targetKind: 'task',
+          targetId: p.taskId,
+          summary,
+          redacted: false,
+        },
+      });
+      const dto: NotificationDto = {
+        id: row.id,
+        kind: p.kind,
+        actorId: p.actorId,
+        actorName: actor,
+        teamId: team,
+        channelId: null,
+        channelName: null,
+        messageId: null,
+        targetKind: 'task',
+        targetId: p.taskId,
+        summary,
+        redacted: false,
+        read: false,
+        createdAt: row.createdAt.toISOString(),
+      };
+      this.bus.publishAfterCommit(tx, 'room.event', { rooms: [`user:${userId}`], name: NOTIFY_EVENTS.created, payload: dto });
+      if (eff.push)
+        this.prisma.afterCommit(tx, () => {
+          void this.pushTask(userId, p.kind, p.taskId, p.title, actor);
+        });
+    }
+  }
+
+  /**
+   * Something happened to a meeting or an event that these people should hear about (invited, changed, cancelled, answered, about
+   * to start). Written like `onTask`: inbox rows in the caller's transaction, the live event and the push after the commit. Whoever
+   * muted the team or project hears nothing; the author of the change is never told. Returns who was told (they may also get an email).
+   */
+  async onMeeting(
+    tx: Tx,
+    p: {
+      kind: 'meeting_invite' | 'meeting_updated' | 'meeting_cancelled' | 'meeting_response' | 'meeting_reminder';
+      recipients: readonly string[];
+      actorId: string | null;
+      spaceId: string;
+      eventId: string;
+      title: string;
+      summary: string;
+    },
+  ): Promise<string[]> {
+    const people = [...new Set(p.recipients)].filter((id) => id !== p.actorId);
+    if (!people.length) return [];
+    const chain = await this.settings.chainOfSpace(p.spaceId);
+    const rules = await this.settings.rulesFor(people, chain);
+    const now = Date.now();
+    const actor = p.actorId
+      ? ((await tx.user.findUnique({ where: { id: p.actorId }, select: { displayName: true } }))?.displayName ?? null)
+      : null;
+    const team = await this.teamOfSpace(tx, p.spaceId);
+    const summary = (p.summary || p.title).replace(/\s+/g, ' ').trim().slice(0, SUMMARY_MAX);
+    const told: string[] = [];
+
+    for (const userId of people) {
+      const eff = resolveSetting(rules.get(userId) ?? [], now, defaultsFor('channel'));
+      if (eff.muted) continue;
+      const row = await tx.notification.create({
+        data: { id: newId(), userId, kind: p.kind, actorId: p.actorId, spaceId: p.spaceId, targetKind: 'event', targetId: p.eventId, summary, redacted: false },
+      });
+      const dto: NotificationDto = {
+        id: row.id,
+        kind: p.kind,
+        actorId: p.actorId,
+        actorName: actor,
+        teamId: team,
+        channelId: null,
+        channelName: null,
+        messageId: null,
+        targetKind: 'event',
+        targetId: p.eventId,
+        summary,
+        redacted: false,
+        read: false,
+        createdAt: row.createdAt.toISOString(),
+      };
+      this.bus.publishAfterCommit(tx, 'room.event', { rooms: [`user:${userId}`], name: NOTIFY_EVENTS.created, payload: dto });
+      told.push(userId);
+      if (eff.push)
+        this.prisma.afterCommit(tx, () => {
+          void this.pushMeeting(userId, p.kind, p.eventId, p.title, actor);
+        });
+    }
+    return told;
+  }
+
+  /**
+   * A calendar the person follows was switched off because it kept failing (phase 14). Only the inbox and the live badge: nothing
+   * in it is private to anybody else, and it is not a chat, so mute settings do not apply.
+   */
+  async calendarSyncOff(userId: string, calendarId: string, name: string): Promise<void> {
+    const summary = name.replace(/s+/g, ' ').trim().slice(0, SUMMARY_MAX);
+    const row = await this.prisma.notification.create({
+      data: { id: newId(), userId, kind: 'calendar_sync_off', actorId: null, spaceId: null, targetKind: 'ext_calendar', targetId: calendarId, summary, redacted: false },
+    });
+    const dto: NotificationDto = {
+      id: row.id,
+      kind: 'calendar_sync_off',
+      actorId: null,
+      actorName: null,
+      teamId: null,
+      channelId: null,
+      channelName: null,
+      messageId: null,
+      targetKind: 'ext_calendar',
+      targetId: calendarId,
+      summary,
+      redacted: false,
+      read: false,
+      createdAt: row.createdAt.toISOString(),
+    };
+    await this.bus.publish('room.event', { rooms: [`user:${userId}`], name: NOTIFY_EVENTS.created, payload: dto });
+  }
+
+  private async pushMeeting(userId: string, kind: NotificationKind, eventId: string, title: string, actorName: string | null): Promise<void> {
+    const url = `${this.env.APP_URL.replace(/\/+$/, '')}/app/calendar?event=${eventId}`;
+    await this.push.notify(userId, null, (locale): PushPayload => {
+      const c = copyFor(locale);
+      return {
+        notification: {
+          title,
+          body: c.meetingPush(kind, actorName ?? c.deletedUser),
+          icon: `${this.env.APP_URL.replace(/\/+$/, '')}/icons/icon-192x192.png`,
+          tag: `event:${eventId}`,
+          data: { url, kind, onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url } } },
+        },
+      };
+    });
+  }
+
+  private async teamOfSpace(tx: Tx, spaceId: string): Promise<string | null> {
+    const space = await tx.space.findUnique({ where: { id: spaceId }, select: { teamId: true, project: { select: { teamId: true } } } });
+    return space?.teamId ?? space?.project?.teamId ?? null;
+  }
+
+  private async pushTask(userId: string, kind: NotificationKind, taskId: string, title: string, actorName: string | null): Promise<void> {
+    const url = `${this.env.APP_URL.replace(/\/+$/, '')}/app/task/${taskId}`;
+    await this.push.notify(userId, null, (locale): PushPayload => {
+      const c = copyFor(locale);
+      return {
+        notification: {
+          title,
+          body: c.taskPush(kind, actorName ?? c.deletedUser),
+          icon: `${this.env.APP_URL.replace(/\/+$/, '')}/icons/icon-192x192.png`,
+          tag: `task:${taskId}`,
+          data: { url, kind, onActionClick: { default: { operation: 'navigateLastFocusedOrOpen', url } } },
+        },
+      };
+    });
+  }
+
   private async pushTo(
     userId: string,
     ctx: MessageContext,
@@ -535,10 +731,22 @@ export class NotificationService {
         })
       ).map((u) => [u.id, u.displayName]),
     );
+    // a task whose board the person can no longer see shows nothing either
+    const taskIds = [...new Set(page.filter((r) => r.targetKind === 'task' && r.targetId).map((r) => r.targetId!))];
+    const seenTasks = new Set<string>();
+    if (taskIds.length) {
+      const boards = new Map((await this.prisma.task.findMany({ where: { id: { in: taskIds } }, select: { id: true, boardId: true } })).map((x) => [x.id, x.boardId]));
+      const okBoards = new Map<string, boolean>();
+      for (const [taskId, boardId] of boards) {
+        if (!okBoards.has(boardId)) okBoards.set(boardId, (await this.perms.boardAccess(userId, boardId)) !== null);
+        if (okBoards.get(boardId)) seenTasks.add(taskId);
+      }
+    }
     const items: NotificationDto[] = [];
     for (const r of page) {
       // a channel the person can no longer see shows nothing of what was said in it
       if (r.channelId && !visible.has(r.channelId)) continue;
+      if (r.targetKind === 'task' && !(r.targetId && seenTasks.has(r.targetId))) continue;
       items.push({
         id: r.id,
         kind: r.kind as NotificationKind,

@@ -85,6 +85,11 @@ export class NotificationSettingsService {
     return [...chain, GLOBAL];
   }
 
+  /** Nearest first: the projects above a space, the team, then the person's global settings (for what is not a chat). */
+  async chainOfSpace(spaceId: string): Promise<ScopeRef[]> {
+    return [...(await this.containerChain(spaceId)), GLOBAL];
+  }
+
   private async containerChain(spaceId: string | null): Promise<ScopeRef[]> {
     if (!spaceId) return [];
     const space = await this.prisma.space.findUnique({ where: { id: spaceId } });

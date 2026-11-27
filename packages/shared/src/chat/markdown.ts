@@ -47,9 +47,11 @@ function pushText(out: Inline[], v: string): void {
 }
 
 /** Index of the closing `delim` for an opener at `from` (just after it), or -1. Content must not start or end with a space. */
-function findClose(src: string, delim: string, from: number): number {
+function findClose(src: string, delim: string, from: number, budget: ScanBudget): number {
   if (isSpace(src[from])) return -1;
   for (let i = from + 1; i < src.length; i++) {
+    // every unmatched opener scans to the end, so many of them make the work grow with the square of the text
+    if (--budget.left < 0) return -1;
     if (src[i] === '\\') {
       i++;
       continue;
@@ -73,9 +75,19 @@ function findClose(src: string, delim: string, from: number): number {
   return -1;
 }
 
+/** Characters that closing-delimiter searches may look at in one message; past it an opener is plain text. */
+const SCAN_BUDGET = 400_000;
+interface ScanBudget {
+  left: number;
+}
+
 const BARE_URL_END = /[\s<>"'`]/u;
 
-export function parseInline(src: string, depth = 0): Inline[] {
+export function parseInline(
+  src: string,
+  depth = 0,
+  budget: ScanBudget = { left: SCAN_BUDGET },
+): Inline[] {
   const out: Inline[] = [];
   if (depth > MAX_DEPTH) {
     pushText(out, src);
@@ -129,7 +141,7 @@ export function parseInline(src: string, depth = 0): Inline[] {
         if (hrefEnd !== -1) {
           const raw = src.slice(close + 2, hrefEnd).trim();
           const href = raw.startsWith('<') && raw.endsWith('>') ? raw.slice(1, -1) : raw;
-          const label = parseInline(src.slice(i + 1, close), depth + 1);
+          const label = parseInline(src.slice(i + 1, close), depth + 1, budget);
           // Only addresses without spaces or quotes, and only ones the notes accept as well, become links.
           if (href && !/[\s"'<>\\]/.test(href) && isSafeHref(href))
             out.push({ t: 'link', href, c: label });
@@ -169,9 +181,9 @@ export function parseInline(src: string, depth = 0): Inline[] {
       // _ inside a word (snake_case) is not emphasis
       if (delim === '_' && (isWordChar(src[i - 1]) || src[i + 1] === '_')) break;
       if (delim === '*' && src[i + 1] === '*') break;
-      const close = findClose(src, delim, i + delim.length);
+      const close = findClose(src, delim, i + delim.length, budget);
       if (close === -1 || (delim === '_' && isWordChar(src[close + 1]))) break;
-      out.push({ t, c: parseInline(src.slice(i + delim.length, close), depth + 1) });
+      out.push({ t, c: parseInline(src.slice(i + delim.length, close), depth + 1, budget) });
       i = close + delim.length;
       continue outer;
     }

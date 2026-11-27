@@ -228,11 +228,14 @@ describe('mentions', () => {
       here: true,
     });
 
-    // nothing in the request can set it
+    // nothing in the request can set it: a field the message does not have is refused (phase 17), and nothing is stored
     const forged = await send(alice, ch.id, 'plain', {
       mentions: { users: [bob.id], roles: [], everyone: true, here: true },
     });
-    expect(forged.body.mentions).toEqual({ users: [], roles: [], everyone: false, here: false });
+    expect(forged.status).toBe(400);
+    expect(forged.body.message).toEqual(['mentions: unknown field']);
+    expect(await t.prisma.message.count({ where: { channelId: ch.id, content: 'plain' } })).toBe(0);
+    expect((await sendOk(alice, ch.id, 'plain')).mentions).toEqual({ users: [], roles: [], everyone: false, here: false });
     // a person who cannot see the channel is not a mention
     await t.http
       .put('/api/overwrites')

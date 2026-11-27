@@ -85,3 +85,50 @@ Attachments charge the owning space (and team for projects). Task text counts as
 
 ## Definition of done
 See [overview §4.3](overview.md#43-definition-of-done-all-phases).
+
+## Result
+
+Done. Where the build differs from the plan above, and what later phases must know:
+
+- **Server: `apps/server/src/boards/`.** `BoardsService` (boards, columns, duplicate, trash/restore), `TasksService` (create, update, move, delete, restore, purge, detail, activity, one-at-a-time
+  assignee/label/checklist calls), `TaskCommentsService`, `TaskAttachmentsService`, `LabelsService`, `TaskViewsService` (`/api/me/tasks`, `/api/spaces/:id/tasks`, `/api/board-permissions`),
+  `TaskAccess` (a task + what the caller may do with it), `BoardEvents`, `BoardsMaintenance` (hourly due-soon notices, nightly purge of what has been in the trash 30 days). Models:
+  `Board`, `BoardColumn` (not `Column`: a reserved word), `Task`, `TaskAssignee`, `Label`, `TaskLabel`, `ChecklistItem`, `TaskComment`, `TaskAttachment`, `TaskActivity`, `TaskMove`.
+- **Checklist items, assignees and labels ride inside the task row** (`TaskDto.checklist/assigneeIds/labelIds`) and every change to them bumps the task's `seq`; there are no separate sync
+  tombstones for them (the plan gave `ChecklistItem` its own `seq`). `commentCount`/`attachmentCount` are counters on the task. Comments, activity and attachments are not synced: they are fetched
+  when a task is opened (`GET /api/tasks/:id`). `TaskComment` has no tombstone: deleting a comment removes the row and refunds its bytes.
+- **Permissions.** Bits 23–28 were already defined. `PermissionService` gained `boardAccess/requireBoard` (VIEW_BOARDS + the board's overwrites; a personal board is its owner's alone),
+  `requireBoardSpace`, `hiddenBoards`, `boardViewers` (who can see a board, in one batch, for assignees/mentions/notifications), `boardPermissions` and `boardSpaces`. Overwrites accept `targetKind:
+  'board'` (MANAGE_BOARDS; not on personal boards). Rules for a task: *create* CREATE_TASKS (+ASSIGN_TASKS to name assignees); *change* EDIT_TASKS, or, for whoever made it or is assigned,
+  only `title`, `description`, `checklist`, `completed`; *assignees* ASSIGN_TASKS; *move* EDIT_TASKS or the same "own" rule; *delete* EDIT_TASKS or the creator; *comment* CREATE_TASKS (a
+  decision: the plan did not say), edit = author only, delete = author or EDIT_TASKS/MANAGE_BOARDS; *files* whoever may edit the task. An archived board is read-only (`422 board_archived`).
+- **Concurrency: board writes run in READ COMMITTED** (`PrismaService.fresh()`). Under the default REPEATABLE READ a transaction kept reading the snapshot of its first read, so after waiting for the
+  space lock (`ChangeSeqService.next`) it still saw the state from before the writer ahead of it committed: two racing moves into a column with room for one both got in. (This applies to any
+  future "check, then write, under the space lock" code: use `fresh()`.) Positions: two tasks with the same key (two people dropping at the same place) are told apart by moving the later one just after;
+  a key longer than `POSITION_REBALANCE_LENGTH` (40) re-keys the whole column in the same order (`evenPositions`). Both are in `shared/dto/position.ts` with tests (500 inserts at one spot reach 86
+  characters without it; the column holds 64).
+- **WIP limit:** `409 wip_limit` for a move into (or a create in) a full column; subtasks do not count; moving inside the column is not an arrival. Finishing a task (`completed: true`) moves it to the first
+  `done` column, but never fails because that column is full (it stays, ticked); reopening needs room in the column it goes back to. A column that changes `kind` to/from `done` completes/reopens its tasks.
+- **Sync.** `SpaceChangesDto` gained `boards, columns, tasks, labels` (always present for a space whose boards the person can see, even when empty), `hiddenBoards` and `movedOutTasks`; a space is
+  asked for when the person may see its notebooks *or* its boards. New ops `task.create|update|move|delete|restore` in `POST /api/sync/batch` (boards, columns, labels, comments and files are online-only),
+  new error code `wip_limit`. A task moved to a board of another space re-attributes its bytes (and files) in one transaction and leaves a `TaskMove` row so the space it left tells its devices
+  (`movedOutTasks`); its assignees who cannot see the target board and labels that are not usable there are dropped.
+- **Realtime.** `JOINABLE_ROOM_KINDS` gained `board`. The row goes to `board:<id>` (only people who may see the board can be in it; rechecked on every permission change); the room of the space gets the same
+  event name with just `{spaceId, boardId, id}`, so a board hidden from somebody stays hidden. Events: `board.updated {board, columns}`, `task.created|updated|moved|deleted`, `comment.created`,
+  `label.created|updated|deleted`.
+- **Notifications.** `NotificationService.onTask` (inbox row in the transaction, live event, Web Push; skipped when the person muted the team/project): `task_assigned`, `task_comment` (assignees and creator,
+  minus the author and the mentioned), `mention_user` with `targetKind: 'task'` for an `@` in a comment (only people who can see the board count; roles/`@everyone`/`@here` are plain text), and `task_due`
+  (hourly, once per due date: `Task.dueNotifiedAt`, reset when the due date changes). The inbox opens `/app/task/:id`, which resolves the board. The inbox hides a task notification once its board is not visible.
+- **Quota.** Task text (`title` + description JSON) and comments are charged to the space as documents (and show in the storage breakdown); files go through `MediaService.store` (so: sniffed by content, EXIF
+  stripped, pictures and videos only). Soft delete never refunds; `DELETE /api/tasks/:id/purge` (a trashed task only) and the nightly purge do, files included. `MediaService.accessible` serves a task file to whoever
+  can see its board; the orphan-media job leaves task files alone.
+- **Shared** gets a fourth entry `@os-planner/shared/boards` (schemas, limits, `validateTaskDescription`, `dueState/groupByDue/compareByDue`, label colours and `textColorOn`); the main entry exports only the types.
+  The description is a hand-written validator (paragraph, lists, `hardBreak`, text with bold/italic/strike/code/link; links http(s)/mailto only; depth, node and size caps), run on the server and before saving in the web app.
+- **Web.** Dexie v7 (`boards`, `columns`, `tasks`, `labels`); `data/board-store.ts` (reads, offline task changes through the outbox, online board/column/label changes, the room of an open board);
+  `features/boards/`: `board-list` (sidebar), `board-page` (Kanban with CDK drag and drop, list view, filters + saved filters, swimlanes, keyboard), `task-drawer` (a dialog on the right, opened by `?task=`),
+  `board-dialogs` (settings/columns, labels, deleted tasks), `my-tasks-page`. "My tasks" is computed from the local copy. A move refused by the server (full column) is dropped from the outbox and the task is
+  re-read so the screen shows where it really is. Saved filters are kept on the device (Dexie `meta`), not per account on the server.
+- **Not done / left for later phases:** per-field merge of conflicting task edits (phase 15: today the later request simply wins field by field, and a refused op is reported); due dates are not on a
+  calendar yet (phase 13); the description has no images (attach them as files); comments are not editable offline; `fieldSeq` is not added.
+- **Proxy.** No change to `deploy/nginx/os-planner.conf.template`: everything is under `/api/`, the board room uses the existing realtime WebSocket, and uploads are covered by `client_max_body_size`.
+- **Tests.** shared +26, server +28 (`boards.test.ts`; plus the phase 12 case in `migration.test.ts`), web e2e +5 (`boards.e2e.mjs`).

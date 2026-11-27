@@ -9,6 +9,9 @@ import { Permission, positionBetween } from '@os-planner/shared/lite';
 import { toProblem } from '../../core/auth-store';
 import { Notify } from '../../core/notify';
 import { chatErrorKey } from '../../data/chat-actions';
+import { Features } from '../../data/features';
+import { VoiceService } from '../../data/voice-service';
+import { VoiceStore } from '../../data/voice-store';
 import { ChatStore } from '../../data/chat-store';
 import type { ChannelRow } from '../../data/db';
 import { TeamStore } from '../../data/team-store';
@@ -82,6 +85,16 @@ const byPosition = (a: ChannelRow, b: ChannelRow): number =>
               >
                 <mat-icon>tag</mat-icon>{{ 'channel.newChannel' | transloco }}
               </button>
+              @if (features.voice()) {
+                <button
+                  mat-menu-item
+                  type="button"
+                  (click)="create(g, null, 'voice')"
+                  data-action="new-voice-channel"
+                >
+                  <mat-icon>volume_up</mat-icon>{{ 'channel.newVoice' | transloco }}
+                </button>
+              }
               <button
                 mat-menu-item
                 type="button"
@@ -152,6 +165,43 @@ const byPosition = (a: ChannelRow, b: ChannelRow): number =>
     </div>
 
     <ng-template #row let-c let-g="g">
+      @if (c.kind === 'voice') {
+        @if (features.voice()) {
+          <div
+            class="row voice"
+            [class.active]="c.id === voice.channelId()"
+            [attr.data-channel-row]="c.name"
+            data-voice-row
+          >
+            <a
+              class="name"
+              [routerLink]="['/app/v', c.id]"
+              (click)="joinVoice(c)"
+              [attr.aria-label]="c.name"
+            >
+              <mat-icon aria-hidden="true">{{ c.archived ? 'inventory_2' : 'volume_up' }}</mat-icon>
+              <span class="label">{{ c.name }}</span>
+            </a>
+            @if (g.canManage) {
+              <a
+                class="gear"
+                [routerLink]="['/app/c', c.id, 'settings']"
+                [attr.aria-label]="'channel.settings' | transloco"
+                ><mat-icon>settings</mat-icon></a
+              >
+            }
+          </div>
+          @for (p of people(c.id); track p.userId) {
+            <div class="who" [class.speaking]="p.speaking" data-voice-participant [attr.data-user]="p.userId">
+              <span class="dot" [style.background]="p.color">{{ p.name.charAt(0).toUpperCase() }}</span>
+              <span class="label">{{ p.name }}</span>
+              @if (p.muted) {
+                <mat-icon class="state" aria-hidden="true">mic_off</mat-icon>
+              }
+            </div>
+          }
+        }
+      } @else {
       <div
         class="row"
         cdkDrag
@@ -183,6 +233,7 @@ const byPosition = (a: ChannelRow, b: ChannelRow): number =>
           >
         }
       </div>
+      }
     </ng-template>
   `,
   styles: `
@@ -328,6 +379,37 @@ const byPosition = (a: ChannelRow, b: ChannelRow): number =>
       text-align: center;
       line-height: 18px;
     }
+    .who {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 6px;
+      padding: 2px 6px 2px 34px;
+      min-height: 26px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .who .dot {
+      flex: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      box-shadow: 0 0 0 2px transparent;
+    }
+    .who.speaking .dot {
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+    .who .state {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      margin-left: auto;
+    }
     .gear {
       display: none;
       color: var(--text-dim);
@@ -359,6 +441,9 @@ export class ChannelList {
   readonly teamId = input.required<string>();
 
   protected readonly chat = inject(ChatStore);
+  protected readonly features = inject(Features);
+  protected readonly voice = inject(VoiceService);
+  private readonly voiceStore = inject(VoiceStore);
   private readonly teams = inject(TeamStore);
   private readonly dialogs = inject(Dialogs);
   private readonly notify = inject(Notify);
@@ -401,6 +486,19 @@ export class ChannelList {
     return out;
   });
 
+  /** Who is in a voice channel: what the call shows for the one this person is in (who is speaking), else the server's list. */
+  protected people(channelId: string): { userId: string; name: string; color: string; speaking: boolean; muted: boolean }[] {
+    if (this.voice.channelId() === channelId && this.voice.tiles().length)
+      return this.voice.tiles().map((t) => ({ userId: t.id, name: t.name, color: t.color, speaking: t.speaking, muted: !t.mic }));
+    return this.voiceStore.participants(channelId).map((p) => ({ userId: p.userId, name: p.name, color: p.color, speaking: false, muted: p.mutedByModerator }));
+  }
+
+  /** Clicking a voice channel in the list joins it (the voice page opens next to it). */
+  protected joinVoice(c: ChannelRow): void {
+    if (c.archived) return;
+    void this.voice.join(c.id);
+  }
+
   protected toggle(id: string): void {
     this.closed.update((s) => {
       const next = new Set(s);
@@ -412,12 +510,12 @@ export class ChannelList {
   protected async create(
     g: Group,
     parentId: string | null,
-    kind: 'text' | 'category',
+    kind: 'text' | 'category' | 'voice',
   ): Promise<void> {
     const answer = await this.dialogs.prompt({
-      titleKey: kind === 'category' ? 'channel.newCategory' : 'channel.newChannel',
+      titleKey: kind === 'category' ? 'channel.newCategory' : kind === 'voice' ? 'channel.newVoice' : 'channel.newChannel',
       labelKey: 'channel.name',
-      placeholder: kind === 'category' ? '' : 'general',
+      placeholder: kind === 'category' ? '' : kind === 'voice' ? 'Lounge' : 'general',
       confirmKey: 'channel.create',
       validate: (v) => (v.trim() ? null : 'channel.nameRequired'),
     });
@@ -429,6 +527,7 @@ export class ChannelList {
         ...(parentId ? { parentId } : {}),
       });
       if (kind === 'text') void this.router.navigate(['/app/c', created.id]);
+      if (kind === 'voice') void this.router.navigate(['/app/v', created.id]);
     } catch (e) {
       const p = toProblem(e);
       this.notify.error(chatErrorKey(p.code, p.status));

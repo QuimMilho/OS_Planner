@@ -51,6 +51,31 @@ button {
 }
 
 // The editor surface: tall enough to click into below the last line, so the caret is never trapped.
+/* Other people's cursors (the name and colour come from the server, see CollabService) */
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid;
+  border-right: 0;
+  word-break: normal;
+  pointer-events: none;
+}
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.55em;
+  left: -2px;
+  font-size: 11px;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 1;
+  white-space: nowrap;
+  color: #fff;
+  padding: 2px 5px;
+  border-radius: 4px 4px 4px 0;
+  user-select: none;
+  z-index: 5;
+}
 .ProseMirror.doc {
   min-height: 55vh;
   padding-bottom: 35vh;
@@ -317,5 +342,17 @@ button {
   }
   .hljs-type {
     color: var(--hl-type);
+  }
+}
+
+// Phase 17: somebody who asked their system for less motion gets none (transitions and animations end at once; nothing scrolls smoothly).
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

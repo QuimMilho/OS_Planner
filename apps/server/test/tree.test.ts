@@ -100,7 +100,7 @@ describe('ownership isolation', () => {
       t.http.patch(`/api/categories/${cat.id}`).set(eve.auth).send({ name: 'pwned' }),
       t.http.get(`/api/pages/${pg.id}`).set(eve.auth),
       t.http.patch(`/api/pages/${pg.id}`).set(eve.auth).send({ title: 'pwned' }),
-      t.http.put(`/api/pages/${pg.id}/content`).set(eve.auth).send({ content: para('pwned'), baseVersion: 0 }),
+      t.http.post(`/api/pages/${pg.id}/snapshots/replace`).set(eve.auth).send({ content: para('pwned'), baseVersion: 0 }),
     ];
     for (const res of await Promise.all(attempts)) expect(res.status).toBe(404);
 
@@ -259,12 +259,12 @@ describe('page content and optimistic concurrency', () => {
     pageId = (await b.page((await b.category((await b.notebook()).id)).id)).id;
   });
   const put = (content: unknown, baseVersion: number, who = me) =>
-    t.http.put(`/api/pages/${pageId}/content`).set(who.auth).send({ content, baseVersion });
+    t.http.post(`/api/pages/${pageId}/snapshots/replace`).set(who.auth).send({ content, baseVersion });
 
   it('saves content, bumps the version, and derives searchable text', async () => {
     const res = await put(para('Hello wörld'), 0);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ version: 1 });
+    expect(res.body).toEqual({ ok: true, version: 1 });
     const row = await t.prisma.page.findUniqueOrThrow({ where: { id: pageId } });
     expect(row.version).toBe(1);
     expect(row.contentText).toBe('Hello wörld');
@@ -290,7 +290,7 @@ describe('page content and optimistic concurrency', () => {
     const retry = await put(para('same content'), 0); // response was "lost", client resends
     expect(first.status).toBe(200);
     expect(retry.status).toBe(200);
-    expect(retry.body).toEqual({ version: 1 });
+    expect(retry.body).toEqual({ ok: true, version: 1 });
   });
 
   it('rejects invalid documents without touching the stored one', async () => {

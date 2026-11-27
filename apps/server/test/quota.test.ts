@@ -54,7 +54,7 @@ const setLimit = (storageBytes: number, userId = me.id) =>
     },
   });
 const save = (pageId: string, content: object, baseVersion: number) =>
-  t.http.put(`/api/pages/${pageId}/content`).set(me.auth).send({ content, baseVersion });
+  t.http.post(`/api/pages/${pageId}/snapshots/replace`).set(me.auth).send({ content, baseVersion });
 
 describe('limitFor', () => {
   it('uses the override over the environment default, and the default again once it is cleared', async () => {

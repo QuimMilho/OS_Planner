@@ -7,7 +7,9 @@ import { TranslocoPipe } from '@jsverse/transloco';
 import { Permission, hasPermission, permissionsFromString } from '@os-planner/shared/lite';
 import { type RoleDto } from '@os-planner/shared';
 import { CHAT_LIMITS } from '@os-planner/shared/chat';
+import { VOICE_LIMITS, VOICE_QUALITY, type VoiceQuality } from '@os-planner/shared/lite';
 import { toProblem, type ApiProblem } from '../../core/auth-store';
+import { AppUpdates } from '../../core/app-updates';
 import { Notify } from '../../core/notify';
 import { chatErrorKey } from '../../data/chat-actions';
 import { ChatStore } from '../../data/chat-store';
@@ -40,8 +42,8 @@ const SLOWMODE_CHOICES = [0, 5, 10, 30, 60, 300, 900, 3600, 21600];
       @case ('ready') {
         @if (channel(); as ch) {
           <div class="page" data-channel-settings>
-            <a class="back" [routerLink]="['/app/c', ch.id]"
-              ><mat-icon>arrow_back</mat-icon>#{{ ch.name }}</a
+            <a class="back" [routerLink]="[ch.kind === 'voice' ? '/app/v' : '/app/c', ch.id]"
+              ><mat-icon>arrow_back</mat-icon>{{ ch.kind === 'voice' ? '' : '#' }}{{ ch.name }}</a
             >
             <h1>{{ 'channel.settings' | transloco }}</h1>
 
@@ -93,6 +95,35 @@ const SLOWMODE_CHOICES = [0, 5, 10, 30, 60, 300, 900, 3600, 21600];
                     </label>
                     <p class="muted hint">{{ 'channel.redactPreviewsHint' | transloco }}</p>
                   }
+                  @if (ch.kind === 'voice') {
+                    <label
+                      >{{ 'voice.userLimit' | transloco }}
+                      <input
+                        type="number"
+                        name="userLimit"
+                        min="1"
+                        [max]="userLimitMax"
+                        [(ngModel)]="userLimit"
+                        (ngModelChange)="syncDraft()"
+                        [placeholder]="'voice.userLimitDefault' | transloco"
+                        data-field="user-limit"
+                      />
+                    </label>
+                    <p class="muted hint">{{ 'voice.userLimitHint' | transloco }}</p>
+                    <label
+                      >{{ 'voice.audioQuality' | transloco }}
+                      <select
+                        name="quality"
+                        [(ngModel)]="quality"
+                        (ngModelChange)="syncDraft()"
+                        data-field="quality"
+                      >
+                        @for (q of qualities; track q) {
+                          <option [ngValue]="q">{{ 'voice.q.' + q | transloco }}</option>
+                        }
+                      </select>
+                    </label>
+                  }
                   <div class="actions">
                     <button
                       mat-flat-button
@@ -102,7 +133,7 @@ const SLOWMODE_CHOICES = [0, 5, 10, 30, 60, 300, 900, 3600, 21600];
                     >
                       {{ 'common.save' | transloco }}
                     </button>
-                    @if (ch.kind === 'text') {
+                    @if (ch.kind !== 'category') {
                       <button
                         mat-stroked-button
                         type="button"
@@ -238,6 +269,10 @@ export class ChannelSettings {
   protected readonly roles = signal<RoleDto[]>([]);
   protected readonly slowmodes = SLOWMODE_CHOICES;
   protected readonly topicMax = CHAT_LIMITS.topicMax;
+  protected readonly userLimitMax = VOICE_LIMITS.userLimitMax;
+  protected readonly qualities = VOICE_QUALITY;
+  protected userLimit: number | null = null;
+  protected quality: VoiceQuality = 'normal';
   protected name = '';
   protected topic = '';
   protected slowmode = 0;
@@ -260,12 +295,22 @@ export class ChannelSettings {
       (this.draft().name !== c.name ||
         this.draft().topic !== c.topic ||
         this.draft().slowmode !== c.slowmodeSeconds ||
-        this.draft().redact !== c.redactPreviews)
+        this.draft().redact !== c.redactPreviews ||
+        (c.kind === 'voice' &&
+          (this.draft().userLimit !== c.userLimit || this.draft().quality !== (c.quality ?? 'normal'))))
     );
   });
-  private readonly draft = signal({ name: '', topic: '', slowmode: 0, redact: false });
+  private readonly draft = signal<{ name: string; topic: string; slowmode: number; redact: boolean; userLimit: number | null; quality: VoiceQuality }>({
+    name: '',
+    topic: '',
+    slowmode: 0,
+    redact: false,
+    userLimit: null,
+    quality: 'normal',
+  });
 
   constructor() {
+    inject(AppUpdates).holdWhile(this.dirty); // an update's reload would throw the unsaved changes away
     effect(() => {
       const id = this.channelId();
       untracked(() => void this.verify(id));
@@ -278,7 +323,9 @@ export class ChannelSettings {
         this.topic = c.topic;
         this.slowmode = c.slowmodeSeconds;
         this.redact = c.redactPreviews;
-        this.draft.set({ name: c.name, topic: c.topic, slowmode: c.slowmodeSeconds, redact: c.redactPreviews });
+        this.userLimit = c.userLimit;
+        this.quality = c.quality ?? 'normal';
+        this.draft.set({ name: c.name, topic: c.topic, slowmode: c.slowmodeSeconds, redact: c.redactPreviews, userLimit: c.userLimit, quality: c.quality ?? 'normal' });
         void this.loadRoles(c.teamId, c.spaceId);
       });
     });
@@ -315,7 +362,15 @@ export class ChannelSettings {
 
   /** Called by the form on every key: the draft the "save" button compares with. */
   protected syncDraft(): void {
-    this.draft.set({ name: this.name.trim(), topic: this.topic.trim(), slowmode: this.slowmode, redact: this.redact });
+    const limit = Number(this.userLimit);
+    this.draft.set({
+      name: this.name.trim(),
+      topic: this.topic.trim(),
+      slowmode: this.slowmode,
+      redact: this.redact,
+      userLimit: this.userLimit === null || String(this.userLimit) === '' || !Number.isFinite(limit) ? null : Math.max(1, Math.min(VOICE_LIMITS.userLimitMax, Math.round(limit))),
+      quality: this.quality,
+    });
   }
 
   protected async save(): Promise<void> {
@@ -327,6 +382,7 @@ export class ChannelSettings {
       await this.chat.update(c, {
         name: d.name,
         ...(c.kind === 'text' ? { topic: d.topic, slowmodeSeconds: d.slowmode, redactPreviews: d.redact } : {}),
+        ...(c.kind === 'voice' ? { userLimit: d.userLimit, quality: d.quality } : {}),
       });
       this.notify.info('settings.saved');
     } catch (e) {

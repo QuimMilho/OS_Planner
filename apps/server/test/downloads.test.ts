@@ -173,6 +173,6 @@ describe('health', () => {
   it('answers 200 when the database is reachable, without login', async () => {
     const res = await t.http.get('/api/health');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ ok: true, realtime: 'ok' });
+    expect(res.body).toMatchObject({ ok: true, db: 'ok', storage: 'ok', realtime: 'ok' });
   });
 });

@@ -61,7 +61,7 @@ const share = async (owner: Account, notebookId: string, to: Account, access: 'r
 };
 const content = (who: Account, pageId: string, text: string, baseVersion = 0) =>
   t.http
-    .put(`/api/pages/${pageId}/content`)
+    .post(`/api/pages/${pageId}/snapshots/replace`)
     .set(who.auth)
     .send({ content: para(text), baseVersion });
 const tree = (who: Account, notebookId: string) =>
@@ -427,7 +427,7 @@ describe('direct shares', () => {
     expect(
       (
         await t.http
-          .put(`/api/pages/${page.id}/content`)
+          .post(`/api/pages/${page.id}/snapshots/replace`)
           .set(alice.auth)
           .send({ content: { type: 'doc', content: [fig(used)] }, baseVersion: 1 })
       ).status,
@@ -557,7 +557,7 @@ describe('share links', () => {
     expect(
       (
         await t.http
-          .put(`/api/pages/${page.id}/content`)
+          .post(`/api/pages/${page.id}/snapshots/replace`)
           .send({ content: para('x'), baseVersion: 1 })
       ).status,
     ).toBe(401);
@@ -691,7 +691,7 @@ describe('share links', () => {
     expect(
       (
         await t.http
-          .put(`/api/pages/${page.id}/content`)
+          .post(`/api/pages/${page.id}/snapshots/replace`)
           .set(alice.auth)
           .send({ content: doc, baseVersion: 1 })
       ).status,
@@ -808,7 +808,7 @@ describe('moving a notebook', () => {
       ],
     };
     await t.http
-      .put(`/api/pages/${page.id}/content`)
+      .post(`/api/pages/${page.id}/snapshots/replace`)
       .set(alice.auth)
       .send({ content: doc, baseVersion: 1 })
       .expect(200);
@@ -917,12 +917,12 @@ describe('moving a notebook', () => {
     };
     const otherNb = await fixture(alice);
     await t.http
-      .put(`/api/pages/${page.id}/content`)
+      .post(`/api/pages/${page.id}/snapshots/replace`)
       .set(alice.auth)
       .send({ content: doc, baseVersion: 1 })
       .expect(200);
     await t.http
-      .put(`/api/pages/${otherNb.page.id}/content`)
+      .post(`/api/pages/${otherNb.page.id}/snapshots/replace`)
       .set(alice.auth)
       .send({ content: doc, baseVersion: 1 })
       .expect(200);

@@ -47,7 +47,9 @@ export class ChatModule implements OnModuleInit {
       // A conversation's room is for its two people (blocked or not: the history stays readable).
       if (await this.direct.participates(userId, id)) return true;
       const access = await this.perms.channelAccess(userId, id);
-      if (!access || access.channel.kind !== 'text') return false;
+      if (!access) return false;
+      if (access.channel.kind === 'voice') return true; // the room that tells who is in the voice channel
+      if (access.channel.kind !== 'text') return false;
       await this.channels.touch(userId, id); // joining is how a person without READ_MESSAGE_HISTORY starts seeing messages
       return true;
     });

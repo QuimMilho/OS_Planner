@@ -45,6 +45,7 @@ import { DigestService } from './digest.service.js';
 import { NotificationService } from './notification.service.js';
 import { PushService } from './push.service.js';
 import { NotificationSettingsService } from './settings.service.js';
+import { Authz } from '../common/authz.js';
 
 /** The inbox, its counters and the person's quiet hours. */
 @Controller('notifications')
@@ -54,6 +55,7 @@ export class NotificationsController {
     private readonly settings: NotificationSettingsService,
   ) {}
 
+  @Authz({ scope: 'self' })
   @Get()
   list(
     @CurrentUser() u: AuthUser,
@@ -62,12 +64,14 @@ export class NotificationsController {
     return this.notifications.list(u.id, q);
   }
 
+  @Authz({ scope: 'self' })
   @Get('count')
   count(@CurrentUser() u: AuthUser): Promise<NotificationCountDto> {
     return this.notifications.count(u.id);
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'self' })
   @Post('read')
   async read(
     @CurrentUser() u: AuthUser,
@@ -77,6 +81,7 @@ export class NotificationsController {
   }
 
   /** The person's quiet hours; 204 when they have none. */
+  @Authz({ scope: 'self' })
   @Get('quiet-hours')
   async quiet(
     @CurrentUser() u: AuthUser,
@@ -87,6 +92,7 @@ export class NotificationsController {
     return hours ?? undefined;
   }
 
+  @Authz({ scope: 'self' })
   @Put('quiet-hours')
   setQuiet(
     @CurrentUser() u: AuthUser,
@@ -101,11 +107,13 @@ export class NotificationsController {
 export class NotificationSettingsController {
   constructor(private readonly settings: NotificationSettingsService) {}
 
+  @Authz({ scope: 'self' })
   @Get()
   list(@CurrentUser() u: AuthUser): Promise<NotificationSettingDto[]> {
     return this.settings.list(u.id);
   }
 
+  @Authz({ scope: 'self', note: 'a place the person cannot see answers 404' })
   @Get('effective')
   effective(
     @CurrentUser() u: AuthUser,
@@ -115,6 +123,7 @@ export class NotificationSettingsController {
   }
 
   /** Sets what is given for one place. 204 when that leaves nothing set there (the row is gone). */
+  @Authz({ scope: 'self', note: 'a place the person cannot see answers 404' })
   @Put()
   async put(
     @CurrentUser() u: AuthUser,
@@ -126,6 +135,7 @@ export class NotificationSettingsController {
     return row ?? undefined;
   }
 
+  @Authz({ scope: 'self', note: 'a place the person cannot see answers 404' })
   @Post('mute')
   async mute(
     @CurrentUser() u: AuthUser,
@@ -138,6 +148,7 @@ export class NotificationSettingsController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'own' })
   @Delete(':id')
   async remove(
     @CurrentUser() u: AuthUser,
@@ -152,12 +163,14 @@ export class NotificationSettingsController {
 export class PushController {
   constructor(private readonly push: PushService) {}
 
+  @Authz({ scope: 'self', note: '404 without VAPID keys' })
   @Get('vapid-key')
   key(): VapidKeyDto {
     return this.push.vapidKey();
   }
 
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Authz({ scope: 'self', note: '404 without VAPID keys' })
   @Post('subscribe')
   subscribe(
     @CurrentUser() u: AuthUser,
@@ -167,6 +180,7 @@ export class PushController {
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'self' })
   @Delete('subscribe')
   async unsubscribe(
     @CurrentUser() u: AuthUser,
@@ -175,12 +189,14 @@ export class PushController {
     await this.push.unsubscribe(u.id, body.endpoint);
   }
 
+  @Authz({ scope: 'self' })
   @Get('devices')
   devices(@CurrentUser() u: AuthUser): Promise<PushDeviceDto[]> {
     return this.push.devices(u.id);
   }
 
   @HttpCode(204)
+  @Authz({ scope: 'own' })
   @Delete('devices/:id')
   async removeDevice(
     @CurrentUser() u: AuthUser,
@@ -198,6 +214,7 @@ export class MailActionsController {
   @Public()
   @HttpCode(200)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Authz({ scope: 'secret', note: 'the signed link in the email says who and what' })
   @Post('unsubscribe')
   unsubscribe(
     @Body({ schema: mailActionSchema }) body: z.infer<typeof mailActionSchema>,

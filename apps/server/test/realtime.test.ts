@@ -407,7 +407,7 @@ describe('limits', () => {
     const gone = closed(big, 6000);
     big.emit('presence:activity', { active: true, pad: 'x'.repeat(2_000_000) });
     await gone;
-    expect((await t.http.get('/api/health')).body).toEqual({ ok: true, realtime: 'ok' });
+    expect((await t.http.get('/api/health')).body).toMatchObject({ ok: true, realtime: 'ok' });
     expect((await connect(url, bob)).connected).toBe(true);
   });
 
@@ -502,7 +502,7 @@ describe('two server instances', () => {
     try {
       const res = await broken.http.get('/api/health');
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ ok: true, realtime: 'degraded' });
+      expect(res.body).toMatchObject({ ok: true, realtime: 'degraded', redis: 'down' });
     } finally {
       await broken.close();
     }

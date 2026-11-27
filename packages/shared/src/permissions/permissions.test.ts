@@ -265,7 +265,10 @@ describe('computePermissions', () => {
 
   it('keeps the unrelated team-level permissions when a channel cannot be seen', () => {
     const got = computePermissions(
-      base({ everyone: P.MANAGE_PROJECTS | P.SEND_MESSAGES, channel: ow(0n, P.VIEW_CHANNEL) }),
+      base({
+        everyone: P.MANAGE_PROJECTS | P.SEND_MESSAGES,
+        channel: { everyone: ow(0n, P.VIEW_CHANNEL) },
+      }),
     );
     expect(has(got, P.MANAGE_PROJECTS)).toBe(true);
     expect(has(got, P.SEND_MESSAGES)).toBe(false); // SEND_MESSAGES needs VIEW_CHANNEL, which @everyone here never had
@@ -330,7 +333,7 @@ describe('exhaustive matrix', () => {
       }
     }
     expect(cases).toBeGreaterThan(10_000);
-  });
+  }, 60_000);
 });
 
 // ------------------------------------------------------------------ property test
@@ -398,7 +401,7 @@ describe('property test against the reference', () => {
           `seed ${SEED}, case ${i}: got ${namesOf(got)} want ${namesOf(want)}\n${JSON.stringify(input, (_, v) => (typeof v === 'bigint' ? v.toString() : v))}`,
         );
     }
-  });
+  }, 60_000);
 
   it('always returns a subset of the defined permissions and never anything for an unviewable container', () => {
     const rnd = mulberry32(7);

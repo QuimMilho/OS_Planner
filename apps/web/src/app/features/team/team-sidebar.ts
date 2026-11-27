@@ -9,6 +9,7 @@ import { TranslocoPipe } from '@jsverse/transloco';
 import type { ProjectDto } from '@os-planner/shared';
 import { NavContext } from '../../core/nav-context';
 import { TeamStore, type ProjectNode } from '../../data/team-store';
+import { BoardList } from '../boards/board-list';
 import { ChannelList } from '../chat/channel-list';
 import { Tree } from '../shell/tree';
 import { TeamUi } from './team-ui';
@@ -222,7 +223,7 @@ export class ProjectRows {
 /** The left column while inside a team: the team's name and its project tree, with the other kinds of things to come. */
 @Component({
   selector: 'app-team-sidebar',
-  imports: [RouterLink, MatIconModule, MatButtonModule, TranslocoPipe, ProjectRows, ChannelList, Tree],
+  imports: [RouterLink, MatIconModule, MatButtonModule, TranslocoPipe, ProjectRows, ChannelList, BoardList, Tree],
   template: `
     @if (team(); as t) {
       <section class="team" data-team-sidebar>
@@ -268,8 +269,9 @@ export class ProjectRows {
           <h3 class="project" data-section="project-notebooks">{{ p.name }}</h3>
           <app-tree [spaceId]="p.spaceId" />
         }
-        <h3 class="soon">{{ 'team.boards' | transloco }}</h3>
         <app-channel-list [teamId]="t.id" />
+        <app-board-list [teamId]="t.id" />
+        <a class="cal-link" routerLink="/app/calendar" [queryParams]="{ space: project()?.spaceId ?? t.spaceId }" data-team-calendar><mat-icon>calendar_month</mat-icon>{{ 'nav.calendar' | transloco }}</a>
       </section>
     }
   `,
@@ -294,6 +296,19 @@ export class ProjectRows {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .cal-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 8px 0;
+      padding: 6px 8px;
+      border-radius: 8px;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .cal-link:hover {
+      background: var(--surface-3);
+    }
     h3 {
       margin: 14px 16px 4px;
       font-size: 12px;
@@ -301,9 +316,6 @@ export class ProjectRows {
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--text-dim);
-    }
-    h3.soon {
-      opacity: 0.55;
     }
     h3.project {
       text-transform: none;
